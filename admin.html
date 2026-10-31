@@ -5,8 +5,14 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; connect-src https://oalnswbnjhkkovxjxtlz.supabase.co wss://oalnswbnjhkkovxjxtlz.supabase.co; img-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'none'">
   <meta name="referrer" content="no-referrer">
   <title>Quản trị | Điểm danh LHTech</title>
-  <link rel="stylesheet" href="css/app.css?v=20261031-weekly">
-  <script defer src="vendor/supabase-2.118.0.js"></script><script defer src="js/config.js"></script><script defer src="js/auth.js?v=20261031-weekly"></script><script defer src="js/member-tools.js"></script><script defer src="js/admin.js?v=20261031-weekly"></script>
+  <link rel="stylesheet" href="css/app.css?v=20261031-attendance">
+  <script defer src="vendor/supabase-2.118.0.js"></script>
+  <script defer src="vendor/qrcode.min.js"></script>
+  <script defer src="js/config.js"></script>
+  <script defer src="js/auth.js?v=20261031-attendance"></script>
+  <script defer src="js/member-tools.js"></script>
+  <script defer src="js/admin-attendance.js?v=20261031-attendance"></script>
+  <script defer src="js/admin.js?v=20261031-attendance"></script>
 </head>
 <body>
   <header class="topbar"><a class="brand" href="index.html"><span class="brand-mark" aria-hidden="true">LH</span><span>Điểm danh LHTech</span></a><div class="user-controls"><span id="signed-in-name"></span><button class="outline-light" id="logout" type="button">Đăng xuất</button></div></header>
@@ -14,15 +20,92 @@
     <p id="page-status" class="status" role="status" aria-live="polite">Đang kiểm tra quyền truy cập…</p>
     <button id="retry-page" type="button" class="secondary" hidden>Thử lại</button>
     <div id="protected-content" hidden>
-      <div class="page-heading"><div><p class="subtitle" id="account-role"></p><h1>Quản lý xưởng</h1><p class="muted">Theo dõi thành viên và hoạt động quản trị.</p></div><button id="reload" type="button" class="secondary">Tải lại dữ liệu</button></div>
-      <nav class="section-nav" aria-label="Chức năng quản trị"><button type="button" data-section="profiles" aria-pressed="true">Thành viên</button><button type="button" data-section="audits" aria-pressed="false">Nhật ký hoạt động</button><a href="schedule.html">Lịch xưởng theo tuần</a></nav>
-      <section id="profiles-panel" class="panel" aria-labelledby="profiles-title">
+      <div class="page-heading"><div><p class="subtitle" id="account-role"></p><h1>Quản lý xưởng</h1><p class="muted">Theo dõi thành viên, hoạt động và điểm danh ca trực tiếp.</p></div><button id="reload" type="button" class="secondary">Tải lại dữ liệu</button></div>
+      <nav class="section-nav" aria-label="Chức năng quản trị">
+        <button type="button" data-section="attendance" aria-pressed="true">Điểm danh hôm nay</button>
+        <button type="button" data-section="profiles" aria-pressed="false">Thành viên</button>
+        <button type="button" data-section="audits" aria-pressed="false">Nhật ký hoạt động</button>
+        <a href="schedule.html">Lịch xưởng theo tuần</a>
+      </nav>
+
+      <!-- Panel 1: Điểm danh thời gian thực 3 ca & QR Động -->
+      <section id="attendance-panel" class="panel" aria-labelledby="attendance-title">
+        <div class="attendance-layout">
+          <!-- Cột trái: QR động xoay vòng 30 giây -->
+          <div class="attendance-qr-col">
+            <div class="qr-card">
+              <div style="display:flex; justify-content:space-between; align-items:center; width:100%;">
+                <h2 id="attendance-title">QR Điểm danh</h2>
+                <span id="qr-shift-badge" class="badge">Ca Sáng</span>
+              </div>
+              <p class="muted" style="margin-top:6px; font-size:0.85rem;">Mã đổi mới mỗi 30 giây chống chụp gửi từ xa.</p>
+              <div id="qr-container" class="qr-display-box">
+                <div id="qrcode"></div>
+              </div>
+              <div class="qr-timer-bar-wrap">
+                <div id="qr-timer-bar" class="qr-timer-bar"></div>
+              </div>
+              <div class="qr-footer">
+                <span id="qr-timer-text" class="qr-timer-text">Đang tạo mã...</span>
+                <button type="button" id="btn-fullscreen-qr" class="secondary small">Phóng to</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Cột phải: Bảng theo dõi điểm danh hôm nay -->
+          <div class="attendance-table-col">
+            <div class="panel-heading attendance-heading" style="padding:0 0 12px;">
+              <div>
+                <h2>Trạng thái Điểm danh</h2>
+                <p id="attendance-summary-text" class="muted">Hôm nay: ...</p>
+              </div>
+              <div class="shift-tabs">
+                <button type="button" class="shift-btn active" data-shift="Sáng">Ca Sáng</button>
+                <button type="button" class="shift-btn" data-shift="Chiều">Ca Chiều</button>
+                <button type="button" class="shift-btn" data-shift="Tối">Ca Tối</button>
+              </div>
+            </div>
+
+            <!-- 4 Thẻ chỉ số tổng hợp -->
+            <div class="stats-grid" style="padding:0 0 16px;">
+              <div class="stat-box present"><span class="stat-num" id="stat-present">0</span><span class="stat-lbl">Có mặt</span></div>
+              <div class="stat-box late"><span class="stat-num" id="stat-late">0</span><span class="stat-lbl">Đi trễ</span></div>
+              <div class="stat-box excused"><span class="stat-num" id="stat-excused">0</span><span class="stat-lbl">Vắng có phép</span></div>
+              <div class="stat-box unexcused"><span class="stat-num" id="stat-unexcused">0</span><span class="stat-lbl">Vắng không phép</span></div>
+            </div>
+
+            <!-- Bảng danh sách sinh viên ca hiện tại -->
+            <div class="table-scroll">
+              <table>
+                <caption class="sr-only">Danh sách sinh viên điểm danh ca</caption>
+                <thead>
+                  <tr>
+                    <th>MSSV</th>
+                    <th>Họ và tên</th>
+                    <th>Trạng thái</th>
+                    <th>Giờ quét</th>
+                    <th>Thiết bị</th>
+                    <th>Thao tác</th>
+                  </tr>
+                </thead>
+                <tbody id="attendance-body"></tbody>
+              </table>
+            </div>
+            <p id="attendance-empty" class="empty" hidden>Chưa có dữ liệu sinh viên trong ca này.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Panel 2: Danh sách thành viên -->
+      <section id="profiles-panel" class="panel" aria-labelledby="profiles-title" hidden>
         <div class="panel-heading"><div><h2 id="profiles-title">Danh sách thành viên</h2><p id="profiles-count" class="muted"></p></div><button class="primary" id="add-member" type="button">Cấp hồ sơ sinh viên</button></div>
         <form class="filters" id="profiles-filter"><div class="field-grow"><label for="profile-search">Tìm tên hoặc MSSV</label><input id="profile-search" type="search" maxlength="100" placeholder="Nhập tên hoặc mã sinh viên"></div><button type="submit" class="secondary">Tìm kiếm</button></form>
         <div class="table-scroll"><table><caption class="sr-only">Hồ sơ thành viên được cấp quyền sử dụng xưởng</caption><thead><tr><th>MSSV</th><th>Họ và tên</th><th>Vai trò</th><th>Trạng thái</th><th>Thao tác</th></tr></thead><tbody id="profiles-body"></tbody></table></div>
         <p id="profiles-empty" class="empty" hidden>Chưa tìm thấy thành viên phù hợp.</p>
         <div class="pagination"><button type="button" class="secondary" id="profiles-prev" disabled>Trang trước</button><span id="profiles-page"></span><button type="button" class="secondary" id="profiles-next" disabled>Trang sau</button></div>
       </section>
+
+      <!-- Panel 3: Nhật ký hoạt động -->
       <section id="audits-panel" class="panel" aria-labelledby="audits-title" hidden>
         <div class="panel-heading"><h2 id="audits-title">Nhật ký hoạt động</h2><p id="audits-count" class="muted"></p></div>
         <form class="filters" id="audits-filter"><div class="field-grow"><label for="audit-action">Lọc theo thao tác</label><input id="audit-action" type="search" maxlength="100" placeholder="Ví dụ: profile.bootstrap_super_admin"></div><button type="submit" class="secondary">Lọc nhật ký</button></form>
@@ -32,6 +115,8 @@
       </section>
     </div>
   </main>
+
+  <!-- Dialog 1: Cấp/sửa hồ sơ sinh viên -->
   <dialog id="member-dialog" aria-labelledby="member-dialog-title">
     <div class="dialog-heading"><h2 id="member-dialog-title">Cấp hồ sơ sinh viên</h2><button type="button" class="secondary" id="close-member">Đóng</button></div>
     <p id="member-status" class="status" role="status" aria-live="polite"></p>
@@ -43,6 +128,57 @@
       <label class="check-label" id="member-active-field" hidden><input id="member-active" type="checkbox">Đang hoạt động</label>
       <button type="submit" class="primary" id="save-member">Cấp hồ sơ</button>
     </form>
+  </dialog>
+
+  <!-- Dialog 2: Can thiệp trạng thái điểm danh thủ công -->
+  <dialog id="attendance-dialog" aria-labelledby="att-dialog-title">
+    <div class="dialog-heading"><h2 id="att-dialog-title">Cập nhật điểm danh</h2><button type="button" class="secondary" id="close-att-dialog">Đóng</button></div>
+    <p id="att-edit-status-msg" class="status" role="status" aria-live="polite"></p>
+    <form id="attendance-edit-form" class="reset-form" method="post">
+      <input type="hidden" id="att-edit-profile-id">
+      <div style="margin-bottom:8px;"><strong>Sinh viên:</strong> <span id="att-edit-name"></span> (<span id="att-edit-mssv"></span>)</div>
+      <div style="margin-bottom:12px;"><strong>Ca & Ngày:</strong> <span id="att-edit-shift-date"></span></div>
+      <div>
+        <label for="att-edit-status">Trạng thái mới</label>
+        <select id="att-edit-status">
+          <option value="Có mặt">Có mặt</option>
+          <option value="Đi trễ">Đi trễ</option>
+          <option value="Vắng có phép">Vắng có phép</option>
+          <option value="Vắng không phép">Vắng không phép</option>
+          <option value="Hủy">Hủy điểm danh (Xóa ghi nhận)</option>
+        </select>
+      </div>
+      <div>
+        <label for="att-edit-reason">Lý do điều chỉnh (bắt buộc khi can thiệp)</label>
+        <textarea id="att-edit-reason" rows="2" maxlength="300" placeholder="Ví dụ: Sinh viên báo bận việc đột xuất, thiết bị hết pin..."></textarea>
+      </div>
+      <button type="submit" class="primary" id="btn-save-attendance">Lưu thay đổi</button>
+    </form>
+  </dialog>
+
+  <!-- Dialog 3: Mở khóa thiết bị cho sinh viên -->
+  <dialog id="device-reset-dialog" aria-labelledby="dev-dialog-title">
+    <div class="dialog-heading"><h2 id="dev-dialog-title">Mở khóa thiết bị</h2><button type="button" class="secondary" id="close-dev-dialog">Đóng</button></div>
+    <p id="dev-reset-status-msg" class="status" role="status" aria-live="polite"></p>
+    <form id="device-reset-form" class="reset-form" method="post">
+      <input type="hidden" id="dev-reset-profile-id">
+      <div style="margin-bottom:8px;"><strong>Sinh viên:</strong> <span id="dev-reset-name"></span> (<span id="dev-reset-mssv"></span>)</div>
+      <p class="muted" style="margin:10px 0; font-size:0.9rem;">Sau khi mở khóa, sinh viên có thể dùng điện thoại/máy mới để quét mã điểm danh. Thiết bị mới sẽ tự động được khóa lại.</p>
+      <div>
+        <label for="dev-reset-reason">Lý do mở khóa</label>
+        <input id="dev-reset-reason" maxlength="200" placeholder="Ví dụ: Đổi máy mới, mất điện thoại..." required>
+      </div>
+      <button type="submit" class="primary" id="btn-save-device-reset">Mở khóa thiết bị ngay</button>
+    </form>
+  </dialog>
+
+  <!-- Dialog 4: Phóng to mã QR toàn màn hình cho máy chiếu -->
+  <dialog id="qr-fullscreen-dialog" aria-labelledby="fs-dialog-title" style="max-width:480px;">
+    <div class="dialog-heading"><h2 id="fs-dialog-title">Mã QR Điểm danh</h2><button type="button" class="secondary" id="close-fs-qr">Đóng</button></div>
+    <div class="fullscreen-qr-body">
+      <p class="muted">Sinh viên đưa camera quét mã trực tiếp trên màn hình.</p>
+      <div id="fullscreen-qrcode" class="qr-display-box"></div>
+    </div>
   </dialog>
 </body>
 </html>

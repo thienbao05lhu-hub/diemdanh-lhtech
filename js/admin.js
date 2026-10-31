@@ -6,10 +6,11 @@
   const retry = document.getElementById('retry-page');
   if (!api) { status.textContent = 'Không tải được hệ thống. Vui lòng tải lại trang.'; return; }
   const pageSize = 20;
-  const state = { section: 'profiles', profiles: { page: 0, filter: '' }, audits: { page: 0, filter: '' }, version: 0 };
+  const state = { section: 'attendance', profiles: { page: 0, filter: '' }, audits: { page: 0, filter: '' }, version: 0 };
   let controller;
   let authenticated = false;
   let currentProfile;
+  let attendanceInitialized = false;
   window.AttendanceAdmin = Object.freeze({ reload: load, getCurrent: () => currentProfile });
   api.bindLogout(status);
   const text = (tag, value, className) => {
@@ -30,10 +31,11 @@
     controller?.abort(); controller = new AbortController();
     const signal = controller.signal;
     const section = state.section;
-    const params = { ...state[section] };
-    document.getElementById(`${section}-body`).replaceChildren();
-    document.getElementById(`${section}-empty`).hidden = true;
-    for (const name of ['prev', 'next']) document.getElementById(`${section}-${name}`).disabled = true;
+    if (section !== 'attendance') {
+      document.getElementById(`${section}-body`).replaceChildren();
+      document.getElementById(`${section}-empty`).hidden = true;
+      for (const name of ['prev', 'next']) document.getElementById(`${section}-${name}`).disabled = true;
+    }
     api.setStatus(status, 'Đang tải dữ liệu…'); retry.hidden = true;
     try {
       const current = await api.requireIdentity(api.adminRoles);
@@ -43,6 +45,19 @@
       document.getElementById('signed-in-name').textContent = `${current.profile.displayName} (${current.profile.studentId})`;
       document.getElementById('account-role').textContent = api.roleLabels[current.profile.role];
       content.hidden = false;
+
+      if (section === 'attendance') {
+        if (!attendanceInitialized) {
+          window.AttendanceLive?.init();
+          attendanceInitialized = true;
+        } else {
+          window.AttendanceLive?.load();
+        }
+        api.setStatus(status);
+        return;
+      }
+
+      const params = { ...state[section] };
       let query;
       if (section === 'profiles') {
         query = api.client.from('profiles').select('id,student_id,display_name,role,active,updated_at', { count: 'exact' }).order('student_id');
@@ -99,6 +114,7 @@
   document.querySelectorAll('[data-section]').forEach(button => button.addEventListener('click', () => {
     state.section = button.dataset.section;
     document.querySelectorAll('[data-section]').forEach(item => item.setAttribute('aria-pressed', String(item === button)));
+    document.getElementById('attendance-panel').hidden = state.section !== 'attendance';
     document.getElementById('profiles-panel').hidden = state.section !== 'profiles';
     document.getElementById('audits-panel').hidden = state.section !== 'audits';
     load();

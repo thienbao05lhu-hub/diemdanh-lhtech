@@ -2,14 +2,88 @@
 <html lang="vi">
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; connect-src https://oalnswbnjhkkovxjxtlz.supabase.co wss://oalnswbnjhkkovxjxtlz.supabase.co; img-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'none'">
-  <meta name="referrer" content="no-referrer"><title>Điểm danh | LHTech</title>
-  <link rel="stylesheet" href="css/app.css"><script defer src="vendor/supabase-2.118.0.js"></script><script defer src="js/config.js"></script><script defer src="js/auth.js"></script><script defer src="js/account.js"></script>
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; connect-src https://oalnswbnjhkkovxjxtlz.supabase.co wss://oalnswbnjhkkovxjxtlz.supabase.co; img-src 'self' data: blob:; object-src 'none'; base-uri 'self'; form-action 'none'">
+  <meta name="referrer" content="no-referrer">
+  <title>Điểm danh QR | Điểm danh LHTech</title>
+  <link rel="stylesheet" href="css/app.css?v=20261031-attendance">
+  <script defer src="vendor/supabase-2.118.0.js"></script>
+  <script defer src="vendor/html5-qrcode.min.js"></script>
+  <script defer src="js/config.js"></script>
+  <script defer src="js/auth.js?v=20261031-attendance"></script>
+  <script defer src="js/checkin.js?v=20261031-attendance"></script>
 </head>
 <body>
-  <header class="topbar"><a class="brand" href="index.html"><span class="brand-mark" aria-hidden="true">LH</span><span>Điểm danh LHTech</span></a><button class="outline-light" id="logout" type="button">Đăng xuất</button></header>
-  <main class="workspace account-workspace"><p id="page-status" class="status" role="status" aria-live="polite">Đang kiểm tra tài khoản…</p><button type="button" class="secondary" id="retry-page" hidden>Thử lại</button>
-    <section id="protected-content" class="panel account-panel" hidden><h1>Điểm danh</h1><p id="profile-name"></p><p>Chức năng điểm danh chưa được mở trên phiên bản này. Chưa có lượt điểm danh nào được ghi nhận từ trang này.</p><a class="button secondary" href="app.html">Xem tài khoản</a></section>
+  <header class="topbar">
+    <a class="brand" href="app.html"><span class="brand-mark" aria-hidden="true">LH</span><span>Điểm danh LHTech</span></a>
+    <div class="user-controls">
+      <span id="signed-in-name"></span>
+      <button class="outline-light" id="logout" type="button">Đăng xuất</button>
+    </div>
+  </header>
+
+  <main class="workspace account-workspace" style="max-width:680px;">
+    <p id="page-status" class="status" role="status" aria-live="polite">Đang kiểm tra tài khoản…</p>
+    <button type="button" class="secondary" id="retry-page" hidden>Thử lại</button>
+
+    <section id="protected-content" class="panel account-panel" hidden>
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+        <div>
+          <p class="subtitle" style="margin-bottom:4px;">Xưởng thực hành LHTech</p>
+          <h1 style="font-size:1.6rem; margin:0;">Quét mã Điểm danh</h1>
+        </div>
+        <a href="app.html" class="button secondary small">Về tài khoản</a>
+      </div>
+
+      <p class="muted" style="margin-bottom:18px;">
+        Đưa camera hướng vào mã QR động 30s đang phát trên màn hình máy chiếu hoặc màn hình quản trị của xưởng.
+      </p>
+
+      <!-- Khung camera quét mã QR -->
+      <div class="scanner-card">
+        <div id="qr-reader" class="scanner-viewport"></div>
+        <div id="camera-status" class="status" style="margin-top:8px;">Đang khởi động camera…</div>
+
+        <div style="margin-top:14px; display:flex; gap:8px; justify-content:center;">
+          <button id="btn-toggle-camera" type="button" class="secondary small">Tắt/Bật camera</button>
+        </div>
+      </div>
+
+      <!-- Khung nhập token dự phòng (nếu camera không cho phép hoặc bị lỗi) -->
+      <details style="margin-top:18px;">
+        <summary style="font-weight:600; font-size:0.9rem;">Không mở được camera? Nhập mã thủ công</summary>
+        <form id="manual-token-form" style="margin-top:12px; display:flex; gap:8px;">
+          <input id="input-qr-token" type="text" placeholder="Dán mã QR 32 ký tự vào đây" style="flex:1;" required>
+          <button type="submit" class="primary small" style="white-space:nowrap;">Xác nhận</button>
+        </form>
+      </details>
+
+      <!-- Thông báo kết quả điểm danh -->
+      <div id="scan-result-card" hidden style="margin-top:20px;">
+        <div id="scan-result-alert" class="scan-alert"></div>
+      </div>
+
+      <!-- Lịch sử điểm danh cá nhân gần đây -->
+      <div style="margin-top:32px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+          <h2 style="font-size:1.15rem; margin:0;">Lịch sử điểm danh gần đây</h2>
+          <button id="btn-reload-history" type="button" class="secondary small">Tải lại</button>
+        </div>
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Ngày</th>
+                <th>Ca</th>
+                <th>Trạng thái</th>
+                <th>Giờ quét</th>
+              </tr>
+            </thead>
+            <tbody id="my-attendance-body"></tbody>
+          </table>
+        </div>
+        <p id="history-empty" class="empty" hidden>Bạn chưa có lượt điểm danh nào.</p>
+      </div>
+    </section>
   </main>
 </body>
 </html>

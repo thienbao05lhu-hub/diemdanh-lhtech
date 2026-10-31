@@ -35,6 +35,9 @@
       APP_INVALID_SCHEDULE: 'Lịch chưa hợp lệ. Mỗi ngày chỉ gồm các ca Sáng, Chiều và Tối.',
       APP_SCHEDULE_STALE: 'Lịch đã được cập nhật ở nơi khác. Bỏ thay đổi và tải lại lịch mới trước khi lưu.',
       APP_REVISION_NOT_FOUND: 'Phiên bản này không còn trong lịch sử. Hãy tải lại danh sách lịch sử.',
+      APP_DEVICE_MISMATCH: 'Thiết bị không khớp. Tài khoản của bạn đã được gắn với thiết bị khác để chống điểm danh hộ.',
+      APP_INVALID_QR: 'Mã QR đã hết hạn hoặc không hợp lệ. Vui lòng quét lại mã 30s đang phát.',
+      APP_SHIFT_LOCKED: 'Ca điểm danh này đã được chốt và khóa sổ.',
     };
     if (appMessages[error?.message]) return appMessages[error.message];
     if (code === '23505') return 'Mã sinh viên hoặc hồ sơ này đã được sử dụng.';

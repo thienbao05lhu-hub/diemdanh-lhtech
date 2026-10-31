@@ -9,7 +9,18 @@
 <body>
   <header class="topbar"><a class="brand" href="index.html"><span class="brand-mark" aria-hidden="true">LH</span><span>Điểm danh LHTech</span></a><button class="outline-light" id="logout" type="button">Đăng xuất</button></header>
   <main class="workspace account-workspace"><p id="page-status" class="status" role="status" aria-live="polite">Đang kiểm tra tài khoản…</p><button type="button" class="secondary" id="retry-page" hidden>Thử lại</button>
-    <section id="protected-content" class="panel account-panel" hidden><p class="subtitle">Tài khoản của bạn</p><h1 id="profile-name"></h1><dl class="profile-details"><div><dt>Mã sinh viên</dt><dd id="profile-student-id"></dd></div><div><dt>Vai trò</dt><dd id="profile-role"></dd></div></dl><a id="admin-link" class="button primary" href="admin.html" hidden>Mở trang quản trị</a></section>
+    <section id="protected-content" class="panel account-panel" hidden>
+      <p class="subtitle">Tài khoản của bạn</p>
+      <h1 id="profile-name"></h1>
+      <dl class="profile-details">
+        <div><dt>Mã sinh viên</dt><dd id="profile-student-id"></dd></div>
+        <div><dt>Vai trò</dt><dd id="profile-role"></dd></div>
+      </dl>
+      <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:20px;">
+        <a class="button primary" href="checkin.html">📷 Quét mã điểm danh</a>
+        <a id="admin-link" class="button secondary" href="admin.html" hidden>Mở trang quản trị</a>
+      </div>
+    </section>
     <section id="student-schedule-panel" class="panel student-week" hidden><div class="panel-heading"><h2>Lịch xưởng của bạn</h2></div><div class="filters"><div class="field-grow"><label for="student-week">Ngày trong tuần</label><input id="student-week" type="date" required></div><button id="load-student-week" class="secondary" type="button">Xem lịch</button></div><p id="student-week-range" class="notice"></p><p id="student-week-status" class="notice status" role="status" aria-live="polite"></p><p class="notice mobile-scroll-hint">Vuốt ngang bảng để xem đủ 7 ngày.</p><div id="student-week-grid" class="table-scroll"></div></section>
   </main>
 </body>
