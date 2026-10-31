@@ -23,6 +23,21 @@
 
   function message(error) {
     const code = error?.code;
+    const appMessages = {
+      APP_FORBIDDEN: 'Tài khoản không có quyền thực hiện thao tác này.',
+      APP_INVALID_INPUT: 'Thông tin chưa hợp lệ. Kiểm tra lại các trường bắt buộc.',
+      APP_AUTH_NOT_FOUND: 'Chưa tìm thấy tài khoản đăng nhập duy nhất cho email này. Hãy cấp tài khoản trước.',
+      APP_PROFILE_EXISTS: 'Email này đã gắn với một mã sinh viên khác.',
+      APP_PROFILE_NOT_FOUND: 'Hồ sơ không tồn tại hoặc đang bị khóa.',
+      APP_PROFILE_STALE: 'Hồ sơ đã được thay đổi. Hãy tải lại danh sách rồi chỉnh sửa lại.',
+      APP_SELF_CHANGE: 'Bạn không thể tự hạ quyền hoặc khóa tài khoản đang sử dụng.',
+      APP_LAST_ADMIN: 'Cần giữ ít nhất một tài khoản Quản trị cao nhất đang hoạt động.',
+      APP_INVALID_SCHEDULE: 'Lịch chưa hợp lệ. Mỗi ngày chỉ gồm các ca Sáng, Chiều và Tối.',
+      APP_SCHEDULE_STALE: 'Lịch đã được cập nhật ở nơi khác. Bỏ thay đổi và tải lại lịch mới trước khi lưu.',
+      APP_REVISION_NOT_FOUND: 'Phiên bản này không còn trong lịch sử. Hãy tải lại danh sách lịch sử.',
+    };
+    if (appMessages[error?.message]) return appMessages[error.message];
+    if (code === '23505') return 'Mã sinh viên hoặc hồ sơ này đã được sử dụng.';
     if (code === 'PROFILE_MISSING') return 'Tài khoản chưa được cấp hồ sơ hoặc đã bị khóa. Vui lòng liên hệ quản trị viên.';
     if (code === 'invalid_credentials') return 'Email hoặc mật khẩu chưa đúng.';
     if (code === 'email_not_confirmed') return 'Email tài khoản chưa được xác nhận. Vui lòng liên hệ quản trị viên.';
@@ -43,7 +58,7 @@
     element.classList.toggle('error', error);
   }
   function safeNext(value) {
-    if (!value || !/^(admin|app|checkin)\.html(?:\?[^#]*)?$/.test(value)) return null;
+    if (!value || !/^(admin|app|checkin|schedule)\.html(?:\?[^#]*)?$/.test(value)) return null;
     const url = new URL(value, root.location.href);
     if (url.pathname.endsWith('/checkin.html')) {
       const token = url.searchParams.get('t');
@@ -53,7 +68,7 @@
   }
   function destination(profile) {
     const next = safeNext(new URLSearchParams(root.location.search).get('next'));
-    if (next && (next !== 'admin.html' || adminRoles.includes(profile.role))) return next;
+    if (next && (!['admin.html','schedule.html'].includes(next) || adminRoles.includes(profile.role))) return next;
     return adminRoles.includes(profile.role) ? 'admin.html' : 'app.html';
   }
   function loginUrl() {

@@ -4,12 +4,13 @@
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; connect-src https://oalnswbnjhkkovxjxtlz.supabase.co wss://oalnswbnjhkkovxjxtlz.supabase.co; img-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'none'">
   <meta name="referrer" content="no-referrer"><title>Tài khoản | Điểm danh LHTech</title>
-  <link rel="stylesheet" href="css/app.css"><script defer src="vendor/supabase-2.118.0.js"></script><script defer src="js/config.js"></script><script defer src="js/auth.js"></script><script defer src="js/account.js"></script>
+  <link rel="stylesheet" href="css/app.css?v=20261031-weekly"><script defer src="vendor/supabase-2.118.0.js"></script><script defer src="js/config.js"></script><script defer src="js/auth.js?v=20261031-weekly"></script><script defer src="js/account.js"></script><script defer src="js/schedule-utils.js"></script><script defer src="js/student-schedule.js"></script>
 </head>
 <body>
   <header class="topbar"><a class="brand" href="index.html"><span class="brand-mark" aria-hidden="true">LH</span><span>Điểm danh LHTech</span></a><button class="outline-light" id="logout" type="button">Đăng xuất</button></header>
   <main class="workspace account-workspace"><p id="page-status" class="status" role="status" aria-live="polite">Đang kiểm tra tài khoản…</p><button type="button" class="secondary" id="retry-page" hidden>Thử lại</button>
     <section id="protected-content" class="panel account-panel" hidden><p class="subtitle">Tài khoản của bạn</p><h1 id="profile-name"></h1><dl class="profile-details"><div><dt>Mã sinh viên</dt><dd id="profile-student-id"></dd></div><div><dt>Vai trò</dt><dd id="profile-role"></dd></div></dl><a id="admin-link" class="button primary" href="admin.html" hidden>Mở trang quản trị</a></section>
+    <section id="student-schedule-panel" class="panel student-week" hidden><div class="panel-heading"><h2>Lịch xưởng của bạn</h2></div><div class="filters"><div class="field-grow"><label for="student-week">Ngày trong tuần</label><input id="student-week" type="date" required></div><button id="load-student-week" class="secondary" type="button">Xem lịch</button></div><p id="student-week-range" class="notice"></p><p id="student-week-status" class="notice status" role="status" aria-live="polite"></p><p class="notice mobile-scroll-hint">Vuốt ngang bảng để xem đủ 7 ngày.</p><div id="student-week-grid" class="table-scroll"></div></section>
   </main>
 </body>
 </html>

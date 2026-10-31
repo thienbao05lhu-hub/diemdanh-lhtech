@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; connect-src https://oalnswbnjhkkovxjxtlz.supabase.co wss://oalnswbnjhkkovxjxtlz.supabase.co; img-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'none'">
+  <meta name="referrer" content="no-referrer"><title>Lịch xưởng theo tuần | LHTech</title>
+  <link rel="stylesheet" href="css/app.css?v=20261031-weekly"><script defer src="vendor/supabase-2.118.0.js"></script><script defer src="js/config.js"></script><script defer src="js/auth.js?v=20261031-weekly"></script><script defer src="js/schedule-utils.js"></script><script defer src="js/schedules.js"></script>
+</head>
+<body>
+  <header class="topbar"><a class="brand" href="admin.html"><span class="brand-mark" aria-hidden="true">LH</span><span>Điểm danh LHTech</span></a><div class="user-controls"><span id="signed-in-name"></span><button class="outline-light" id="logout" type="button">Đăng xuất</button></div></header>
+  <main class="workspace">
+    <p id="page-status" class="status" role="status" aria-live="polite">Đang kiểm tra quyền truy cập…</p><button id="retry-page" class="secondary" type="button" hidden>Thử lại</button>
+    <div id="protected-content" hidden>
+      <div class="page-heading"><div><p class="subtitle">Lịch xưởng</p><h1>Lịch theo tuần</h1><p class="muted">Chọn các ca thành viên sẽ lên xưởng trong tuần.</p></div><a class="button secondary" href="admin.html">Về quản lý thành viên</a></div>
+      <section class="panel">
+        <div class="filters schedule-filters"><div class="field-grow"><label for="schedule-member">Thành viên</label><select id="schedule-member"></select></div><div><label for="schedule-week">Ngày trong tuần</label><input id="schedule-week" type="date" required></div><button type="button" id="previous-week" class="secondary">Tuần trước</button><button type="button" id="next-week" class="secondary">Tuần sau</button></div>
+        <div class="panel-heading"><h2 id="week-range"></h2><p class="muted" id="schedule-revision"></p></div>
+        <p id="schedule-empty" class="notice" hidden>Chưa có lịch cho tuần này. Chọn các ca và lưu để thiết lập.</p>
+        <p class="notice mobile-scroll-hint">Vuốt ngang bảng để xem đủ 7 ngày.</p><div id="schedule-grid" class="table-scroll"></div>
+        <form id="schedule-form" class="schedule-save" method="post"><label for="schedule-reason">Lý do thay đổi</label><textarea id="schedule-reason" maxlength="500" rows="2" required placeholder="Ghi lý do cập nhật lịch"></textarea><div class="button-row"><button id="save-schedule" type="submit" class="primary">Lưu lịch tuần</button><button id="discard-schedule" type="button" class="secondary">Bỏ thay đổi</button><button id="reload-schedule" type="button" class="secondary">Tải lại lịch</button><button id="schedule-history" type="button" class="secondary">Lịch sử và khôi phục</button></div></form>
+      </section>
+    </div>
+  </main>
+  <dialog id="history-dialog" aria-labelledby="history-title"><div class="dialog-heading"><h2 id="history-title">Lịch sử lịch tuần</h2><button id="close-history" type="button" class="secondary">Đóng</button></div><p id="history-status" class="status" role="status" aria-live="polite"></p><label for="restore-reason">Lý do khôi phục</label><textarea id="restore-reason" maxlength="500" rows="2" required></textarea><div id="history-list"></div></dialog>
+</body>
+</html>

@@ -5,8 +5,8 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; connect-src https://oalnswbnjhkkovxjxtlz.supabase.co wss://oalnswbnjhkkovxjxtlz.supabase.co; img-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'none'">
   <meta name="referrer" content="no-referrer">
   <title>Quản trị | Điểm danh LHTech</title>
-  <link rel="stylesheet" href="css/app.css">
-  <script defer src="vendor/supabase-2.118.0.js"></script><script defer src="js/config.js"></script><script defer src="js/auth.js"></script><script defer src="js/admin.js"></script>
+  <link rel="stylesheet" href="css/app.css?v=20261031-weekly">
+  <script defer src="vendor/supabase-2.118.0.js"></script><script defer src="js/config.js"></script><script defer src="js/auth.js?v=20261031-weekly"></script><script defer src="js/member-tools.js"></script><script defer src="js/admin.js?v=20261031-weekly"></script>
 </head>
 <body>
   <header class="topbar"><a class="brand" href="index.html"><span class="brand-mark" aria-hidden="true">LH</span><span>Điểm danh LHTech</span></a><div class="user-controls"><span id="signed-in-name"></span><button class="outline-light" id="logout" type="button">Đăng xuất</button></div></header>
@@ -15,11 +15,11 @@
     <button id="retry-page" type="button" class="secondary" hidden>Thử lại</button>
     <div id="protected-content" hidden>
       <div class="page-heading"><div><p class="subtitle" id="account-role"></p><h1>Quản lý xưởng</h1><p class="muted">Theo dõi thành viên và hoạt động quản trị.</p></div><button id="reload" type="button" class="secondary">Tải lại dữ liệu</button></div>
-      <nav class="section-nav" aria-label="Chức năng quản trị"><button type="button" data-section="profiles" aria-pressed="true">Thành viên</button><button type="button" data-section="audits" aria-pressed="false">Nhật ký hoạt động</button></nav>
+      <nav class="section-nav" aria-label="Chức năng quản trị"><button type="button" data-section="profiles" aria-pressed="true">Thành viên</button><button type="button" data-section="audits" aria-pressed="false">Nhật ký hoạt động</button><a href="schedule.html">Lịch xưởng theo tuần</a></nav>
       <section id="profiles-panel" class="panel" aria-labelledby="profiles-title">
-        <div class="panel-heading"><h2 id="profiles-title">Danh sách thành viên</h2><p id="profiles-count" class="muted"></p></div>
+        <div class="panel-heading"><div><h2 id="profiles-title">Danh sách thành viên</h2><p id="profiles-count" class="muted"></p></div><button class="primary" id="add-member" type="button">Cấp hồ sơ sinh viên</button></div>
         <form class="filters" id="profiles-filter"><div class="field-grow"><label for="profile-search">Tìm tên hoặc MSSV</label><input id="profile-search" type="search" maxlength="100" placeholder="Nhập tên hoặc mã sinh viên"></div><button type="submit" class="secondary">Tìm kiếm</button></form>
-        <div class="table-scroll"><table><caption class="sr-only">Hồ sơ thành viên được cấp quyền sử dụng xưởng</caption><thead><tr><th>MSSV</th><th>Họ và tên</th><th>Vai trò</th><th>Trạng thái</th></tr></thead><tbody id="profiles-body"></tbody></table></div>
+        <div class="table-scroll"><table><caption class="sr-only">Hồ sơ thành viên được cấp quyền sử dụng xưởng</caption><thead><tr><th>MSSV</th><th>Họ và tên</th><th>Vai trò</th><th>Trạng thái</th><th>Thao tác</th></tr></thead><tbody id="profiles-body"></tbody></table></div>
         <p id="profiles-empty" class="empty" hidden>Chưa tìm thấy thành viên phù hợp.</p>
         <div class="pagination"><button type="button" class="secondary" id="profiles-prev" disabled>Trang trước</button><span id="profiles-page"></span><button type="button" class="secondary" id="profiles-next" disabled>Trang sau</button></div>
       </section>
@@ -32,5 +32,17 @@
       </section>
     </div>
   </main>
+  <dialog id="member-dialog" aria-labelledby="member-dialog-title">
+    <div class="dialog-heading"><h2 id="member-dialog-title">Cấp hồ sơ sinh viên</h2><button type="button" class="secondary" id="close-member">Đóng</button></div>
+    <p id="member-status" class="status" role="status" aria-live="polite"></p>
+    <form id="member-form" class="reset-form" method="post">
+      <div id="member-email-field"><label for="member-email">Email tài khoản đã được cấp</label><input id="member-email" type="email" maxlength="254" required autocomplete="off"><p class="help">Email này cần có tài khoản đăng nhập trước khi được gắn hồ sơ.</p></div>
+      <div><label for="member-student-id">Mã sinh viên</label><input id="member-student-id" inputmode="numeric" pattern="[0-9]{6,20}" minlength="6" maxlength="20" required></div>
+      <div><label for="member-name">Họ và tên</label><input id="member-name" maxlength="100" required></div>
+      <div id="member-role-field" hidden><label for="member-role">Vai trò</label><select id="member-role"><option value="student">Sinh viên</option><option value="admin">Quản trị viên</option><option value="super_admin">Quản trị cao nhất</option></select></div>
+      <label class="check-label" id="member-active-field" hidden><input id="member-active" type="checkbox">Đang hoạt động</label>
+      <button type="submit" class="primary" id="save-member">Cấp hồ sơ</button>
+    </form>
+  </dialog>
 </body>
 </html>
