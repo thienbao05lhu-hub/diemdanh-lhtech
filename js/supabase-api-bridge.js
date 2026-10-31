@@ -261,6 +261,7 @@
         const records = (data?.records || []).map(r => ({
           userId: r.studentId,
           userName: r.displayName,
+          department: r.studentId?.startsWith('124') ? '24CD111' : (r.studentId?.startsWith('125') ? '25CD111' : '23CD111'),
           shift: shift,
           status: r.status,
           timestamp: r.scannedAt,
@@ -308,7 +309,7 @@
           id: p.id,
           userId: p.student_id,
           name: p.display_name,
-          department: '23CD111',
+          department: p.department || (p.student_id?.startsWith('124') ? '24CD111' : (p.student_id?.startsWith('125') ? '25CD111' : '23CD111')),
           role: p.role === 'super_admin' ? 'superadmin' : p.role,
           active: p.active,
           deviceBound: devMap.has(p.id),
@@ -349,15 +350,28 @@
         const profile = getProfileByStudentId(body.userId);
         if (!profile) return jsonResponse({ success: false, message: 'Không tìm thấy hồ sơ SV' }, 404);
 
+        let targetStatus = body.newStatus || body.status;
+        if (targetStatus === 'Chưa điểm danh' || targetStatus === 'Hủy') {
+          targetStatus = 'Hủy';
+        } else if (targetStatus === 'Vắng CP') {
+          targetStatus = 'Vắng có phép';
+        } else if (targetStatus === 'Vắng KP') {
+          targetStatus = 'Vắng không phép';
+        }
+
         const { data, error } = await client.rpc('admin_update_attendance', {
           p_profile_id: profile.id,
           p_date: body.date || getTodayIso(),
           p_shift: body.shift || 'Sáng',
-          p_status: body.status,
+          p_status: targetStatus,
           p_reason: body.reason || 'Quản trị viên điều chỉnh thủ công'
         });
 
-        return jsonResponse({ success: !error, data });
+        if (error) {
+          return jsonResponse({ success: false, message: error.message }, 400);
+        }
+
+        return jsonResponse({ success: true, message: 'Cập nhật thành công', data });
       }
 
       // 8. /api/attendance/cancel (Hủy điểm danh)
@@ -374,7 +388,11 @@
           p_reason: 'Quản trị viên hủy điểm danh'
         });
 
-        return jsonResponse({ success: !error, data });
+        if (error) {
+          return jsonResponse({ success: false, message: error.message }, 400);
+        }
+
+        return jsonResponse({ success: true, message: 'Hủy điểm danh thành công', data });
       }
 
       // 9. /api/schedule (Lấy hoặc Lưu lịch tuần)
@@ -391,7 +409,7 @@
             _id: p.id,
             userId: p.student_id,
             name: p.display_name,
-            department: '23CD111',
+            department: p.department || (p.student_id?.startsWith('124') ? '24CD111' : (p.student_id?.startsWith('125') ? '25CD111' : '23CD111')),
             schedule: schedMap.get(p.id)?.schedule || {
               t2: ['Sáng', 'Chiều', 'Tối'], t3: ['Sáng', 'Chiều', 'Tối'],
               t4: ['Sáng', 'Chiều', 'Tối'], t5: ['Sáng', 'Chiều', 'Tối'],
@@ -453,7 +471,8 @@
       // 10. /api/admin/grant hoặc /api/admin/revoke
       if (urlStr.includes('/api/admin/grant') || urlStr.includes('/api/admin/revoke')) {
         const body = JSON.parse(options.body || '{}');
-        const profile = getProfileByStudentId(body.userId);
+        const targetId = body.targetUserId || body.userId;
+        const profile = getProfileByStudentId(targetId);
         if (!profile) return jsonResponse({ success: false, message: 'Không tìm thấy SV' }, 404);
 
         const newRole = urlStr.includes('grant') ? 'admin' : 'student';
@@ -475,28 +494,46 @@
         const statsMap = new Map();
 
         cachedProfiles.forEach(p => {
+          const dept = p.department || (p.student_id?.startsWith('124') ? '24CD111' : (p.student_id?.startsWith('125') ? '25CD111' : '23CD111'));
           statsMap.set(p.id, {
             userId: p.student_id,
             name: p.display_name,
+            department: dept,
+            present: 0,
+            late: 0,
+            excused: 0,
+            unexcused: 0,
             totalPresent: 0,
             totalLate: 0,
             totalAbsentWithLeave: 0,
-            totalAbsentWithoutLeave: 0
+            totalAbsentWithoutLeave: 0,
+            total: 0
           });
         });
 
         (atts || []).forEach(a => {
           const s = statsMap.get(a.profile_id);
           if (s) {
-            if (a.status === 'Có mặt') s.totalPresent++;
-            else if (a.status === 'Đi trễ') s.totalLate++;
-            else if (a.status === 'Vắng có phép') s.totalAbsentWithLeave++;
-            else if (a.status === 'Vắng không phép') s.totalAbsentWithoutLeave++;
+            s.total++;
+            if (a.status === 'Có mặt') {
+              s.present++;
+              s.totalPresent++;
+            } else if (a.status === 'Đi trễ') {
+              s.late++;
+              s.totalLate++;
+            } else if (a.status === 'Vắng có phép' || a.status === 'Vắng CP') {
+              s.excused++;
+              s.totalAbsentWithLeave++;
+            } else if (a.status === 'Vắng không phép' || a.status === 'Vắng KP') {
+              s.unexcused++;
+              s.totalAbsentWithoutLeave++;
+            }
           }
         });
 
         return jsonResponse({
           success: true,
+          count: statsMap.size,
           data: Array.from(statsMap.values())
         });
       }
@@ -510,8 +547,8 @@
         (atts || []).forEach(a => {
           if (a.status === 'Có mặt') present++;
           else if (a.status === 'Đi trễ') late++;
-          else if (a.status === 'Vắng có phép') excused++;
-          else if (a.status === 'Vắng không phép') unexcused++;
+          else if (a.status === 'Vắng có phép' || a.status === 'Vắng CP') excused++;
+          else if (a.status === 'Vắng không phép' || a.status === 'Vắng KP') unexcused++;
         });
 
         return jsonResponse({
