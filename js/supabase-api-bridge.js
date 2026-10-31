@@ -32,7 +32,14 @@
   async function refreshProfiles() {
     try {
       const { data } = await client.from('profiles').select('*').order('student_id');
-      if (data) cachedProfiles = data;
+      if (data) {
+        cachedProfiles = data.map(p => {
+          if (p.student_id === '123000896' || p.role === 'super_admin') {
+            p.display_name = 'Võ Huỳnh Thiên Bảo';
+          }
+          return p;
+        });
+      }
     } catch (e) {}
     return cachedProfiles;
   }
@@ -151,12 +158,23 @@
         if (!profile || !['admin', 'super_admin'].includes(profile.role)) {
           return jsonResponse({ success: false, message: 'Tài khoản không có quyền quản trị' }, 403);
         }
+        const adminDisplayName = (profile.student_id === '123000896' || profile.role === 'super_admin') ? 'Võ Huỳnh Thiên Bảo' : profile.display_name;
+        if ((profile.student_id === '123000896' || profile.role === 'super_admin') && profile.display_name !== 'Võ Huỳnh Thiên Bảo') {
+          profile.display_name = 'Võ Huỳnh Thiên Bảo';
+          client.rpc('admin_update_profile', {
+            p_id: profile.id,
+            p_display_name: 'Võ Huỳnh Thiên Bảo',
+            p_role: profile.role,
+            p_active: profile.active !== false,
+            p_expected_updated_at: profile.updated_at
+          }).then(res => { if (res.data) profile.updated_at = res.data.updated_at; }).catch(() => {});
+        }
         return jsonResponse({
           success: true,
           csrfToken: 'sb-jwt-' + session.access_token.slice(-10),
           data: {
             userId: profile.student_id,
-            name: profile.display_name,
+            name: adminDisplayName,
             role: profile.role === 'super_admin' ? 'superadmin' : profile.role
           }
         });
@@ -178,12 +196,23 @@
           const res = await client.from('profiles').select('*').eq('id', data.user.id).maybeSingle();
           profile = res.data;
         }
+        const adminDisplayName = (profile.student_id === '123000896' || profile.role === 'super_admin') ? 'Võ Huỳnh Thiên Bảo' : profile.display_name;
+        if ((profile.student_id === '123000896' || profile.role === 'super_admin') && profile.display_name !== 'Võ Huỳnh Thiên Bảo') {
+          profile.display_name = 'Võ Huỳnh Thiên Bảo';
+          client.rpc('admin_update_profile', {
+            p_id: profile.id,
+            p_display_name: 'Võ Huỳnh Thiên Bảo',
+            p_role: profile.role,
+            p_active: profile.active !== false,
+            p_expected_updated_at: profile.updated_at
+          }).then(res => { if (res.data) profile.updated_at = res.data.updated_at; }).catch(() => {});
+        }
         return jsonResponse({
           success: true,
           csrfToken: 'sb-jwt-' + data.session.access_token.slice(-10),
           data: {
             userId: profile.student_id,
-            name: profile.display_name,
+            name: adminDisplayName,
             role: profile.role === 'super_admin' ? 'superadmin' : profile.role
           }
         });
