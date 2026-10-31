@@ -1083,7 +1083,13 @@
         }
 
         try {
-          await sendZaloMessage(reportMsg);
+          if (typeof sendZaloMessage === 'function') {
+            await sendZaloMessage(reportMsg);
+          } else if (typeof root.sendZaloMessage === 'function') {
+            await root.sendZaloMessage(reportMsg);
+          } else if (typeof window !== 'undefined' && typeof window.sendZaloMessage === 'function') {
+            await window.sendZaloMessage(reportMsg);
+          }
         } catch (zErr) {
           console.warn('Lỗi khi gửi Zalo:', zErr);
         }
