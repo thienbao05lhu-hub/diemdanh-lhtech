@@ -3452,6 +3452,37 @@
     setInterval(fetchTodayAttendance, 3000);
     // 2. Polling cập nhật thống kê chuyên cần cá nhân mỗi 6 giây
     setInterval(fetchPersonalStats, 6000);
+
+    // 3. Tự động gửi báo cáo Zalo khi đến giờ chốt ca (11:00 Ca Sáng, 17:00 Ca Chiều, 22:00 Ca Tối)
+    setInterval(() => {
+      try {
+        const now = new Date();
+        const vnStr = now.toLocaleTimeString('en-US', { timeZone: 'Asia/Ho_Chi_Minh', hour12: false, hour: '2-digit', minute: '2-digit' });
+        const [h, m] = vnStr.split(':').map(Number);
+        const vnDate = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' });
+        
+        let closeShift = null;
+        if (h === 11 && m === 0) closeShift = 'Sáng';
+        else if (h === 17 && m === 0) closeShift = 'Chiều';
+        else if (h === 22 && m === 0) closeShift = 'Tối';
+
+        if (closeShift) {
+          const sentKey = `auto_zalo_sent_${vnDate}_${closeShift}`;
+          if (!localStorage.getItem(sentKey)) {
+            localStorage.setItem(sentKey, 'true');
+            fetch('/api/attendance/force-zalo-report', {
+              method: 'POST',
+              headers: getAdminHeaders(),
+              body: JSON.stringify({ shift: closeShift })
+            }).then(r => r.json()).then(res => {
+              if (res.success && typeof showToast !== 'undefined') {
+                showToast.info(`Tự động gửi báo cáo Ca ${closeShift} qua Zalo!`);
+              }
+            }).catch(() => {});
+          }
+        }
+      } catch (e) {}
+    }, 20000);
   </script>
   <script src="js/admin-auth.js"></script>
   <script src="js/weekly-schedule.js"></script>

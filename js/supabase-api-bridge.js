@@ -9,6 +9,8 @@
   const config = root.ATTENDANCE_CONFIG || {
     supabaseUrl: 'https://oalnswbnjhkkovxjxtlz.supabase.co',
     supabasePublishableKey: 'sb_publishable_Sz6k8E5HKwtxXbmu1T0HLw_4sXzTjo7',
+    zaloBotToken: '1993804723126353491:VPyOMCngpRjWbHtPCVsYJnCBezBkpapglMLmvHGMLBxDNLqpqFTiuDByXBAdHSKd',
+    zaloChatId: '0edc1e512605cf5b9614',
   };
 
   if (!root.supabase?.createClient) {
@@ -315,14 +317,37 @@
         }
 
         const resData = data || {};
+        const isAlready = Boolean(resData.alreadyScanned);
+        const resolvedName = resData.data?.displayName || (userId === '123000896' ? 'Võ Huỳnh Thiên Bảo' : userId);
+        const resolvedStatus = resData.data?.status || 'Có mặt';
+        const resolvedTime = resData.data?.scannedAt || new Date().toISOString();
+
+        // Gửi thông báo tức thì lên Nhóm Zalo nếu quét mới thành công
+        if (!isAlready) {
+          try {
+            const vnNow = getVnTimeInfo();
+            const curShift = vnNow.totalMinutes < 720 ? 'Sáng' : (vnNow.totalMinutes < 1080 ? 'Chiều' : 'Tối');
+            const timeStr = new Date(resolvedTime).toLocaleString('vi-VN', {
+              timeZone: 'Asia/Ho_Chi_Minh',
+              hour: '2-digit', minute: '2-digit', second: '2-digit',
+              day: '2-digit', month: '2-digit', year: 'numeric'
+            });
+            const icon = resolvedStatus === 'Đi trễ' ? '⚠️' : '✅';
+            const actionText = resolvedStatus === 'Đi trễ' ? 'đi trễ' : 'vừa điểm danh';
+            sendZaloMessage(`${icon} Sinh viên [${resolvedName}] ${actionText} ca [${curShift}] lúc [${timeStr}]`);
+          } catch (zErr) {
+            console.warn('Lỗi gửi tin nhắn điểm danh Zalo:', zErr);
+          }
+        }
+
         return jsonResponse({
           success: true,
-          alreadyScanned: resData.alreadyScanned || false,
+          alreadyScanned: isAlready,
           message: resData.message || 'Điểm danh thành công',
           data: {
-            userName: resData.data?.displayName || userId,
-            status: resData.data?.status || 'Có mặt',
-            timestamp: resData.data?.scannedAt || new Date().toISOString()
+            userName: resolvedName,
+            status: resolvedStatus,
+            timestamp: resolvedTime
           }
         });
       }
@@ -897,11 +922,109 @@
         });
       }
 
-      // 16. /api/attendance/force-zalo-report
+      // 16. /api/attendance/force-zalo-report (Báo Cáo Điểm Danh Ca Lên Nhóm Zalo)
       if (urlStr.includes('/api/attendance/force-zalo-report')) {
+        const body = JSON.parse(options.body || '{}');
+        const vnInfo = getVnTimeInfo();
+        let targetShift = body.shift;
+        if (!targetShift) {
+          targetShift = vnInfo.totalMinutes < 720 ? 'Sáng' : (vnInfo.totalMinutes < 1080 ? 'Chiều' : 'Tối');
+        }
+        if (targetShift.toLowerCase().includes('chiều')) targetShift = 'Chiều';
+        else if (targetShift.toLowerCase().includes('tối')) targetShift = 'Tối';
+        else targetShift = 'Sáng';
+
+        const todayIso = vnInfo.isoDateStr;
+        const { data: atts } = await client.from('attendance')
+          .select('*')
+          .eq('business_date', todayIso)
+          .eq('shift', targetShift);
+
+        const { data: scheds } = await client.from('weekly_schedules')
+          .select('*')
+          .eq('week_start', getMondayIso());
+        const schedMap = new Map((scheds || []).map(s => [s.profile_id, s.schedule]));
+
+        const attList = atts || [];
+        const attMap = new Map(attList.map(a => [a.profile_id, a]));
+
+        const dayKey = vnInfo.dayKey;
+        const shiftLower = targetShift.toLowerCase();
+
+        // 1. Lọc danh sách sinh viên có lịch lên xưởng ca này hôm nay
+        const expectedProfiles = cachedProfiles.filter(p => {
+          const userSched = schedMap.get(p.id);
+          if (!userSched || !userSched[dayKey] || !Array.isArray(userSched[dayKey])) return true;
+          return userSched[dayKey].map(s => String(s).toLowerCase()).includes(shiftLower);
+        });
+
+        // 2. Phân loại có mặt đúng giờ, đi trễ, vắng
+        const presentOnTime = attList.filter(a => a.status === 'Có mặt');
+        const lateList = attList.filter(a => a.status === 'Đi trễ');
+
+        const absentList = [];
+        const processedProfileIds = new Set();
+
+        expectedProfiles.forEach(p => {
+          const att = attMap.get(p.id);
+          const pName = (p.student_id === '123000896' || p.role === 'super_admin') ? 'Võ Huỳnh Thiên Bảo' : p.display_name;
+          if (!att) {
+            absentList.push({ name: pName, note: '' });
+          } else if (att.status === 'Vắng có phép' || att.status === 'Vắng CP') {
+            absentList.push({ name: pName, note: ' (Có phép)' });
+          } else if (att.status === 'Vắng không phép' || att.status === 'Vắng KP') {
+            absentList.push({ name: pName, note: '' });
+          }
+          processedProfileIds.add(p.id);
+        });
+
+        // Kiểm tra SV ngoài lịch có bản ghi vắng mặt
+        attList.forEach(a => {
+          if (!processedProfileIds.has(a.profile_id) && ['Vắng có phép', 'Vắng CP', 'Vắng không phép', 'Vắng KP'].includes(a.status)) {
+            const p = cachedProfiles.find(x => x.id === a.profile_id);
+            const pName = p ? ((p.student_id === '123000896' || p.role === 'super_admin') ? 'Võ Huỳnh Thiên Bảo' : p.display_name) : a.student_id;
+            const note = (a.status === 'Vắng có phép' || a.status === 'Vắng CP') ? ' (Có phép)' : '';
+            absentList.push({ name: pName, note });
+            processedProfileIds.add(a.profile_id);
+          }
+        });
+
+        // 3. Soạn tin nhắn báo cáo Zalo chuẩn theo format xưởng
+        let reportMsg = `🔔 BÁO CÁO CA ${targetShift.toUpperCase()} (${vnInfo.dateVnStr})\n`;
+        reportMsg += `- ✅ Có mặt đúng giờ: ${presentOnTime.length}\n`;
+
+        if (lateList.length === 0) {
+          reportMsg += `- ⚠️ Đi trễ: 0\n`;
+        } else {
+          reportMsg += `- ⚠️ Đi trễ: ${lateList.length}\n`;
+          lateList.forEach((r, idx) => {
+            const p = cachedProfiles.find(x => x.id === r.profile_id);
+            const pName = p ? ((p.student_id === '123000896' || p.role === 'super_admin') ? 'Võ Huỳnh Thiên Bảo' : p.display_name) : r.student_id;
+            reportMsg += `  ${idx + 1}. ${pName}\n`;
+          });
+        }
+
+        if (absentList.length === 0) {
+          reportMsg += `- ❌ Vắng mặt: 0 (Đủ quân số)`;
+        } else {
+          reportMsg += `- ❌ Vắng mặt: ${absentList.length}\n`;
+          absentList.forEach((item, idx) => {
+            reportMsg += `  ${idx + 1}. ${item.name}${item.note}\n`;
+          });
+          reportMsg = reportMsg.trimEnd();
+        }
+
+        await sendZaloMessage(reportMsg);
+
         return jsonResponse({
           success: true,
-          message: 'Báo cáo điểm danh ca đã được gửi thành công!'
+          message: `Đã gửi báo cáo Ca ${targetShift} thành công lên nhóm Zalo!`,
+          data: {
+            shift: targetShift,
+            present: presentOnTime.length,
+            late: lateList.length,
+            absent: absentList.length
+          }
         });
       }
 
