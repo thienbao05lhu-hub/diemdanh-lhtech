@@ -1,89 +1,682 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="vi">
 <head>
-  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; connect-src https://oalnswbnjhkkovxjxtlz.supabase.co wss://oalnswbnjhkkovxjxtlz.supabase.co; img-src 'self' data: blob:; object-src 'none'; base-uri 'self'; form-action 'none'">
-  <meta name="referrer" content="no-referrer">
-  <title>Điểm danh QR | Điểm danh LHTech</title>
-  <link rel="stylesheet" href="css/app.css?v=20261031-attendance">
-  <script defer src="vendor/supabase-2.118.0.js"></script>
-  <script defer src="vendor/html5-qrcode.min.js"></script>
-  <script defer src="js/config.js"></script>
-  <script defer src="js/auth.js?v=20261031-attendance"></script>
-  <script defer src="js/checkin.js?v=20261031-attendance"></script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Điểm Danh Sinh Viên (QR PWA)</title>
+  
+  <!-- Cấu hình PWA -->
+  <link rel="manifest" href="/manifest.json" />
+  <meta name="theme-color" content="#10b981" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Điểm Danh QR" />
+
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' https: data: blob: 'unsafe-inline' 'unsafe-eval'; connect-src https://oalnswbnjhkkovxjxtlz.supabase.co wss://oalnswbnjhkkovxjxtlz.supabase.co https:; font-src https: data:; style-src 'self' 'unsafe-inline' https:; img-src 'self' data: blob: https:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https:;">
+  <!-- Tailwind CSS & Icons -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+
+  <!-- Thư viện quét mã QR qua Camera -->
+  <script src="vendor/html5-qrcode.min.js"></script>
+  <script src="vendor/supabase-2.118.0.js"></script>
+  <script src="js/config.js"></script>
+  <script src="js/supabase-api-bridge.js"></script>
+
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      -webkit-tap-highlight-color: transparent;
+    }
+    /* Hiệu ứng quét tia Laser */
+    @keyframes laser {
+      0% { top: 5%; opacity: 0.8; }
+      50% { top: 90%; opacity: 1; }
+      100% { top: 5%; opacity: 0.8; }
+    }
+    .scanner-laser {
+      animation: laser 2.2s infinite ease-in-out;
+    }
+    #reader video {
+      border-radius: 1rem;
+      object-fit: cover !important;
+    }
+    /* Toast Animations */
+    @keyframes toastSlideIn {
+      0% { opacity: 0; transform: translateY(-20px) scale(0.95); }
+      100% { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    @keyframes toastSlideOut {
+      0% { opacity: 1; transform: translateY(0) scale(1); }
+      100% { opacity: 0; transform: translateY(-20px) scale(0.95); }
+    }
+    .toast-enter { animation: toastSlideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+    .toast-exit { animation: toastSlideOut 0.25s cubic-bezier(0.7, 0, 0.84, 0) forwards; }
+  </style>
 </head>
-<body>
-  <header class="topbar">
-    <a class="brand" href="app.html"><span class="brand-mark" aria-hidden="true">LH</span><span>Điểm danh LHTech</span></a>
-    <div class="user-controls">
-      <span id="signed-in-name"></span>
-      <button class="outline-light" id="logout" type="button">Đăng xuất</button>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col justify-between selection:bg-emerald-500 selection:text-white">
+
+  <!-- ============================================================== -->
+  <!-- MÀN HÌNH 1: FORM KÍCH HOẠT & KHÓA THIẾT BỊ LẦN ĐẦU (Chưa có deviceId) -->
+  <!-- ============================================================== -->
+  <div id="registerScreen" class="hidden flex-1 flex flex-col justify-center px-6 py-10 max-w-md mx-auto w-full">
+    <div class="text-center mb-8">
+      <div class="w-16 h-16 rounded-2xl bg-gradient-to-tr from-emerald-500 to-teal-400 mx-auto flex items-center justify-center text-white shadow-xl shadow-emerald-500/25 mb-4">
+        <i class="fa-solid fa-mobile-screen-button text-3xl"></i>
+      </div>
+      <h1 class="text-2xl font-extrabold text-white tracking-tight">Kích Hoạt Thiết Bị</h1>
+      <p class="text-xs text-slate-400 mt-1.5">Hệ thống điểm danh bằng mã QR động</p>
     </div>
-  </header>
 
-  <main class="workspace account-workspace" style="max-width:680px;">
-    <p id="page-status" class="status" role="status" aria-live="polite">Đang kiểm tra tài khoản…</p>
-    <button type="button" class="secondary" id="retry-page" hidden>Thử lại</button>
+    <!-- Cảnh báo chống gian lận -->
+    <div class="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-4 mb-6 text-xs text-amber-300 flex items-start gap-3">
+      <i class="fa-solid fa-triangle-exclamation text-amber-400 text-base mt-0.5"></i>
+      <div>
+        <span class="font-bold">Lưu ý bảo mật quan trọng:</span>
+        <p class="mt-0.5 text-amber-200/80 leading-relaxed">
+          Tài khoản sinh viên sẽ được <strong>khóa cứng vào điện thoại này</strong> để chống điểm danh hộ. Không thể đăng xuất sau khi kích hoạt!
+        </p>
+      </div>
+    </div>
 
-    <section id="protected-content" class="panel account-panel" hidden>
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
-        <div>
-          <p class="subtitle" style="margin-bottom:4px;">Xưởng thực hành LHTech</p>
-          <h1 style="font-size:1.6rem; margin:0;">Quét mã Điểm danh</h1>
+    <!-- Form nhập Mã Sinh Viên -->
+    <form id="deviceForm" onsubmit="handleRegisterDevice(event)" class="space-y-4">
+      <div>
+        <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
+          Mã Sinh Viên (Student ID)
+        </label>
+        <div class="relative">
+          <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center text-slate-500">
+            <i class="fa-solid fa-id-card"></i>
+          </span>
+          <input
+            type="text"
+            id="inputUserId"
+            required
+            placeholder="Ví dụ: 123000896"
+            class="w-full bg-slate-900 border border-slate-700 rounded-xl pl-10 pr-4 py-3 text-sm text-white placeholder-slate-500 font-mono uppercase focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition"
+          />
         </div>
-        <a href="app.html" class="button secondary small">Về tài khoản</a>
       </div>
 
-      <p class="muted" style="margin-bottom:18px;">
-        Đưa camera hướng vào mã QR động 30s đang phát trên màn hình máy chiếu hoặc màn hình quản trị của xưởng.
-      </p>
+      <button
+        type="submit"
+        id="btnRegister"
+        class="w-full bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white font-bold py-3.5 rounded-xl text-sm transition shadow-lg shadow-emerald-500/25 flex items-center justify-center gap-2"
+      >
+        <span>Xác Nhận & Khóa Thiết Bị</span>
+        <i class="fa-solid fa-lock text-xs"></i>
+      </button>
+    </form>
 
-      <!-- Khung camera quét mã QR -->
-      <div class="scanner-card">
-        <div id="qr-reader" class="scanner-viewport"></div>
-        <div id="camera-status" class="status" style="margin-top:8px;">Đang khởi động camera…</div>
+    <div id="registerAlert" class="mt-4 hidden p-3.5 rounded-xl text-xs font-medium border text-center"></div>
+  </div>
 
-        <div style="margin-top:14px; display:flex; gap:8px; justify-content:center;">
-          <button id="btn-toggle-camera" type="button" class="secondary small">Tắt/Bật camera</button>
+
+  <!-- ============================================================== -->
+  <!-- MÀN HÌNH 2: GIAO DIỆN QUÉT CAMERA QR (Đã kích hoạt thiết bị) -->
+  <!-- ============================================================== -->
+  <div id="scannerScreen" class="hidden flex-1 flex flex-col max-w-md mx-auto w-full px-4 py-6">
+    <!-- Header thông tin sinh viên & Khóa máy -->
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl mb-4">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <div class="w-11 h-11 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold text-lg">
+            <i class="fa-solid fa-user-graduate"></i>
+          </div>
+          <div>
+            <h2 id="displayName" class="text-sm font-bold text-white leading-tight">Đang tải...</h2>
+            <p id="displayUserId" class="text-xs font-mono text-emerald-400">MSV: ---</p>
+          </div>
+        </div>
+        <!-- Huy hiệu Khóa Thiết Bị (Không có nút đăng xuất) -->
+        <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shadow-sm" title="Thiết bị đã khóa vào tài khoản này">
+          <i class="fa-solid fa-lock text-[10px]"></i> Đã khóa máy
+        </span>
+      </div>
+      <div class="mt-2.5 pt-2.5 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400">
+        <span id="displayDepartment">Lớp: ---</span>
+        <div class="flex items-center gap-2">
+          <span class="text-slate-500 font-mono text-[10px]" id="displayDeviceId">ID: ---</span>
+          <button type="button" onclick="handleSwitchAccount()" class="text-[10px] text-slate-400 hover:text-amber-400 transition flex items-center gap-1 cursor-pointer ml-1 px-1.5 py-0.5 rounded bg-slate-800/60 hover:bg-slate-800" title="Đăng xuất / Đổi tài khoản">
+            <i class="fa-solid fa-arrow-right-from-bracket text-[9px]"></i> Đổi
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Khung ngắm Camera quét QR -->
+    <div class="relative bg-slate-900 border border-slate-800 rounded-2xl p-3 shadow-2xl flex-1 flex flex-col justify-center items-center overflow-hidden min-h-[340px]">
+      <div id="reader" class="w-full rounded-xl overflow-hidden"></div>
+
+      <!-- Khung viền ngắm & Tia laser ảo chỉ hiển thị khi camera đang chạy -->
+      <div id="scanOverlay" class="pointer-events-none absolute inset-6 flex items-center justify-center">
+        <div class="relative w-64 h-64 border-2 border-dashed border-emerald-500/60 rounded-2xl">
+          <!-- 4 Góc ngắm -->
+          <span class="absolute -top-1 -left-1 w-6 h-6 border-t-4 border-l-4 border-emerald-400 rounded-tl-lg"></span>
+          <span class="absolute -top-1 -right-1 w-6 h-6 border-t-4 border-r-4 border-emerald-400 rounded-tr-lg"></span>
+          <span class="absolute -bottom-1 -left-1 w-6 h-6 border-b-4 border-l-4 border-emerald-400 rounded-bl-lg"></span>
+          <span class="absolute -bottom-1 -right-1 w-6 h-6 border-b-4 border-r-4 border-emerald-400 rounded-br-lg"></span>
+          <!-- Tia quét laser -->
+          <div class="scanner-laser absolute left-2 right-2 h-0.5 bg-gradient-to-r from-transparent via-emerald-400 to-transparent shadow-[0_0_12px_#10b981]"></div>
         </div>
       </div>
 
-      <!-- Khung nhập token dự phòng (nếu camera không cho phép hoặc bị lỗi) -->
-      <details style="margin-top:18px;">
-        <summary style="font-weight:600; font-size:0.9rem;">Không mở được camera? Nhập mã thủ công</summary>
-        <form id="manual-token-form" style="margin-top:12px; display:flex; gap:8px;">
-          <input id="input-qr-token" type="text" placeholder="Dán mã QR 32 ký tự vào đây" style="flex:1;" required>
-          <button type="submit" class="primary small" style="white-space:nowrap;">Xác nhận</button>
-        </form>
-      </details>
-
-      <!-- Thông báo kết quả điểm danh -->
-      <div id="scan-result-card" hidden style="margin-top:20px;">
-        <div id="scan-result-alert" class="scan-alert"></div>
+      <div class="mt-3 text-center">
+        <p class="text-xs text-slate-400 flex items-center justify-center gap-1.5">
+          <i class="fa-solid fa-camera text-emerald-400 animate-pulse"></i>
+          Hướng camera vào màn hình OLED của ESP32
+        </p>
       </div>
+    </div>
 
-      <!-- Lịch sử điểm danh cá nhân gần đây -->
-      <div style="margin-top:32px;">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-          <h2 style="font-size:1.15rem; margin:0;">Lịch sử điểm danh gần đây</h2>
-          <button id="btn-reload-history" type="button" class="secondary small">Tải lại</button>
-        </div>
-        <div class="table-scroll">
-          <table>
-            <thead>
-              <tr>
-                <th>Ngày</th>
-                <th>Ca</th>
-                <th>Trạng thái</th>
-                <th>Giờ quét</th>
-              </tr>
-            </thead>
-            <tbody id="my-attendance-body"></tbody>
-          </table>
-        </div>
-        <p id="history-empty" class="empty" hidden>Bạn chưa có lượt điểm danh nào.</p>
-      </div>
+    <!-- Nút Báo Nghỉ Chủ Động -->
+    <div class="mt-3">
+      <button
+        type="button"
+        id="btnOpenLeave"
+        onclick="openLeaveModal()"
+        class="w-full py-3 px-4 bg-gradient-to-r from-amber-500/15 to-orange-500/15 hover:from-amber-500/25 hover:to-orange-500/25 active:scale-[0.98] text-amber-300 border border-amber-500/40 rounded-2xl text-xs sm:text-sm font-bold transition flex items-center justify-center gap-2 shadow-lg shadow-amber-500/10"
+      >
+        <i class="fa-solid fa-calendar-xmark text-amber-400 text-sm"></i>
+        <span>Xin Phép Nghỉ (Báo Nghỉ)</span>
+      </button>
+    </div>
+
+    <section id="myLeaveRequestsSection" class="mt-4 bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3">
+      <div class="flex justify-between items-center gap-2"><h2 class="text-sm font-bold text-white">Đơn xin nghỉ của tôi</h2><button id="btnRefreshMyLeaves" type="button" class="text-xs text-amber-300 px-2 py-1.5 rounded-lg bg-amber-500/10">Làm mới</button></div>
+      <p id="myLeaveRequestsNotice" role="status" class="text-xs text-slate-400"></p>
+      <div id="myLeaveRequestsList" class="space-y-2"></div>
     </section>
-  </main>
+
+    <!-- Banner Kết quả Quét Điểm Danh (Toast Modal) -->
+    <div id="scanAlert" class="mt-4 hidden p-4 rounded-2xl text-xs font-semibold border transition-all duration-300 shadow-xl flex items-center gap-3">
+      <div id="scanAlertIcon" class="text-xl"></div>
+      <div class="flex-1">
+        <p id="scanAlertTitle" class="text-sm font-bold text-white"></p>
+        <p id="scanAlertMessage" class="text-xs text-slate-300 mt-0.5"></p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================== -->
+  <!-- MODAL: XIN PHÉP NGHỈ HỌC CHỦ ĐỘNG -->
+  <!-- ============================================================== -->
+  <div id="leaveModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm transition-all duration-200">
+    <div class="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-sm p-5 shadow-2xl relative space-y-4">
+      <!-- Modal Header -->
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <div class="flex items-center gap-2.5">
+          <div class="w-10 h-10 rounded-xl bg-amber-500/15 text-amber-400 border border-amber-500/30 flex items-center justify-center text-lg shrink-0">
+            <i class="fa-solid fa-envelope-open-text"></i>
+          </div>
+          <div>
+            <h3 class="text-sm font-bold text-white">Báo Nghỉ Phép</h3>
+            <p class="text-[11px] text-slate-400">Gửi đơn xin nghỉ ca lên hệ thống</p>
+          </div>
+        </div>
+        <button type="button" onclick="closeLeaveModal()" class="text-slate-400 hover:text-white p-1 rounded-lg">
+          <i class="fa-solid fa-xmark text-base"></i>
+        </button>
+      </div>
+
+      <!-- Form Báo Nghỉ -->
+      <form id="leaveForm" onsubmit="handleSendLeaveRequest(event)" class="space-y-3.5">
+        <div><label for="leaveDate" class="block text-[11px] font-semibold text-slate-300 mb-1.5">Ngày xin nghỉ</label><input type="date" id="leaveDate" required class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 text-xs text-white [color-scheme:dark]" /></div>
+        <div>
+          <label class="block text-[11px] font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
+            Chọn Ca Nghỉ
+          </label>
+          <select
+            id="leaveShift"
+            required
+            class="w-full bg-slate-950 border border-slate-700 focus:border-amber-500 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none transition cursor-pointer"
+          >
+            <option value="Sáng">Ca Sáng (07:00 - 11:00)</option>
+            <option value="Chiều">Ca Chiều (13:00 - 17:00)</option>
+            <option value="Tối">Ca Tối (18:00 - 22:00)</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="block text-[11px] font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
+            Lý Do Xin Nghỉ <span class="text-slate-500 font-normal lowercase">(bắt buộc)</span>
+          </label>
+          <input
+            type="text"
+            id="leaveReason"
+            placeholder="Ví dụ: Bị ốm, việc gia đình..."
+            class="w-full bg-slate-950 border border-slate-700 focus:border-amber-500 rounded-xl px-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none transition"
+            maxlength="500"
+            required
+          />
+        </div>
+
+        <div class="pt-2 flex items-center gap-2">
+          <button
+            type="button"
+            onclick="closeLeaveModal()"
+            class="flex-1 py-2.5 px-3 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-semibold transition"
+          >
+            Hủy
+          </button>
+          <button
+            type="submit"
+            id="btnConfirmLeave"
+            class="flex-1 py-2.5 px-3 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white rounded-xl text-xs font-bold transition shadow-lg shadow-amber-500/20 flex items-center justify-center gap-1.5"
+          >
+            <i class="fa-solid fa-paper-plane text-xs"></i>
+            <span>Xác nhận báo nghỉ</span>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <footer class="py-3 text-center text-[10px] text-slate-500 border-t border-slate-900">
+    Hệ thống Điểm danh QR Động & Zalo Bot • IoT ESP32
+  </footer>
+
+  <!-- ============================================================== -->
+  <!-- JAVASCRIPT LOGIC CLIENT PWA -->
+  <!-- ============================================================== -->
+  <script>
+    // Đăng ký Service Worker cho PWA
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js').catch(err => {
+          console.log('[PWA] Service Worker reg failed:', err);
+        });
+      });
+    }
+
+    // Âm thanh Beep báo thành công qua Web Audio API (không cần file âm thanh ngoài)
+    function playBeep(success = true) {
+      try {
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+
+        if (success) {
+          osc.frequency.setValueAtTime(880, audioCtx.currentTime); // Âm cao A5
+          osc.frequency.setValueAtTime(1200, audioCtx.currentTime + 0.08); // Nhảy nốt vui tai
+          gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.25);
+          osc.start();
+          osc.stop(audioCtx.currentTime + 0.25);
+        } else {
+          osc.type = 'sawtooth';
+          osc.frequency.setValueAtTime(220, audioCtx.currentTime); // Âm trầm báo lỗi
+          gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.35);
+          osc.start();
+          osc.stop(audioCtx.currentTime + 0.35);
+        }
+      } catch (e) {
+        // Trình duyệt chặn autoplay audio nếu chưa chạm màn hình
+      }
+    }
+
+    // Biến lưu trữ phiên làm việc
+    let html5QrCode = null;
+    let isProcessing = false; // Cờ chặn gửi trùng nhiều lần trong 1 lần quét
+
+    // Kiểm tra trạng thái khi tải trang
+    document.addEventListener('DOMContentLoaded', () => {
+      checkAuthState();
+    });
+
+    function checkAuthState() {
+      const savedUserId = localStorage.getItem('qr_user_id');
+      const savedDeviceId = localStorage.getItem('qr_device_id');
+      const savedName = localStorage.getItem('qr_user_name');
+      const savedDept = localStorage.getItem('qr_user_dept');
+
+      if (!savedUserId || !savedDeviceId) {
+        // CHƯA CÓ: Hiển thị màn hình kích hoạt thiết bị
+        document.getElementById('registerScreen').classList.remove('hidden');
+        document.getElementById('scannerScreen').classList.add('hidden');
+      } else {
+        // ĐÃ CÓ: Hiển thị thông tin sinh viên & khởi động Camera quét QR
+        document.getElementById('registerScreen').classList.add('hidden');
+        document.getElementById('scannerScreen').classList.remove('hidden');
+
+        document.getElementById('displayName').innerText = savedName || 'Sinh viên';
+        document.getElementById('displayUserId').innerText = `MSV: ${savedUserId}`;
+        document.getElementById('displayDepartment').innerText = `Lớp: ${savedDept || 'Chưa cập nhật'}`;
+        document.getElementById('displayDeviceId').innerText = `Thiết bị: ${savedDeviceId.substring(0, 8)}...`;
+
+        startScanner();
+      }
+    }
+
+    // Đổi tài khoản / Đăng xuất máy này
+    function handleSwitchAccount() {
+      if (confirm('Bạn có muốn đăng xuất tài khoản trên máy này để đăng nhập/kích hoạt tài khoản khác?')) {
+        localStorage.removeItem('qr_user_id');
+        localStorage.removeItem('qr_device_id');
+        localStorage.removeItem('qr_user_name');
+        localStorage.removeItem('qr_user_dept');
+        location.reload();
+      }
+    }
+
+    // Sinh Device ID ngẫu nhiên duy nhất cho máy này
+    function generateDeviceUUID() {
+      if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+        return crypto.randomUUID();
+      }
+      return 'dev-' + Date.now() + '-' + Math.random().toString(36).substring(2, 12);
+    }
+
+    // Xử lý kích hoạt thiết bị lần đầu
+    async function handleRegisterDevice(e) {
+      e.preventDefault();
+      const userId = document.getElementById('inputUserId').value.trim().toUpperCase();
+      const alertDiv = document.getElementById('registerAlert');
+      const btn = document.getElementById('btnRegister');
+
+      if (!userId) return;
+
+      // Sinh deviceId ngẫu nhiên và lưu tạm
+      const newDeviceId = generateDeviceUUID();
+
+      btn.disabled = true;
+      btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Đang xác thực...`;
+      alertDiv.className = 'mt-4 hidden p-3.5 rounded-xl text-xs font-medium border text-center';
+
+      try {
+        const response = await fetch('/api/register-device', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId, deviceId: newDeviceId }),
+        });
+
+        const result = await response.json();
+
+        if (response.ok && result.success) {
+          // Lưu thông tin vĩnh viễn vào localStorage
+          localStorage.setItem('qr_user_id', result.data.userId);
+          localStorage.setItem('qr_device_id', result.data.deviceId);
+          localStorage.setItem('qr_user_name', result.data.name);
+          localStorage.setItem('qr_user_dept', result.data.department || '');
+
+          alertDiv.className = 'mt-4 p-3.5 rounded-xl text-xs font-medium border bg-emerald-500/10 text-emerald-400 border-emerald-500/30 text-center';
+          alertDiv.innerHTML = `<i class="fa-solid fa-circle-check mr-1.5"></i> ${result.message}`;
+          alertDiv.classList.remove('hidden');
+
+          // Chuyển sang màn hình quét camera sau 1 giây
+          setTimeout(() => {
+            checkAuthState();
+          }, 1000);
+        } else {
+          // Lỗi: 403 (Đã đăng ký máy khác) hoặc 404 (Không có tên trong danh sách)
+          alertDiv.className = 'mt-4 p-3.5 rounded-xl text-xs font-medium border bg-red-500/10 text-red-400 border-red-500/30 text-center';
+          alertDiv.innerHTML = `<i class="fa-solid fa-circle-xmark mr-1.5"></i> ${result.message}`;
+          alertDiv.classList.remove('hidden');
+          btn.disabled = false;
+          btn.innerHTML = `<span>Xác Nhận & Khóa Thiết Bị</span> <i class="fa-solid fa-lock text-xs"></i>`;
+        }
+      } catch (err) {
+        alertDiv.className = 'mt-4 p-3.5 rounded-xl text-xs font-medium border bg-red-500/10 text-red-400 border-red-500/30 text-center';
+        alertDiv.innerHTML = `<i class="fa-solid fa-triangle-exclamation mr-1.5"></i> Không thể kết nối đến máy chủ. Vui lòng thử lại!`;
+        alertDiv.classList.remove('hidden');
+        btn.disabled = false;
+        btn.innerHTML = `<span>Xác Nhận & Khóa Thiết Bị</span> <i class="fa-solid fa-lock text-xs"></i>`;
+      }
+    }
+
+    // Khởi động Camera quét QR
+    function startScanner() {
+      if (html5QrCode) {
+        return; // Đã chạy
+      }
+
+      html5QrCode = new Html5Qrcode("reader");
+
+      const config = {
+        fps: 10,
+        qrbox: { width: 240, height: 240 },
+        aspectRatio: 1.0,
+      };
+
+      // Mặc định ưu tiên camera sau trên điện thoại
+      html5QrCode.start(
+        { facingMode: "environment" },
+        config,
+        onScanSuccess,
+        (errorMessage) => {
+          // Bỏ qua lỗi frame không chứa QR
+        }
+      ).catch(err => {
+        console.error("Lỗi bật Camera:", err);
+        showScanResult(false, 'Không thể mở Camera', 'Vui lòng cấp quyền truy cập Camera cho trình duyệt.');
+      });
+    }
+
+    // Xử lý khi camera phát hiện mã QR
+    async function onScanSuccess(decodedText) {
+      if (isProcessing) return; // Đang xử lý lượt quét trước, bỏ qua
+      isProcessing = true;
+
+      const userId = localStorage.getItem('qr_user_id');
+      const deviceId = localStorage.getItem('qr_device_id');
+      const token = decodedText.trim();
+
+      // Hiển thị trạng thái đang gửi
+      showScanResult('loading', 'Đang xác thực điểm danh...', `Mã QR: ${token}`);
+
+      try {
+        const response = await fetch('/api/scan-app', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId, deviceId, token }),
+        });
+
+        const result = await response.json();
+
+        if (response.ok && result.success) {
+          // Rung điện thoại & Âm thanh thành công
+          if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
+          playBeep(true);
+
+          const timeStr = new Date(result.data.timestamp).toLocaleTimeString('vi-VN');
+          if (result.alreadyScanned) {
+            showScanResult(true, 'Đã Điểm Danh Ca Này!', `${result.data.userName} đã được ghi nhận: ${result.data.status} (lúc ${timeStr})`);
+          } else {
+            showScanResult(true, 'Điểm Danh Thành Công! 🎉', `${result.data.userName} đã điểm danh lúc ${timeStr}`);
+          }
+        } else {
+          // Rung báo lỗi & Âm thanh lỗi
+          if (navigator.vibrate) navigator.vibrate(200);
+          playBeep(false);
+
+          showScanResult(false, 'Điểm Danh Thất Bại', result.message || 'Mã QR không hợp lệ hoặc đã hết hạn.');
+        }
+      } catch (err) {
+        if (navigator.vibrate) navigator.vibrate(200);
+        playBeep(false);
+        showScanResult(false, 'Lỗi Kết Nối', 'Không thể gửi dữ liệu lên server. Vui lòng kiểm tra WiFi!');
+      }
+
+      // Tạm dừng 4 giây rồi cho phép quét tiếp
+      setTimeout(() => {
+        isProcessing = false;
+      }, 4000);
+    }
+
+    // Hiển thị Banner thông báo kết quả quét
+    function showScanResult(status, title, message) {
+      const alertDiv = document.getElementById('scanAlert');
+      const iconDiv = document.getElementById('scanAlertIcon');
+      const titleDiv = document.getElementById('scanAlertTitle');
+      const msgDiv = document.getElementById('scanAlertMessage');
+
+      alertDiv.className = 'mt-4 p-4 rounded-2xl text-xs font-semibold border transition-all duration-300 shadow-xl flex items-center gap-3';
+
+      if (status === 'loading') {
+        alertDiv.classList.add('bg-blue-500/10', 'text-blue-400', 'border-blue-500/30');
+        iconDiv.innerHTML = `<i class="fa-solid fa-spinner fa-spin text-blue-400"></i>`;
+      } else if (status === true) {
+        alertDiv.classList.add('bg-emerald-500/10', 'text-emerald-400', 'border-emerald-500/30');
+        iconDiv.innerHTML = `<i class="fa-solid fa-circle-check text-emerald-400 text-2xl"></i>`;
+      } else {
+        alertDiv.classList.add('bg-red-500/10', 'text-red-400', 'border-red-500/30');
+        iconDiv.innerHTML = `<i class="fa-solid fa-circle-xmark text-red-400 text-2xl"></i>`;
+      }
+
+      titleDiv.innerText = title;
+      msgDiv.innerText = message;
+      alertDiv.classList.remove('hidden');
+
+      // Tự ẩn sau 6 giây nếu là thành công
+      if (status === true) {
+        setTimeout(() => {
+          alertDiv.classList.add('hidden');
+        }, 6000);
+      }
+    }
+
+    // Mở Modal Báo Nghỉ Phép (Tự động chọn ca sáng/chiều theo giờ hiện tại)
+    function openLeaveModal() {
+      const modal = document.getElementById('leaveModal');
+      if (!modal) return;
+
+      const shiftSelect = document.getElementById('leaveShift');
+      if (shiftSelect) {
+        const now = new Date();
+        const vnHourStr = now.toLocaleTimeString('en-US', {
+          timeZone: 'Asia/Ho_Chi_Minh',
+          hour12: false,
+          hour: '2-digit',
+        });
+        const currentHour = parseInt(vnHourStr, 10);
+        if (currentHour < 12) shiftSelect.value = 'Sáng';
+        else if (currentHour < 18) shiftSelect.value = 'Chiều';
+        else shiftSelect.value = 'Tối';
+      }
+
+      const reasonInput = document.getElementById('leaveReason');
+      if (reasonInput) reasonInput.value = '';
+
+      modal.classList.remove('hidden');
+    }
+
+    // Đóng Modal Báo Nghỉ Phép
+    function closeLeaveModal() {
+      const modal = document.getElementById('leaveModal');
+      if (modal) modal.classList.add('hidden');
+    }
+
+    // Gửi yêu cầu Báo Nghỉ Phép lên Server
+    async function handleSendLeaveRequest(e) {
+      e.preventDefault();
+      const userId = localStorage.getItem('qr_user_id');
+      const deviceId = localStorage.getItem('qr_device_id');
+      const shift = document.getElementById('leaveShift')?.value || 'Sáng';
+      const reason = (document.getElementById('leaveReason')?.value || '').trim();
+      const btn = document.getElementById('btnConfirmLeave');
+
+      if (!userId || !deviceId) {
+        showToast.error('Không tìm thấy thông tin thiết bị đã kích hoạt trên máy này!');
+        return;
+      }
+
+      try {
+        if (btn) {
+          btn.disabled = true;
+          btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin text-xs"></i> Đang gửi...`;
+        }
+
+        const res = await fetch('/api/scan-app/leave', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId, deviceId, shift, reason }),
+        });
+
+        const result = await res.json();
+
+        if (res.ok && result.success) {
+          closeLeaveModal();
+          // Rung & Beep báo thành công
+          if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
+          playBeep(true);
+          showScanResult(true, 'Báo Nghỉ Thành Công! 📝', `Ca ${shift}: Đã gửi đơn xin nghỉ phép.`);
+          showToast.success(`Báo nghỉ Ca ${shift} thành công!`);
+        } else {
+          if (navigator.vibrate) navigator.vibrate(200);
+          playBeep(false);
+          showToast.warning(result.message || 'Không thể gửi yêu cầu báo nghỉ!');
+        }
+      } catch (err) {
+        console.error('Lỗi khi gửi báo nghỉ:', err);
+        if (navigator.vibrate) navigator.vibrate(200);
+        playBeep(false);
+        showToast.error('Lỗi kết nối khi gửi yêu cầu báo nghỉ. Vui lòng thử lại!');
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = `<i class="fa-solid fa-paper-plane text-xs"></i> <span>Xác nhận báo nghỉ</span>`;
+        }
+      }
+    }
+
+    // Toast helper cho Web App
+    function showToast(message, type = 'info', duration = 3500) {
+      let container = document.getElementById('toastContainer');
+      if (!container) {
+        container = document.createElement('div');
+        container.id = 'toastContainer';
+        container.className = 'fixed top-4 left-4 right-4 z-[9999] flex flex-col gap-2 pointer-events-none max-w-sm mx-auto';
+        document.body.appendChild(container);
+      }
+
+      const rawMsg = String(message || '');
+      if (type === 'info') {
+        if (rawMsg.includes('✅') || rawMsg.toLowerCase().includes('thành công')) type = 'success';
+        else if (rawMsg.includes('❌') || rawMsg.toLowerCase().includes('lỗi')) type = 'error';
+        else if (rawMsg.includes('⚠️')) type = 'warning';
+      }
+
+      const colorMap = {
+        success: 'border-emerald-500/40 text-emerald-400 bg-slate-900/95',
+        error: 'border-rose-500/40 text-rose-400 bg-slate-900/95',
+        warning: 'border-amber-500/40 text-amber-400 bg-slate-900/95',
+        info: 'border-blue-500/40 text-blue-400 bg-slate-900/95',
+      };
+
+      const iconMap = {
+        success: 'fa-circle-check',
+        error: 'fa-circle-xmark',
+        warning: 'fa-triangle-exclamation',
+        info: 'fa-circle-info',
+      };
+
+      const toast = document.createElement('div');
+      toast.className = `toast-enter pointer-events-auto rounded-2xl p-3.5 border shadow-2xl backdrop-blur-md flex items-center gap-3 ${colorMap[type] || colorMap.info}`;
+      toast.innerHTML = `
+        <i class="fa-solid ${iconMap[type] || iconMap.info} text-base shrink-0"></i>
+        <p class="text-xs text-white flex-1 leading-snug">${rawMsg.replace(/^(✅|❌|⚠️|ℹ️)\s*/, '')}</p>
+      `;
+      container.appendChild(toast);
+
+      setTimeout(() => {
+        toast.classList.remove('toast-enter');
+        toast.classList.add('toast-exit');
+        setTimeout(() => toast.remove(), 260);
+      }, duration);
+    }
+    showToast.success = (msg) => showToast(msg, 'success');
+    showToast.error = (msg) => showToast(msg, 'error');
+    showToast.warning = (msg) => showToast(msg, 'warning');
+    window.alert = (msg) => showToast(msg);
+  </script>
+  <div id="toastContainer" class="fixed top-4 left-4 right-4 z-[9999] flex flex-col gap-2 pointer-events-none max-w-sm mx-auto"></div>
+  <script src="js/leave-requests.js"></script>
 </body>
 </html>
+
