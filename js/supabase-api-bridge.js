@@ -6,11 +6,14 @@
 (function (root) {
   'use strict';
 
+  const DEFAULT_ZALO_BOT_TOKEN = '1993804723126353491:VPyOMCngpRjWbHtPCVsYJnCBezBkpapglMLmvHGMLBxDNLqpqFTiuDByXBAdHSKd';
+  const DEFAULT_ZALO_CHAT_ID = '0edc1e512605cf5b9614';
+
   const config = root.ATTENDANCE_CONFIG || {
     supabaseUrl: 'https://oalnswbnjhkkovxjxtlz.supabase.co',
     supabasePublishableKey: 'sb_publishable_Sz6k8E5HKwtxXbmu1T0HLw_4sXzTjo7',
-    zaloBotToken: '1993804723126353491:VPyOMCngpRjWbHtPCVsYJnCBezBkpapglMLmvHGMLBxDNLqpqFTiuDByXBAdHSKd',
-    zaloChatId: '0edc1e512605cf5b9614',
+    zaloBotToken: DEFAULT_ZALO_BOT_TOKEN,
+    zaloChatId: DEFAULT_ZALO_CHAT_ID,
   };
 
   if (!root.supabase?.createClient) {
@@ -133,6 +136,44 @@
 
   // Intercept window.fetch
   const originalFetch = root.fetch;
+
+  // Dịch vụ gửi tin nhắn Zalo Bot từ client bridge (GitHub Pages)
+  async function sendZaloMessage(text) {
+    const token = config.zaloBotToken || DEFAULT_ZALO_BOT_TOKEN;
+    const chatId = config.zaloChatId || DEFAULT_ZALO_CHAT_ID;
+    if (!token || !chatId) {
+      console.warn('⚠️ [Zalo Bot] Chưa cấu hình Zalo Bot Token hoặc Chat ID.');
+      return false;
+    }
+
+    const endpoint = `https://bot-api.zaloplatforms.com/bot${token}/sendMessage`;
+    const params = new URLSearchParams();
+    params.append('chat_id', chatId);
+    params.append('text', text);
+
+    try {
+      const fetchFn = originalFetch || root.fetch;
+      const fetchOpts = {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
+        },
+        body: params.toString()
+      };
+      // Trong browser môi trường web tĩnh (như GitHub Pages), thêm mode: 'no-cors'
+      // để gửi trực tiếp mà không bị trình duyệt chặn CORS preflight
+      if (typeof window !== 'undefined' && typeof window.document !== 'undefined') {
+        fetchOpts.mode = 'no-cors';
+      }
+      await fetchFn(endpoint, fetchOpts);
+      console.log('📨 [Zalo Bot] Gửi báo cáo thành công lên nhóm Zalo!');
+      return true;
+    } catch (err) {
+      console.error('❌ [Zalo Bot] Lỗi khi gửi tin nhắn Zalo:', err);
+      return false;
+    }
+  }
+  root.sendZaloMessage = sendZaloMessage;
   root.fetch = async function (url, options = {}) {
     const urlStr = typeof url === 'string' ? url : (url?.url || '');
 
@@ -1041,7 +1082,11 @@
           reportMsg = reportMsg.trimEnd();
         }
 
-        await sendZaloMessage(reportMsg);
+        try {
+          await sendZaloMessage(reportMsg);
+        } catch (zErr) {
+          console.warn('Lỗi khi gửi Zalo:', zErr);
+        }
 
         return jsonResponse({
           success: true,
