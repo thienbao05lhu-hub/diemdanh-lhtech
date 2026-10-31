@@ -1,9 +1,14 @@
 (function (root) {
   'use strict';
+  if (root.AttendanceRedirecting) return;
   const config = root.ATTENDANCE_CONFIG;
   if (!config || !root.supabase?.createClient) return;
   const client = root.supabase.createClient(config.supabaseUrl, config.supabasePublishableKey, {
-    auth: { storage: root.sessionStorage, storageKey: 'lhtech-attendance-auth-v1', persistSession: true, autoRefreshToken: true, detectSessionInUrl: false },
+    auth: {
+      storage: root.sessionStorage, storageKey: 'lhtech-attendance-auth-v1',
+      persistSession: true, autoRefreshToken: true, flowType: 'implicit',
+      detectSessionInUrl: root.location.pathname.endsWith('/reset-password.html'),
+    },
     global: {
       fetch: (url, options = {}) => root.fetch(url, {
         ...options,
@@ -21,6 +26,11 @@
     if (code === 'PROFILE_MISSING') return 'Tài khoản chưa được cấp hồ sơ hoặc đã bị khóa. Vui lòng liên hệ quản trị viên.';
     if (code === 'invalid_credentials') return 'Email hoặc mật khẩu chưa đúng.';
     if (code === 'email_not_confirmed') return 'Email tài khoản chưa được xác nhận. Vui lòng liên hệ quản trị viên.';
+    if (code === 'weak_password') return 'Mật khẩu chưa đạt yêu cầu bảo mật của hệ thống. Hãy chọn mật khẩu mạnh hơn.';
+    if (code === 'same_password') return 'Mật khẩu mới cần khác mật khẩu đang dùng.';
+    if (code === 'otp_expired' || code === 'AUTH_LINK_REQUIRED' || error?.name === 'AuthImplicitGrantRedirectError') return 'Liên kết không hợp lệ hoặc đã hết hạn. Hãy yêu cầu liên kết mới qua email.';
+    if (code === 'SESSION_CHANGED' || code === 'reauthentication_needed' || code === 'reauthentication_not_valid') return 'Phiên xác nhận đã thay đổi hoặc hết hạn. Hãy mở liên kết mới trong email.';
+    if (code === 'email_address_not_authorized') return 'Dịch vụ gửi email chưa cho phép địa chỉ này. Chủ dự án cần kiểm tra cấu hình gửi email.';
     if (code === 'over_request_rate_limit' || code === 'over_email_send_rate_limit' || error?.status === 429) return 'Bạn thao tác quá nhanh. Vui lòng chờ một lát rồi thử lại.';
     if (code === '42501') return 'Tài khoản không có quyền thực hiện thao tác này.';
     if (code === 'PGRST202' || code === 'PGRST205' || code === '42P01') return 'Dữ liệu hệ thống chưa sẵn sàng. Vui lòng liên hệ quản trị viên.';
@@ -86,18 +96,24 @@
   }
   function bindLogout(statusElement) {
     const button = document.getElementById('logout');
+    let redirecting = false;
+    function leavePage() {
+      if (redirecting) return;
+      redirecting = true;
+      document.getElementById('protected-content')?.setAttribute('hidden', '');
+      root.location.replace('index.html');
+    }
     button?.addEventListener('click', async () => {
       button.disabled = true;
       try {
         const result = await client.auth.signOut({ scope: 'local' });
         if (result.error) throw result.error;
-        root.location.replace('index.html');
+        leavePage();
       } catch (error) { setStatus(statusElement, message(error), true); button.disabled = false; }
     });
     client.auth.onAuthStateChange((event) => {
       if (event === 'SIGNED_OUT') {
-        document.getElementById('protected-content')?.setAttribute('hidden', '');
-        root.location.replace('index.html');
+        leavePage();
       }
     });
   }

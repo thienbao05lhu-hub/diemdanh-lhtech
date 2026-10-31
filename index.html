@@ -6,11 +6,12 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; connect-src https://oalnswbnjhkkovxjxtlz.supabase.co wss://oalnswbnjhkkovxjxtlz.supabase.co; img-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'none'">
   <meta name="referrer" content="no-referrer">
   <title>Đăng nhập | Điểm danh LHTech</title>
-  <link rel="stylesheet" href="css/app.css">
+  <link rel="stylesheet" href="css/app.css?v=20261031-recovery">
+  <script defer src="js/auth-callback.js"></script>
   <script defer src="vendor/supabase-2.118.0.js"></script>
   <script defer src="js/config.js"></script>
-  <script defer src="js/auth.js"></script>
-  <script defer src="js/login.js"></script>
+  <script defer src="js/auth.js?v=20261031-recovery"></script>
+  <script defer src="js/login.js?v=20261031-recovery"></script>
 </head>
 <body class="login-page">
   <main class="login-layout">
@@ -32,7 +33,8 @@
         </form>
         <p id="login-status" class="status" role="status" aria-live="polite">Đang khởi tạo…</p>
         <button id="retry-session" type="button" class="secondary" hidden>Kiểm tra lại phiên</button>
-        <p class="help">Cần cấp tài khoản hoặc quên mật khẩu? Liên hệ quản trị viên của xưởng.</p>
+        <p class="help"><a href="reset-password.html">Thiết lập hoặc đặt lại mật khẩu</a></p>
+        <p class="help">Cần cấp tài khoản? Liên hệ quản trị viên của xưởng.</p>
         <noscript><p>Bạn cần bật JavaScript để đăng nhập.</p></noscript>
       </div>
     </section>

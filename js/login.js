@@ -1,5 +1,6 @@
 (async function () {
   'use strict';
+  if (window.AttendanceRedirecting) return;
   const api = window.Attendance;
   const status = document.getElementById('login-status');
   const button = document.getElementById('login-button');
