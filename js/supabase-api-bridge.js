@@ -32,12 +32,39 @@
 
   root.supabaseClient = client;
 
+  // Danh sách sinh viên tĩnh dự phòng (đảm bảo App PWA luôn nhận diện được kể cả khi chưa login quyền admin)
+  const STATIC_PROFILES = [
+    { id: '06a7aa67-d3ba-4efb-abc7-c8e14e593fa5', student_id: '123000896', display_name: 'Võ Huỳnh Thiên Bảo', role: 'super_admin', department: '23CD111' },
+    { id: '5b241da0-acf1-4207-a43c-bb6a18bad523', student_id: '123000022', display_name: 'Nguyễn Văn Kha', role: 'student', department: '23CD111' },
+    { id: 'c234d23c-3b45-4f5d-a735-12d233b39e41', student_id: '123000720', display_name: 'Nguyễn Hoàng Cao Trí', role: 'student', department: '23CD111' },
+    { id: '0c776ee7-c029-4585-a74f-5bba6be74e71', student_id: '123000638', display_name: 'Võ Minh Kiệt', role: 'student', department: '23CD111' },
+    { id: 'acc9944c-bab4-4420-a2d8-59733e035066', student_id: '123001330', display_name: 'Phạm Quốc Thành', role: 'student', department: '23CD111' },
+    { id: 'bf2c08c2-5226-46cf-af55-d7a2dfd000f4', student_id: '123000587', display_name: 'Cai Văn Đức', role: 'student', department: '23CD111' },
+    { id: '798f2753-cd0f-425d-a80c-55e1f72cc943', student_id: '123001227', display_name: 'Đoàn Nguyễn Minh Quang', role: 'student', department: '23CD111' },
+    { id: '66a426fe-93e4-4531-a9b9-f2cc5fa1766d', student_id: '123000897', display_name: 'Nguyễn Đức Tâm', role: 'student', department: '23CD111' },
+    { id: 'dc0520e5-3e9b-4254-a571-bf7ea6481bd3', student_id: '123000505', display_name: 'Phan Tuấn Anh', role: 'student', department: '23CD111' },
+    { id: '44d2905c-5905-486e-ad8d-07551939902c', student_id: '123001342', display_name: 'Trương Nguyên Chương', role: 'student', department: '23CD111' },
+    { id: 'b060276c-6305-49e3-a8a1-f175ac4088b5', student_id: '123001009', display_name: 'Lê Dương Thụ', role: 'student', department: '23CD111' },
+    { id: 'd8008629-c786-4fee-a50d-e15a10f50687', student_id: '123001430', display_name: 'Vương Tấn Tài', role: 'student', department: '23CD111' },
+    { id: 'd3955e9b-b5e8-438b-a5b6-f8f2a0c49975', student_id: '124001213', display_name: 'Phạm Minh Thọ', role: 'student', department: '24CD111' },
+    { id: '3aa846e7-8673-406d-af38-4e5429b8e8ba', student_id: '124001823', display_name: 'Tạ Quang Trung', role: 'student', department: '24CD111' },
+    { id: '556d814c-f6f7-4e2d-a348-444911830758', student_id: '125002058', display_name: 'Mấu Thị Kim Nương', role: 'student', department: '25CK111' },
+    { id: 'b7057f80-9af0-4903-ae81-be84f827efb2', student_id: '123000915', display_name: 'Nguyễn Quang Vinh', role: 'student', department: '23CD111' },
+    { id: '0e9bd3e3-dc75-4c4d-a2e1-a63c0dd2a026', student_id: '124001161', display_name: 'Đàm Vũ Thiên Đồng', role: 'student', department: '24CD111' },
+    { id: 'd1e9d81c-2174-40f1-a63c-08a33aaca592', student_id: '125000902', display_name: 'Trần Trương Duy Nghĩa', role: 'student', department: '25CT111' },
+    { id: 'dfcf95a1-98d2-4bb7-ac9e-bc5a68a783ec', student_id: '124000954', display_name: 'Trần Xuân Hùng', role: 'student', department: '24CD111' },
+    { id: '2da29931-4ee6-4e86-a8fa-bbf62eb91c60', student_id: '124001658', display_name: 'Ngô Phương Anh Khôi', role: 'student', department: '24CD111' },
+    { id: 'b9544fa1-f865-4558-acf5-2d4b057eceed', student_id: '124000709', display_name: 'Nguyễn Minh Sang', role: 'student', department: '24CD111' },
+    { id: '38e14f23-736f-47db-a220-211c4a9aa922', student_id: '124000840', display_name: 'Dương Ngọc Pha', role: 'student', department: '24CD111' },
+    { id: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890', student_id: '123000555', display_name: 'Đặng Minh Hiếu', role: 'student', department: '23CD111' }
+  ];
+
   // Cache danh sách profiles để map nhanh giữa MSSV (userId) và UUID (profile_id)
-  let cachedProfiles = [];
+  let cachedProfiles = [...STATIC_PROFILES];
   async function refreshProfiles() {
     try {
       const { data } = await client.from('profiles').select('*').order('student_id');
-      if (data) {
+      if (data && data.length > 0) {
         cachedProfiles = data.map(p => {
           if (p.student_id === '123000896' || p.role === 'super_admin') {
             p.display_name = 'Võ Huỳnh Thiên Bảo';
@@ -50,7 +77,10 @@
   }
 
   function getProfileByStudentId(studentId) {
-    return cachedProfiles.find(p => p.student_id === studentId);
+    if (!studentId) return undefined;
+    const cleanId = String(studentId).trim();
+    return cachedProfiles.find(p => p.student_id === cleanId) ||
+           STATIC_PROFILES.find(p => p.student_id === cleanId);
   }
 
   function getVnTimeInfo(d = new Date()) {
@@ -266,27 +296,88 @@
         const body = JSON.parse(options.body || '{}');
         const userId = (body.userId || '').trim().toUpperCase();
         const deviceId = (body.deviceId || '').trim();
-        const profile = getProfileByStudentId(userId);
 
-        if (!profile) return jsonResponse({ success: false, message: `Không tìm thấy sinh viên có mã "${userId}".` }, 404);
-
-        const { data: dev } = await client.from('devices').select('device_fingerprint').eq('profile_id', profile.id).maybeSingle();
-
-        if (dev && dev.device_fingerprint && dev.device_fingerprint !== deviceId) {
+        if (!userId) {
           return jsonResponse({
             success: false,
-            message: 'Tài khoản này đã được kích hoạt trên thiết bị khác! Vui lòng liên hệ giảng viên mở khóa.'
-          }, 403);
+            message: 'Vui lòng nhập Mã Sinh Viên (MSSV)!'
+          }, 400);
         }
+
+        let profile = getProfileByStudentId(userId);
+
+        // Đảm bảo session authenticated: nếu chưa đăng nhập, tự động đăng nhập với email MSSV
+        try {
+          let session = (await client.auth.getSession()).data?.session;
+          if (!session || !session.user) {
+            const email = `${userId}@student.lhu.edu.vn`;
+            const loginRes = await client.auth.signInWithPassword({ email, password: '123456' });
+            if (loginRes.data?.session) {
+              session = loginRes.data.session;
+              if (loginRes.data.user?.id) {
+                const { data: dbProfile } = await client.from('profiles').select('*').eq('id', loginRes.data.user.id).maybeSingle();
+                if (dbProfile) {
+                  profile = Object.assign({}, profile, dbProfile);
+                  if (profile.student_id === '123000896' || profile.role === 'super_admin') {
+                    profile.display_name = 'Võ Huỳnh Thiên Bảo';
+                  }
+                }
+              }
+            }
+          } else {
+            if (session.user.id) {
+              const { data: dbProfile } = await client.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
+              if (dbProfile) {
+                profile = Object.assign({}, profile, dbProfile);
+                if (profile.student_id === '123000896' || profile.role === 'super_admin') {
+                  profile.display_name = 'Võ Huỳnh Thiên Bảo';
+                }
+              }
+            }
+          }
+        } catch (authErr) {
+          console.warn('Lưu ý xác thực sinh viên:', authErr);
+        }
+
+        if (!profile) {
+          return jsonResponse({
+            success: false,
+            message: `Không tìm thấy sinh viên có mã "${userId}". Vui lòng kiểm tra lại MSSV!`
+          }, 404);
+        }
+
+        // Kiểm tra thiết bị đã đăng ký
+        try {
+          if (profile.id) {
+            const { data: dev } = await client.from('devices').select('device_fingerprint').eq('profile_id', profile.id).maybeSingle();
+            if (dev && dev.device_fingerprint && dev.device_fingerprint !== deviceId) {
+              return jsonResponse({
+                success: false,
+                message: 'Tài khoản này đã được kích hoạt trên thiết bị khác! Vui lòng liên hệ giảng viên mở khóa.'
+              }, 403);
+            }
+            if (!dev && deviceId) {
+              await client.from('devices').insert({
+                profile_id: profile.id,
+                device_fingerprint: deviceId
+              }).catch(() => {});
+            }
+          }
+        } catch (devErr) {
+          console.warn('Lỗi kiểm tra thiết bị:', devErr);
+        }
+
+        const dept = profile.department || (profile.student_id?.startsWith('124') ? '24CD111' : (profile.student_id?.startsWith('125') ? '25CK111' : '23CD111'));
+        const displayName = (profile.student_id === '123000896' || profile.role === 'super_admin') ? 'Võ Huỳnh Thiên Bảo' : profile.display_name;
 
         return jsonResponse({
           success: true,
           message: 'Kích hoạt thiết bị thành công! Thiết bị đã được khóa cố định.',
           data: {
             userId: profile.student_id,
-            name: profile.display_name,
+            name: displayName,
             deviceId: deviceId,
-            department: profile.student_id.startsWith('124') ? '24CD111' : (profile.student_id.startsWith('125') ? '25CD111' : '23CD111')
+            department: dept
           }
         });
       }

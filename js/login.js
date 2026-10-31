@@ -33,7 +33,11 @@
     busy = true; button.disabled = true; button.textContent = 'Đang đăng nhập…'; retry.hidden = true;
     api.setStatus(status);
     try {
-      const result = await api.client.auth.signInWithPassword({ email: document.getElementById('email').value.trim(), password: password.value });
+      let emailVal = document.getElementById('email').value.trim();
+      if (/^\d{8,10}$/.test(emailVal)) {
+        emailVal = `${emailVal}@student.lhu.edu.vn`;
+      }
+      const result = await api.client.auth.signInWithPassword({ email: emailVal, password: password.value });
       if (result.error) throw result.error;
       const current = await api.identity();
       if (!current) throw new Error('Session unavailable');

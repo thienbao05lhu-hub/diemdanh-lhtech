@@ -21,7 +21,7 @@
   <script src="vendor/html5-qrcode.min.js"></script>
   <script src="vendor/supabase-2.118.0.js"></script>
   <script src="js/config.js"></script>
-  <script src="js/supabase-api-bridge.js?v=20261031_04"></script>
+  <script src="js/supabase-api-bridge.js?v=20261031_05"></script>
 
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
@@ -330,11 +330,44 @@
       checkAuthState();
     });
 
-    function checkAuthState() {
-      const savedUserId = localStorage.getItem('qr_user_id');
-      const savedDeviceId = localStorage.getItem('qr_device_id');
-      const savedName = localStorage.getItem('qr_user_name');
-      const savedDept = localStorage.getItem('qr_user_dept');
+    async function checkAuthState() {
+      let savedUserId = localStorage.getItem('qr_user_id');
+      let savedDeviceId = localStorage.getItem('qr_device_id');
+      let savedName = localStorage.getItem('qr_user_name');
+      let savedDept = localStorage.getItem('qr_user_dept');
+
+      // Tự động nhận diện nếu đã đăng nhập Supabase Auth trước đó
+      if ((!savedUserId || !savedDeviceId) && window.supabaseClient) {
+        try {
+          const { data: { session } } = await window.supabaseClient.auth.getSession();
+          if (session && session.user) {
+            const email = session.user.email || '';
+            const mMatch = email.match(/^(\d+)@/);
+            const mssv = mMatch ? mMatch[1] : (session.user.user_metadata?.student_id || '');
+            if (mssv) {
+              const devId = savedDeviceId || generateDeviceUUID();
+              const regRes = await fetch('/api/register-device', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId: mssv, deviceId: devId })
+              });
+              const regJson = await regRes.json();
+              if (regJson.success && regJson.data) {
+                localStorage.setItem('qr_user_id', regJson.data.userId);
+                localStorage.setItem('qr_device_id', regJson.data.deviceId);
+                localStorage.setItem('qr_user_name', regJson.data.name);
+                localStorage.setItem('qr_user_dept', regJson.data.department || '');
+                savedUserId = regJson.data.userId;
+                savedDeviceId = regJson.data.deviceId;
+                savedName = regJson.data.name;
+                savedDept = regJson.data.department;
+              }
+            }
+          }
+        } catch (e) {
+          console.warn('Lỗi tự động nhận diện tài khoản:', e);
+        }
+      }
 
       if (!savedUserId || !savedDeviceId) {
         // CHƯA CÓ: Hiển thị màn hình kích hoạt thiết bị
@@ -380,7 +413,12 @@
       const alertDiv = document.getElementById('registerAlert');
       const btn = document.getElementById('btnRegister');
 
-      if (!userId) return;
+      if (!userId) {
+        alertDiv.className = 'mt-4 p-3.5 rounded-xl text-xs font-medium border bg-amber-500/10 text-amber-400 border-amber-500/30 text-center';
+        alertDiv.innerHTML = '<i class="fa-solid fa-triangle-exclamation mr-1.5"></i> Vui lòng nhập Mã Sinh Viên!';
+        alertDiv.classList.remove('hidden');
+        return;
+      }
 
       // Sinh deviceId ngẫu nhiên và lưu tạm
       const newDeviceId = generateDeviceUUID();
@@ -416,7 +454,7 @@
         } else {
           // Lỗi: 403 (Đã đăng ký máy khác) hoặc 404 (Không có tên trong danh sách)
           alertDiv.className = 'mt-4 p-3.5 rounded-xl text-xs font-medium border bg-red-500/10 text-red-400 border-red-500/30 text-center';
-          alertDiv.innerHTML = `<i class="fa-solid fa-circle-xmark mr-1.5"></i> ${result.message}`;
+          alertDiv.innerHTML = `<i class="fa-solid fa-circle-xmark mr-1.5"></i> ${result.message || "Xác thực thất bại!"}`;
           alertDiv.classList.remove('hidden');
           btn.disabled = false;
           btn.innerHTML = `<span>Xác Nhận & Khóa Thiết Bị</span> <i class="fa-solid fa-lock text-xs"></i>`;

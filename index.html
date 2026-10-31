@@ -15,8 +15,8 @@
   <script defer src="js/auth-callback.js"></script>
   <script defer src="vendor/supabase-2.118.0.js"></script>
   <script defer src="js/config.js"></script>
-  <script defer src="js/auth.js?v=20261031-dark"></script>
-  <script defer src="js/login.js?v=20261031-dark"></script>
+  <script defer src="js/auth.js?v=20261031_05"></script>
+  <script defer src="js/login.js?v=20261031_05"></script>
 </head>
 <body class="bg-slate-950 text-slate-100 min-h-screen flex items-center justify-center p-4 selection:bg-emerald-500 selection:text-white">
   <main class="w-full max-w-md">
@@ -38,7 +38,7 @@
       <form id="login-form" method="post" class="space-y-4">
         <div>
           <label for="email" class="block text-[11px] font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
-            Email tài khoản
+            Email hoặc Mã Sinh Viên
           </label>
           <div class="relative">
             <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
@@ -47,11 +47,11 @@
             <input
               id="email"
               name="email"
-              type="email"
+              type="text"
               autocomplete="username"
               maxlength="254"
               required
-              placeholder="VD: 123000896@student.lhu.edu.vn"
+              placeholder="VD: 123000896 hoặc 123000896@student.lhu.edu.vn"
               class="w-full bg-slate-950 border border-slate-800 rounded-xl pl-10 pr-3 py-2.5 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition"
             >
           </div>
