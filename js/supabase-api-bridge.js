@@ -322,23 +322,6 @@
         const resolvedStatus = resData.data?.status || 'Có mặt';
         const resolvedTime = resData.data?.scannedAt || new Date().toISOString();
 
-        // Gửi thông báo tức thì lên Nhóm Zalo nếu quét mới thành công
-        if (!isAlready) {
-          try {
-            const vnNow = getVnTimeInfo();
-            const curShift = vnNow.totalMinutes < 720 ? 'Sáng' : (vnNow.totalMinutes < 1080 ? 'Chiều' : 'Tối');
-            const timeStr = new Date(resolvedTime).toLocaleString('vi-VN', {
-              timeZone: 'Asia/Ho_Chi_Minh',
-              hour: '2-digit', minute: '2-digit', second: '2-digit',
-              day: '2-digit', month: '2-digit', year: 'numeric'
-            });
-            const icon = resolvedStatus === 'Đi trễ' ? '⚠️' : '✅';
-            const actionText = resolvedStatus === 'Đi trễ' ? 'đi trễ' : 'vừa điểm danh';
-            sendZaloMessage(`${icon} Sinh viên [${resolvedName}] ${actionText} ca [${curShift}] lúc [${timeStr}]`);
-          } catch (zErr) {
-            console.warn('Lỗi gửi tin nhắn điểm danh Zalo:', zErr);
-          }
-        }
 
         return jsonResponse({
           success: true,
