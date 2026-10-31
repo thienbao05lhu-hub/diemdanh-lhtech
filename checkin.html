@@ -21,7 +21,7 @@
   <script src="vendor/html5-qrcode.min.js"></script>
   <script src="vendor/supabase-2.118.0.js"></script>
   <script src="js/config.js"></script>
-  <script src="js/supabase-api-bridge.js?v=20261031_08"></script>
+  <script src="js/supabase-api-bridge.js?v=20261031_09"></script>
 
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
@@ -171,7 +171,30 @@
       </div>
     </div>
 
-    <!-- Nút Báo Nghỉ Chủ Động -->
+        <!-- Thẻ Kết quả Quét Điểm Danh (Modern Result Card - Nằm ngay dưới camera) -->
+    <div id="scanAlert" class="mt-3.5 hidden p-4 sm:p-5 rounded-2xl border transition-all duration-300 shadow-2xl flex flex-col gap-3.5">
+      <!-- Hàng trên: Icon badge + Tiêu đề trạng thái & nội dung -->
+      <div class="flex items-start gap-3.5">
+        <div id="scanAlertIcon" class="w-10 h-10 rounded-xl flex items-center justify-center text-xl shrink-0"></div>
+        <div class="flex-1 min-w-0">
+          <h3 id="scanAlertTitle" class="text-sm sm:text-base font-bold text-white leading-snug"></h3>
+          <p id="scanAlertMessage" class="text-xs sm:text-sm text-slate-200 mt-1 leading-relaxed break-words"></p>
+        </div>
+      </div>
+
+      <!-- Nút Tiếp Tục Quét Lại (Nằm trọn vẹn ở hàng dưới, trải rộng toàn chiều ngang, dễ bấm) -->
+      <button
+        type="button"
+        id="btnResumeScan"
+        onclick="resumeScanner()"
+        class="mt-1 hidden w-full py-3 px-4 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 active:scale-[0.98] text-white font-bold rounded-xl text-xs sm:text-sm transition-all duration-200 flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 cursor-pointer"
+      >
+        <i class="fa-solid fa-camera-rotate text-sm"></i>
+        <span>Tiếp Tục Quét Lại</span>
+      </button>
+    </div>
+
+<!-- Nút Báo Nghỉ Chủ Động -->
     <div class="mt-3">
       <button
         type="button"
@@ -190,24 +213,7 @@
       <div id="myLeaveRequestsList" class="space-y-2"></div>
     </section>
 
-    <!-- Banner Kết quả Quét Điểm Danh (Toast Modal) -->
-    <div id="scanAlert" class="mt-4 hidden p-4 rounded-2xl text-xs font-semibold border transition-all duration-300 shadow-xl flex items-center gap-3">
-      <div id="scanAlertIcon" class="text-xl"></div>
-      <div class="flex-1">
-        <p id="scanAlertTitle" class="text-sm font-bold text-white"></p>
-        <p id="scanAlertMessage" class="text-xs text-slate-300 mt-0.5"></p>
-      </div>
-    <!-- Nút Tiếp Tục Quét Lại (chỉ hiển thị khi camera tạm dừng chống spam) -->
-    <button
-      type="button"
-      id="btnResumeScan"
-      onclick="resumeScanner()"
-      class="mt-3 hidden w-full py-2.5 px-4 bg-slate-800 hover:bg-slate-700 active:scale-[0.98] text-emerald-400 border border-emerald-500/30 rounded-2xl text-xs font-bold transition flex items-center justify-center gap-2 shadow-lg"
-    >
-      <i class="fa-solid fa-camera-rotate"></i>
-      <span>Tiếp Tục Quét Lại</span>
-    </button>
-    </div>
+    
   </div>
 
   <!-- ============================================================== -->
@@ -618,22 +624,31 @@
       const titleDiv = document.getElementById('scanAlertTitle');
       const msgDiv = document.getElementById('scanAlertMessage');
 
-      alertDiv.className = 'mt-4 p-4 rounded-2xl text-xs font-semibold border transition-all duration-300 shadow-xl flex items-center gap-3';
+      alertDiv.className = 'mt-3.5 p-4 sm:p-5 rounded-2xl border transition-all duration-300 shadow-2xl flex flex-col gap-3.5';
 
       if (status === 'loading') {
-        alertDiv.classList.add('bg-blue-500/10', 'text-blue-400', 'border-blue-500/30');
-        iconDiv.innerHTML = `<i class="fa-solid fa-spinner fa-spin text-blue-400"></i>`;
+        alertDiv.classList.add('bg-blue-950/60', 'border-blue-500/40');
+        iconDiv.className = 'w-10 h-10 rounded-xl bg-blue-500/15 text-blue-400 border border-blue-500/30 flex items-center justify-center text-lg shrink-0';
+        iconDiv.innerHTML = '<i class="fa-solid fa-spinner fa-spin text-blue-400"></i>';
+        titleDiv.className = 'text-sm sm:text-base font-bold text-blue-300 leading-snug';
       } else if (status === true) {
-        alertDiv.classList.add('bg-emerald-500/10', 'text-emerald-400', 'border-emerald-500/30');
-        iconDiv.innerHTML = `<i class="fa-solid fa-circle-check text-emerald-400 text-2xl"></i>`;
+        alertDiv.classList.add('bg-emerald-950/60', 'border-emerald-500/40');
+        iconDiv.className = 'w-10 h-10 rounded-xl bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 flex items-center justify-center text-xl shrink-0 shadow-lg shadow-emerald-500/10';
+        iconDiv.innerHTML = '<i class="fa-solid fa-circle-check text-emerald-400"></i>';
+        titleDiv.className = 'text-sm sm:text-base font-bold text-emerald-300 leading-snug';
       } else if (status === 'warning') {
-        alertDiv.classList.add('bg-amber-500/15', 'text-amber-400', 'border-amber-500/40');
-        iconDiv.innerHTML = `<i class="fa-solid fa-triangle-exclamation text-amber-400 text-2xl"></i>`;
+        alertDiv.classList.add('bg-amber-950/60', 'border-amber-500/50');
+        iconDiv.className = 'w-10 h-10 rounded-xl bg-amber-500/15 text-amber-400 border border-amber-500/30 flex items-center justify-center text-xl shrink-0 shadow-lg shadow-amber-500/10';
+        iconDiv.innerHTML = '<i class="fa-solid fa-triangle-exclamation text-amber-400"></i>';
+        titleDiv.className = 'text-sm sm:text-base font-bold text-amber-300 leading-snug';
       } else {
-        alertDiv.classList.add('bg-red-500/10', 'text-red-400', 'border-red-500/30');
-        iconDiv.innerHTML = `<i class="fa-solid fa-circle-xmark text-red-400 text-2xl"></i>`;
+        alertDiv.classList.add('bg-rose-950/60', 'border-rose-500/40');
+        iconDiv.className = 'w-10 h-10 rounded-xl bg-rose-500/15 text-rose-400 border border-rose-500/30 flex items-center justify-center text-xl shrink-0 shadow-lg shadow-rose-500/10';
+        iconDiv.innerHTML = '<i class="fa-solid fa-circle-xmark text-rose-400"></i>';
+        titleDiv.className = 'text-sm sm:text-base font-bold text-rose-300 leading-snug';
       }
 
+      msgDiv.className = 'text-xs sm:text-sm text-slate-200 mt-1 leading-relaxed break-words';
       titleDiv.innerText = title;
       msgDiv.innerText = message;
       alertDiv.classList.remove('hidden');
