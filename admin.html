@@ -1718,12 +1718,14 @@
       return [...list].sort((a, b) => {
         const getSortKey = (fullName) => {
           if (!fullName) return '';
-          const parts = fullName.trim().split(/\s+/);
+          const parts = String(fullName).trim().split(/\s+/);
           const lastName = parts[parts.length - 1]; // Tên chính (A-Z)
           const rest = parts.slice(0, parts.length - 1).join(' '); // Họ và đệm
           return `${lastName} ${rest}`;
         };
-        return getSortKey(a.name).localeCompare(getSortKey(b.name), 'vi', { sensitivity: 'base' });
+        const nameA = a.name || a.userName || a.displayName || '';
+        const nameB = b.name || b.userName || b.displayName || '';
+        return getSortKey(nameA).localeCompare(getSortKey(nameB), 'vi', { sensitivity: 'base' });
       });
     }
 
@@ -1877,7 +1879,7 @@
         clearBtn.classList.toggle('hidden', !keyword);
       }
 
-      let filteredList = list || [];
+      let filteredList = sortVietnameseAlphabet(list || []);
       if (keyword) {
         filteredList = filteredList.filter(item => {
           const name = (item.userName || '').toLowerCase();

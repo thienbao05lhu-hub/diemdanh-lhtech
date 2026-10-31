@@ -395,10 +395,15 @@
       // 4. /api/attendance/today (Trạng thái điểm danh hôm nay theo ca)
       if (urlStr.includes('/api/attendance/today')) {
         const urlObj = new URL(urlStr, root.location.origin);
-        const shiftParam = urlObj.searchParams.get('shift') || 'Sáng';
-        const shift = shiftParam.includes('Chiều') ? 'Chiều' : (shiftParam.includes('Tối') ? 'Tối' : 'Sáng');
-        const todayIso = getTodayIso();
         const vnInfo = getVnTimeInfo();
+        const shiftParam = urlObj.searchParams.get('shift');
+        let shift = 'Sáng';
+        if (shiftParam) {
+          shift = shiftParam.includes('Chiều') ? 'Chiều' : (shiftParam.includes('Tối') ? 'Tối' : 'Sáng');
+        } else {
+          shift = vnInfo.totalMinutes < 720 ? 'Sáng' : (vnInfo.totalMinutes < 1080 ? 'Chiều' : 'Tối');
+        }
+        const todayIso = getTodayIso();
 
         let cutoffMinutes = 510, closingMinutes = 660, cutoffTimeStr = '08:30', closingTimeStr = '11:00';
         if (shift === 'Chiều') {
@@ -437,16 +442,17 @@
         for (const p of expectedProfiles) {
           const att = attMap.get(p.id);
           const dept = p.department || (p.student_id?.startsWith('124') ? '24CD111' : (p.student_id?.startsWith('125') ? '25CD111' : '23CD111'));
+          const studentName = (p.student_id === '123000896' || p.role === 'super_admin') ? 'Võ Huỳnh Thiên Bảo' : p.display_name;
           if (att) {
             records.push({
               userId: p.student_id,
-              userName: p.display_name,
+              userName: studentName,
               department: dept,
               shift: shift,
               status: att.status,
               timestamp: att.scanned_at,
               inSchedule: true,
-              isLocked: Boolean(att.is_locked),
+              isLocked: Boolean(att.is_locked) || isClosed,
               deviceBound: devMap.has(p.id),
               profileId: p.id,
               note: att.note || '',
@@ -456,13 +462,13 @@
             const autoStatus = isPastCutoff ? 'Vắng không phép' : 'Chưa điểm danh';
             records.push({
               userId: p.student_id,
-              userName: p.display_name,
+              userName: studentName,
               department: dept,
               shift: shift,
               status: autoStatus,
               timestamp: null,
               inSchedule: true,
-              isLocked: false,
+              isLocked: isClosed,
               deviceBound: devMap.has(p.id),
               profileId: p.id,
               note: '',
@@ -477,15 +483,16 @@
             const p = cachedProfiles.find(cp => cp.id === att.profile_id);
             if (p && ['Có mặt', 'Đi trễ', 'Vắng có phép', 'Vắng CP'].includes(att.status)) {
               const dept = p.department || (p.student_id?.startsWith('124') ? '24CD111' : (p.student_id?.startsWith('125') ? '25CD111' : '23CD111'));
+              const studentName = (p.student_id === '123000896' || p.role === 'super_admin') ? 'Võ Huỳnh Thiên Bảo' : p.display_name;
               records.push({
                 userId: p.student_id,
-                userName: p.display_name,
+                userName: studentName,
                 department: dept,
                 shift: shift,
                 status: att.status,
                 timestamp: att.scanned_at,
                 inSchedule: false,
-                isLocked: Boolean(att.is_locked),
+                isLocked: Boolean(att.is_locked) || isClosed,
                 deviceBound: devMap.has(p.id),
                 profileId: p.id,
                 note: 'Ngoài lịch',
@@ -493,6 +500,18 @@
               });
             }
           }
+        });
+
+        // Sắp xếp danh sách hôm nay theo thứ tự bảng chữ cái tiếng Việt (A-Z theo Tên chính)
+        records.sort((a, b) => {
+          const getSortKey = (fullName) => {
+            if (!fullName) return '';
+            const parts = String(fullName).trim().split(/\s+/);
+            const lastName = parts[parts.length - 1];
+            const rest = parts.slice(0, parts.length - 1).join(' ');
+            return `${lastName} ${rest}`;
+          };
+          return getSortKey(a.userName).localeCompare(getSortKey(b.userName), 'vi', { sensitivity: 'base' });
         });
 
         // Tính thống kê theo chuẩn web gốc
@@ -598,27 +617,17 @@
           return jsonResponse({ success: true, message: 'Đã hủy điểm danh thành công' });
         }
 
-        // Cập nhật trạng thái và mở khóa để Admin có thể tiếp tục điều chỉnh nếu cần
-        const { data, error } = await client.from('attendance').upsert({
-          profile_id: profile.id,
-          student_id: profile.student_id,
-          business_date: targetDate,
-          shift: targetShift,
-          status: targetStatus,
-          note: body.reason || 'Quản trị viên điều chỉnh thủ công',
-          is_locked: false,
-          scanned_at: new Date().toISOString()
-        }, { onConflict: 'profile_id,business_date,shift' }).select().maybeSingle();
+        // Luôn sử dụng RPC admin_update_attendance bảo mật để tuân thủ RLS & Audit logs
+        const { data, error } = await client.rpc('admin_update_attendance', {
+          p_profile_id: profile.id,
+          p_date: targetDate,
+          p_shift: targetShift,
+          p_status: targetStatus,
+          p_reason: body.reason || 'Quản trị viên điều chỉnh thủ công'
+        });
 
         if (error) {
-          const rpcRes = await client.rpc('admin_update_attendance', {
-            p_profile_id: profile.id,
-            p_date: targetDate,
-            p_shift: targetShift,
-            p_status: targetStatus,
-            p_reason: body.reason || 'Quản trị viên điều chỉnh thủ công'
-          });
-          if (rpcRes.error) return jsonResponse({ success: false, message: rpcRes.error.message }, 400);
+          return jsonResponse({ success: false, message: error.message }, 400);
         }
 
         return jsonResponse({ success: true, message: 'Cập nhật thành công', data });
@@ -633,12 +642,19 @@
         const targetDate = body.date || getTodayIso();
         const targetShift = body.shift || 'Sáng';
 
-        await client.from('attendance').delete()
-          .eq('profile_id', profile.id)
-          .eq('business_date', targetDate)
-          .eq('shift', targetShift);
+        const { data, error } = await client.rpc('admin_update_attendance', {
+          p_profile_id: profile.id,
+          p_date: targetDate,
+          p_shift: targetShift,
+          p_status: 'Hủy',
+          p_reason: 'Quản trị viên hủy điểm danh'
+        });
 
-        return jsonResponse({ success: true, message: 'Hủy điểm danh thành công' });
+        if (error) {
+          return jsonResponse({ success: false, message: error.message }, 400);
+        }
+
+        return jsonResponse({ success: true, message: 'Hủy điểm danh thành công', data });
       }
 
       // 9. /api/schedule (Lấy hoặc Lưu lịch tuần)
@@ -916,10 +932,38 @@
 
       // 15. /api/attendance/reset hoặc /api/attendance/reset-all-stats
       if (urlStr.includes('/api/attendance/reset')) {
-        return jsonResponse({
-          success: true,
-          message: 'Đã thiết lập lại dữ liệu kiểm thử thành công'
-        });
+        const isResetAll = urlStr.includes('reset-all-stats');
+        const todayIso = getTodayIso();
+
+        if (isResetAll) {
+          // Xóa toàn bộ lịch sử điểm danh test (gọi RPC hủy cho từng bản ghi)
+          const { data: allAtts } = await client.from('attendance').select('profile_id, business_date, shift');
+          for (const a of (allAtts || [])) {
+            await client.rpc('admin_update_attendance', {
+              p_profile_id: a.profile_id,
+              p_date: a.business_date,
+              p_shift: a.shift,
+              p_status: 'Hủy',
+              p_reason: 'Reset toàn bộ dữ liệu test'
+            }).catch(() => {});
+          }
+          return jsonResponse({ success: true, message: 'Đã xóa sạch toàn bộ lịch sử điểm danh test!' });
+        } else {
+          // Reset điểm danh chưa chốt hôm nay
+          const { data: todayAtts } = await client.from('attendance').select('profile_id, business_date, shift, is_locked').eq('business_date', todayIso);
+          for (const a of (todayAtts || [])) {
+            if (!a.is_locked) {
+              await client.rpc('admin_update_attendance', {
+                p_profile_id: a.profile_id,
+                p_date: a.business_date,
+                p_shift: a.shift,
+                p_status: 'Hủy',
+                p_reason: 'Reset điểm danh hôm nay'
+              }).catch(() => {});
+            }
+          }
+          return jsonResponse({ success: true, message: 'Đã reset dữ liệu điểm danh chưa khóa của hôm nay về 0!' });
+        }
       }
 
       // 16. /api/attendance/force-zalo-report (Báo Cáo Điểm Danh Ca Lên Nhóm Zalo)
