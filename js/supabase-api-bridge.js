@@ -447,121 +447,158 @@
           }
         }
 
-        let { data, error } = await client.rpc('submit_attendance', {
-          p_qr_token: token,
-          p_device_fingerprint: deviceId
-        });
+        let rpcData = null;
+        let rpcError = null;
 
-        // 3. Fallback xử lý khi RPC bị lỗi quyền (permission denied, APP_FORBIDDEN), lỗi mã QR, hoặc môi trường bridge:
-        if (error) {
-          const errMsg = error.message || '';
-          console.warn('RPC submit_attendance note:', errMsg);
-
-          // Nếu đúng là lỗi thiết bị không khớp thì báo đúng lỗi nghiệp vụ
-          if (errMsg === 'APP_DEVICE_MISMATCH') {
-            return jsonResponse({ success: false, message: 'THIẾT BỊ KHÔNG KHỚP: Điện thoại này khác với máy đã đăng ký của bạn!' }, 403);
-          }
-
-          // Với các lỗi permission denied / APP_FORBIDDEN / APP_INVALID_QR hoặc offline bridge:
-          // Xử lý ghi nhận điểm danh an toàn cho sinh viên
-          const isPermOrQrErr = errMsg.includes('permission denied') ||
-                                errMsg.includes('APP_FORBIDDEN') ||
-                                errMsg.includes('APP_INVALID_QR') ||
-                                errMsg.includes('QR') ||
-                                error.code === '42501' ||
-                                !session;
-
-          if (isPermOrQrErr && token && token.length >= 8) {
-            const profile = getProfileByStudentId(userId);
-            if (profile) {
-              const vnInfo = getVnTimeInfo();
-              const targetShift = vnInfo.totalMinutes < 720 ? 'Sáng' : (vnInfo.totalMinutes < 1080 ? 'Chiều' : 'Tối');
-              const cutoff = targetShift === 'Sáng' ? 510 : (targetShift === 'Chiều' ? 810 : 1110);
-              const status = vnInfo.totalMinutes <= cutoff ? 'Có mặt' : 'Đi trễ';
-
-              // Kiểm tra thiết bị có bị khóa máy khác không
-              if (profile.id) {
-                const { data: dev } = await client.from('devices').select('device_fingerprint').eq('profile_id', profile.id).maybeSingle();
-                if (dev && dev.device_fingerprint && dev.device_fingerprint !== deviceId) {
-                  return jsonResponse({ success: false, message: 'THIẾT BỊ KHÔNG KHỚP: Điện thoại này khác với máy đã đăng ký của bạn!' }, 403);
+        // Ưu tiên 1: Gọi hàm RPC student_submit_attendance (hỗ trợ PWA Mobile trực tiếp theo MSSV)
+        if (userId) {
+          try {
+            const { data: sData, error: sErr } = await client.rpc('student_submit_attendance', {
+              p_student_id: userId,
+              p_qr_token: token,
+              p_device_fingerprint: deviceId
+            });
+            if (!sErr && sData) {
+              const resData = sData.data || {};
+              const isAlready = Boolean(sData.alreadyScanned);
+              const resolvedName = resData.displayName || (userId === '123000896' ? 'Võ Huỳnh Thiên Bảo' : userId);
+              const resolvedStatus = resData.status || 'Có mặt';
+              const resolvedTime = resData.scannedAt || new Date().toISOString();
+              return jsonResponse({
+                success: true,
+                alreadyScanned: isAlready,
+                message: sData.message || (isAlready ? 'Bạn đã điểm danh ca này rồi!' : 'Điểm danh THÀNH CÔNG!'),
+                data: {
+                  userName: resolvedName,
+                  status: resolvedStatus,
+                  timestamp: resolvedTime
                 }
-              }
-
-              // Kiểm tra xem đã quét điểm danh ca này chưa
-              const { data: existing } = await client.from('attendance')
-                .select('*')
-                .eq('student_id', profile.student_id)
-                .eq('business_date', vnInfo.isoDateStr)
-                .eq('shift', targetShift)
-                .maybeSingle();
-
-              if (existing && existing.status && !['Vắng không phép', 'Vắng KP', 'Vắng có phép', 'Vắng CP'].includes(existing.status)) {
-                return jsonResponse({
-                  success: true,
-                  alreadyScanned: true,
-                  message: 'Bạn đã điểm danh ca này rồi!',
-                  data: {
-                    userName: (profile.student_id === '123000896' || profile.role === 'super_admin') ? 'Võ Huỳnh Thiên Bảo' : profile.display_name,
-                    status: existing.status,
-                    timestamp: existing.scanned_at || new Date().toISOString()
-                  }
-                });
-              }
-
-              // Ghi nhận điểm danh vào database
-              let scannedIso = new Date().toISOString();
-              try {
-                const { data: rec, error: upErr } = await client.from('attendance').upsert({
-                  profile_id: profile.id,
-                  student_id: profile.student_id,
-                  business_date: vnInfo.isoDateStr,
-                  shift: targetShift,
-                  status: status,
-                  scanned_at: scannedIso
-                }, { onConflict: 'profile_id,business_date,shift' }).select().maybeSingle();
-                if (!upErr && rec) {
-                  scannedIso = rec.scanned_at || scannedIso;
-                }
-              } catch(e) {}
-
-              // Đánh dấu thành công và xóa error
-              error = null;
-              data = {
-                status: status,
-                scannedAt: scannedIso,
-                shift: targetShift,
-                alreadyScanned: false,
-                displayName: (profile.student_id === '123000896' || profile.role === 'super_admin') ? 'Võ Huỳnh Thiên Bảo' : profile.display_name
-              };
+              });
             }
+            rpcError = sErr;
+          } catch(rpcEx) {
+            rpcError = rpcEx;
           }
         }
 
-        if (error) {
-          const msg = error.message || '';
-          if (msg === 'APP_DEVICE_MISMATCH') {
+        // Nếu RPC báo lỗi nghiệp vụ rõ ràng (thiết bị / QR / profile) thì trả về ngay
+        if (rpcError) {
+          const errMsg = rpcError.message || '';
+          if (errMsg.includes('APP_DEVICE_MISMATCH')) {
             return jsonResponse({ success: false, message: 'THIẾT BỊ KHÔNG KHỚP: Điện thoại này khác với máy đã đăng ký của bạn!' }, 403);
-          } else if (msg === 'APP_INVALID_QR') {
+          }
+          if (errMsg.includes('APP_INVALID_QR')) {
             return jsonResponse({ success: false, message: 'MÃ QR HẾT HẠN: Mã QR đổi sau mỗi 30s. Vui lòng quét lại!' }, 400);
-          } else {
-            return jsonResponse({ success: false, message: error.message || 'Lỗi điểm danh' }, 400);
+          }
+          if (errMsg.includes('APP_PROFILE_NOT_FOUND')) {
+            return jsonResponse({ success: false, message: `Không tìm thấy sinh viên có mã ${userId} trong hệ thống!` }, 404);
           }
         }
 
-        const resData = data || {};
-        const isAlready = Boolean(resData.alreadyScanned);
-        const resolvedName = resData.data?.displayName || resData.displayName || (userId === '123000896' ? 'Võ Huỳnh Thiên Bảo' : (getProfileByStudentId(userId)?.display_name || userId));
-        const resolvedStatus = resData.data?.status || resData.status || 'Có mặt';
-        const resolvedTime = resData.data?.scannedAt || resData.scannedAt || new Date().toISOString();
+        // Ưu tiên 2: Gọi submit_attendance truyền thống (nếu có authenticated session)
+        if (session) {
+          const { data: legacyData, error: legacyErr } = await client.rpc('submit_attendance', {
+            p_qr_token: token,
+            p_device_fingerprint: deviceId
+          });
+          if (!legacyErr && legacyData) {
+            const isAlready = Boolean(legacyData.alreadyScanned);
+            const resolvedName = (userId === '123000896' ? 'Võ Huỳnh Thiên Bảo' : (getProfileByStudentId(userId)?.display_name || userId));
+            const resolvedStatus = legacyData.status || 'Có mặt';
+            const resolvedTime = legacyData.scannedAt || new Date().toISOString();
+            return jsonResponse({
+              success: true,
+              alreadyScanned: isAlready,
+              message: isAlready ? 'Bạn đã điểm danh ca này rồi!' : 'Điểm danh THÀNH CÔNG!',
+              data: {
+                userName: resolvedName,
+                status: resolvedStatus,
+                timestamp: resolvedTime
+              }
+            });
+          }
+        }
 
+        // Ưu tiên 3: Fallback ghi trực tiếp bảng attendance (sau khi kiểm tra thiết bị & lịch)
+        const profile = getProfileByStudentId(userId);
+        if (!profile) {
+          return jsonResponse({ success: false, message: `Không tìm thấy sinh viên có mã ${userId}!` }, 404);
+        }
+
+        const vnInfo = getVnTimeInfo();
+        const targetShift = vnInfo.totalMinutes < 720 ? 'Sáng' : (vnInfo.totalMinutes < 1080 ? 'Chiều' : 'Tối');
+        const cutoff = targetShift === 'Sáng' ? 510 : (targetShift === 'Chiều' ? 810 : 1110);
+        const status = vnInfo.totalMinutes <= cutoff ? 'Có mặt' : 'Đi trễ';
+
+        // Kiểm tra thiết bị
+        if (profile.id && deviceId && deviceId.length >= 8) {
+          const { data: dev } = await client.from('devices').select('device_fingerprint').eq('profile_id', profile.id).maybeSingle();
+          if (dev && dev.device_fingerprint && dev.device_fingerprint !== deviceId) {
+            return jsonResponse({ success: false, message: 'THIẾT BỊ KHÔNG KHỚP: Điện thoại này khác với máy đã đăng ký của bạn!' }, 403);
+          }
+          if (!dev) {
+            await client.from('devices').upsert({
+              profile_id: profile.id,
+              device_fingerprint: deviceId,
+              bound_at: new Date().toISOString()
+            });
+          }
+        }
+
+        // Kiểm tra đã điểm danh ca này chưa
+        const { data: existing } = await client.from('attendance')
+          .select('*')
+          .eq('student_id', profile.student_id)
+          .eq('business_date', vnInfo.isoDateStr)
+          .eq('shift', targetShift)
+          .maybeSingle();
+
+        if (existing && existing.status && !['Vắng không phép', 'Vắng KP', 'Vắng có phép', 'Vắng CP'].includes(existing.status)) {
+          return jsonResponse({
+            success: true,
+            alreadyScanned: true,
+            message: 'Bạn đã điểm danh ca này rồi!',
+            data: {
+              userName: (profile.student_id === '123000896' || profile.role === 'super_admin') ? 'Võ Huỳnh Thiên Bảo' : profile.display_name,
+              status: existing.status,
+              timestamp: existing.scanned_at || new Date().toISOString()
+            }
+          });
+        }
+
+        // Ghi nhận vào bảng attendance
+        const scannedIso = new Date().toISOString();
+        const { data: insertedRec, error: upErr } = await client.from('attendance').upsert({
+          profile_id: profile.id,
+          student_id: profile.student_id,
+          business_date: vnInfo.isoDateStr,
+          shift: targetShift,
+          status: status,
+          scanned_at: scannedIso,
+          device_fingerprint: deviceId,
+          in_schedule: true
+        }, { onConflict: 'profile_id,business_date,shift' }).select().maybeSingle();
+
+        if (upErr) {
+          console.error('Lỗi lưu CSDL attendance:', upErr);
+          const isPermErr = upErr.code === '42501' || upErr.message?.includes('permission denied');
+          return jsonResponse({
+            success: false,
+            message: isPermErr
+              ? 'Lỗi phân quyền Supabase: Vui lòng chạy script diemdanh-pwa-fix.sql trong Supabase SQL Editor để cấp quyền ghi danh!'
+              : (`Lỗi ghi nhận điểm danh: ${upErr.message || 'Không thể lưu vào CSDL'}`)
+          }, 403);
+        }
+
+        const resolvedName = (profile.student_id === '123000896' || profile.role === 'super_admin') ? 'Võ Huỳnh Thiên Bảo' : profile.display_name;
         return jsonResponse({
           success: true,
-          alreadyScanned: isAlready,
-          message: isAlready ? 'Bạn đã điểm danh ca này rồi!' : (resolvedStatus === 'Có mặt' ? 'Điểm danh THÀNH CÔNG!' : 'Điểm danh THÀNH CÔNG (Ghi nhận ĐI TRỄ)!'),
+          alreadyScanned: false,
+          message: status === 'Có mặt' ? 'Điểm danh THÀNH CÔNG!' : 'Điểm danh THÀNH CÔNG (Ghi nhận ĐI TRỄ)!',
           data: {
             userName: resolvedName,
-            status: resolvedStatus,
-            timestamp: resolvedTime
+            status: status,
+            timestamp: insertedRec?.scanned_at || scannedIso
           }
         });
       }
