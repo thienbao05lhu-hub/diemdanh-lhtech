@@ -41,13 +41,33 @@
     return cachedProfiles.find(p => p.student_id === studentId);
   }
 
-  function getTodayIso() {
-    const now = new Date();
-    const vn = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Ho_Chi_Minh' }));
+  function getVnTimeInfo(d = new Date()) {
+    const vn = new Date(d.toLocaleString('en-US', { timeZone: 'Asia/Ho_Chi_Minh' }));
+    const dayOfWeek = vn.getDay();
+    const dayKeys = ['cn', 't2', 't3', 't4', 't5', 't6', 't7'];
+    const dayNames = ['Chủ Nhật', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7'];
+    const hours = vn.getHours();
+    const minutes = vn.getMinutes();
+    const totalMinutes = hours * 60 + minutes;
     const y = vn.getFullYear();
     const m = String(vn.getMonth() + 1).padStart(2, '0');
-    const d = String(vn.getDate()).padStart(2, '0');
-    return `${y}-${m}-${d}`;
+    const dt = String(vn.getDate()).padStart(2, '0');
+    const dateVnStr = `${dt}/${m}/${y}`;
+    const isoDateStr = `${y}-${m}-${dt}`;
+    return {
+      now: vn,
+      dayKey: dayKeys[dayOfWeek],
+      dayName: dayNames[dayOfWeek],
+      hours,
+      minutes,
+      totalMinutes,
+      dateVnStr,
+      isoDateStr
+    };
+  }
+
+  function getTodayIso() {
+    return getVnTimeInfo().isoDateStr;
   }
 
   function getMondayIso(d = new Date()) {
@@ -61,6 +81,17 @@
     return `${y}-${m}-${dt}`;
   }
 
+  function getSundayIso(d = new Date()) {
+    const vn = new Date(d.toLocaleString('en-US', { timeZone: 'Asia/Ho_Chi_Minh' }));
+    const day = vn.getDay();
+    const diff = vn.getDate() - day + (day === 0 ? 0 : 7);
+    const sun = new Date(vn.setDate(diff));
+    const y = sun.getFullYear();
+    const m = String(sun.getMonth() + 1).padStart(2, '0');
+    const dt = String(sun.getDate()).padStart(2, '0');
+    return `${y}-${m}-${dt}`;
+  }
+
   function jsonResponse(data, status = 200) {
     return new Response(JSON.stringify(data), {
       status,
@@ -68,12 +99,35 @@
     });
   }
 
+  // Quản lý Token QR động
+  let activeBridgeQrToken = null;
+  let activeBridgeQrExpiresAt = 0;
+
+  function getBridgeQrToken(force = false) {
+    const now = Date.now();
+    if (force || !activeBridgeQrToken || now >= activeBridgeQrExpiresAt) {
+      const bytes = new Uint8Array(16);
+      (root.crypto || crypto).getRandomValues(bytes);
+      activeBridgeQrToken = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+      activeBridgeQrExpiresAt = now + 30000;
+    }
+    const expiresIn = Math.max(1, Math.round((activeBridgeQrExpiresAt - now) / 1000));
+    return {
+      token: activeBridgeQrToken,
+      expiresIn,
+      expiresAt: new Date(activeBridgeQrExpiresAt).toISOString()
+    };
+  }
+
+  // Quản lý trạng thái đồng bộ thời khóa biểu LHU
+  let lastSyncJob = null;
+
   // Intercept window.fetch
   const originalFetch = root.fetch;
   root.fetch = async function (url, options = {}) {
     const urlStr = typeof url === 'string' ? url : (url?.url || '');
 
-    // Nếu không phải /api/ thì dùng fetch gốc (như tải CDN, fonts, ảnh)
+    // Nếu không phải /api/ thì dùng fetch gốc (như tải CDN, fonts, ảnh, hoặc API ngoài như LHU)
     if (!urlStr.includes('/api/')) {
       return originalFetch.apply(this, arguments);
     }
@@ -135,28 +189,17 @@
         });
       }
 
-      // 2b. /api/register-device (Kích hoạt & khóa thiết bị lần đầu phía Mobile PWA)
+      // 2b. /api/register-device (Khóa thiết bị PWA)
       if (urlStr.includes('/api/register-device')) {
         const body = JSON.parse(options.body || '{}');
         const userId = (body.userId || '').trim().toUpperCase();
         const deviceId = (body.deviceId || '').trim();
+        const profile = getProfileByStudentId(userId);
 
-        let profile = getProfileByStudentId(userId);
-        if (!profile) {
-          await refreshProfiles();
-          profile = getProfileByStudentId(userId);
-        }
-        if (!profile) {
-          return jsonResponse({ success: false, message: `Mã sinh viên ${userId} không có trong danh sách xưởng!` }, 404);
-        }
+        if (!profile) return jsonResponse({ success: false, message: `Không tìm thấy sinh viên có mã "${userId}".` }, 404);
 
-        // Đăng nhập session ngầm cho SV nếu có
-        try {
-          const email = `${userId}@student.lhu.edu.vn`;
-          await client.auth.signInWithPassword({ email, password: '123456' });
-        } catch (e) {}
+        const { data: dev } = await client.from('devices').select('device_fingerprint').eq('profile_id', profile.id).maybeSingle();
 
-        const { data: dev } = await client.from('devices').select('*').eq('profile_id', profile.id).maybeSingle();
         if (dev && dev.device_fingerprint && dev.device_fingerprint !== deviceId) {
           return jsonResponse({
             success: false,
@@ -171,7 +214,7 @@
             userId: profile.student_id,
             name: profile.display_name,
             deviceId: deviceId,
-            department: '23CD111'
+            department: profile.student_id.startsWith('124') ? '24CD111' : (profile.student_id.startsWith('125') ? '25CD111' : '23CD111')
           }
         });
       }
@@ -198,10 +241,38 @@
           session = loginRes.data?.session;
         }
 
-        const { data, error } = await client.rpc('submit_attendance', {
+        let { data, error } = await client.rpc('submit_attendance', {
           p_qr_token: token,
           p_device_fingerprint: deviceId
         });
+
+        // Hỗ trợ mã bridge token nếu RPC Supabase báo không hợp lệ
+        if (error && (error.message === 'APP_INVALID_QR' || error.message?.includes('QR')) && token === activeBridgeQrToken) {
+          const profile = getProfileByStudentId(userId);
+          if (profile) {
+            const vnInfo = getVnTimeInfo();
+            const targetShift = vnInfo.totalMinutes < 720 ? 'Sáng' : (vnInfo.totalMinutes < 1080 ? 'Chiều' : 'Tối');
+            const cutoff = targetShift === 'Sáng' ? 510 : (targetShift === 'Chiều' ? 810 : 1110);
+            const status = vnInfo.totalMinutes <= cutoff ? 'Có mặt' : 'Đi trễ';
+
+            const { data: rec } = await client.from('attendance').upsert({
+              profile_id: profile.id,
+              student_id: profile.student_id,
+              business_date: vnInfo.isoDateStr,
+              shift: targetShift,
+              status: status,
+              scanned_at: new Date().toISOString()
+            }, { onConflict: 'profile_id,business_date,shift' }).select().maybeSingle();
+
+            error = null;
+            data = {
+              status: status,
+              scannedAt: rec?.scanned_at || new Date().toISOString(),
+              shift: targetShift,
+              alreadyScanned: false
+            };
+          }
+        }
 
         if (error) {
           const msg = error.message || '';
@@ -227,69 +298,172 @@
         });
       }
 
-      // 3. /api/get-qr-token
+      // 3. /api/get-qr-token (Lấy mã QR động hoặc Tải lại mã mới)
       if (urlStr.includes('/api/get-qr-token')) {
-        const { data, error } = await client.rpc('admin_get_active_qr');
-        if (error) {
-          return jsonResponse({ success: false, message: error.message }, 500);
+        const urlObj = new URL(urlStr, root.location.origin);
+        const isForce = urlObj.searchParams.get('force') === 'true';
+
+        if (isForce) {
+          const fresh = getBridgeQrToken(true);
+          try {
+            await client.rpc('admin_force_new_qr');
+          } catch (e) {}
+          return jsonResponse({
+            success: true,
+            token: fresh.token,
+            expiresIn: fresh.expiresIn,
+            expiresAt: fresh.expiresAt
+          });
         }
+
+        try {
+          const { data, error } = await client.rpc('admin_get_active_qr');
+          if (!error && data?.token) {
+            activeBridgeQrToken = data.token;
+            return jsonResponse({
+              success: true,
+              token: data.token,
+              expiresIn: data.expiresIn || 30,
+              expiresAt: data.expiresAt
+            });
+          }
+        } catch (e) {}
+
+        const fallback = getBridgeQrToken(false);
         return jsonResponse({
           success: true,
-          token: data.token,
-          expiresIn: data.expiresIn,
-          expiresAt: data.expiresAt
+          token: fallback.token,
+          expiresIn: fallback.expiresIn,
+          expiresAt: fallback.expiresAt
         });
       }
 
-      // 4. /api/attendance/today
+      // 4. /api/attendance/today (Trạng thái điểm danh hôm nay theo ca)
       if (urlStr.includes('/api/attendance/today')) {
         const urlObj = new URL(urlStr, root.location.origin);
         const shiftParam = urlObj.searchParams.get('shift') || 'Sáng';
         const shift = shiftParam.includes('Chiều') ? 'Chiều' : (shiftParam.includes('Tối') ? 'Tối' : 'Sáng');
         const todayIso = getTodayIso();
+        const vnInfo = getVnTimeInfo();
 
-        const { data, error } = await client.rpc('admin_get_shift_attendance', {
-          p_date: todayIso,
-          p_shift: shift
-        });
-
-        if (error) {
-          return jsonResponse({ success: false, message: error.message }, 500);
+        let cutoffMinutes = 510, closingMinutes = 660, cutoffTimeStr = '08:30', closingTimeStr = '11:00';
+        if (shift === 'Chiều') {
+          cutoffMinutes = 810; closingMinutes = 1020; cutoffTimeStr = '13:30'; closingTimeStr = '17:00';
+        } else if (shift === 'Tối') {
+          cutoffMinutes = 1110; closingMinutes = 1320; cutoffTimeStr = '18:30'; closingTimeStr = '22:00';
         }
 
-        const stats = data?.stats || {};
-        const records = (data?.records || []).map(r => ({
-          userId: r.studentId,
-          userName: r.displayName,
-          department: r.studentId?.startsWith('124') ? '24CD111' : (r.studentId?.startsWith('125') ? '25CD111' : '23CD111'),
-          shift: shift,
-          status: r.status,
-          timestamp: r.scannedAt,
-          inSchedule: true,
-          isLocked: r.isLocked,
-          deviceBound: r.deviceBound,
-          profileId: r.profileId,
-          note: r.note
-        }));
+        const isPastCutoff = vnInfo.totalMinutes > cutoffMinutes;
+        const isClosed = vnInfo.totalMinutes >= closingMinutes;
 
-        let cutoffTimeStr = '08:30', closingTimeStr = '11:00';
-        if (shift === 'Chiều') { cutoffTimeStr = '13:30'; closingTimeStr = '17:00'; }
-        else if (shift === 'Tối') { cutoffTimeStr = '18:30'; closingTimeStr = '22:00'; }
+        // Lấy lịch tuần và thiết bị
+        const { data: scheds } = await client.from('weekly_schedules').select('*').eq('week_start', getMondayIso());
+        const schedMap = new Map((scheds || []).map(s => [s.profile_id, s.schedule]));
+        const { data: devices } = await client.from('devices').select('profile_id, device_fingerprint');
+        const devMap = new Map((devices || []).map(d => [d.profile_id, d.device_fingerprint]));
+
+        // Lấy bản ghi điểm danh ca hôm nay
+        const { data: atts } = await client.from('attendance').select('*').eq('business_date', todayIso).eq('shift', shift);
+        const attMap = new Map((atts || []).map(a => [a.profile_id, a]));
+
+        const shiftLower = shift.toLowerCase();
+        const dayKey = vnInfo.dayKey;
+
+        // Lọc sinh viên CÓ LỊCH trong ca này
+        const expectedProfiles = cachedProfiles.filter(p => {
+          const userSched = schedMap.get(p.id);
+          if (!userSched || !userSched[dayKey] || !Array.isArray(userSched[dayKey])) return true;
+          return userSched[dayKey].map(s => String(s).toLowerCase()).includes(shiftLower);
+        });
+        const expectedProfileIds = new Set(expectedProfiles.map(p => p.id));
+
+        const records = [];
+
+        // 1. Sinh viên có lịch
+        for (const p of expectedProfiles) {
+          const att = attMap.get(p.id);
+          const dept = p.department || (p.student_id?.startsWith('124') ? '24CD111' : (p.student_id?.startsWith('125') ? '25CD111' : '23CD111'));
+          if (att) {
+            records.push({
+              userId: p.student_id,
+              userName: p.display_name,
+              department: dept,
+              shift: shift,
+              status: att.status,
+              timestamp: att.scanned_at,
+              inSchedule: true,
+              isLocked: Boolean(att.is_locked),
+              deviceBound: devMap.has(p.id),
+              profileId: p.id,
+              note: att.note || '',
+              reason: att.note || ''
+            });
+          } else {
+            const autoStatus = isPastCutoff ? 'Vắng không phép' : 'Chưa điểm danh';
+            records.push({
+              userId: p.student_id,
+              userName: p.display_name,
+              department: dept,
+              shift: shift,
+              status: autoStatus,
+              timestamp: null,
+              inSchedule: true,
+              isLocked: false,
+              deviceBound: devMap.has(p.id),
+              profileId: p.id,
+              note: '',
+              reason: ''
+            });
+          }
+        }
+
+        // 2. Sinh viên ngoài lịch nhưng có đến quét
+        (atts || []).forEach(att => {
+          if (!expectedProfileIds.has(att.profile_id)) {
+            const p = cachedProfiles.find(cp => cp.id === att.profile_id);
+            if (p && ['Có mặt', 'Đi trễ', 'Vắng có phép', 'Vắng CP'].includes(att.status)) {
+              const dept = p.department || (p.student_id?.startsWith('124') ? '24CD111' : (p.student_id?.startsWith('125') ? '25CD111' : '23CD111'));
+              records.push({
+                userId: p.student_id,
+                userName: p.display_name,
+                department: dept,
+                shift: shift,
+                status: att.status,
+                timestamp: att.scanned_at,
+                inSchedule: false,
+                isLocked: Boolean(att.is_locked),
+                deviceBound: devMap.has(p.id),
+                profileId: p.id,
+                note: 'Ngoài lịch',
+                reason: att.note || ''
+              });
+            }
+          }
+        });
+
+        // Tính thống kê theo chuẩn web gốc
+        const presentCount = records.filter(r => r.status === 'Có mặt').length;
+        const lateCount = records.filter(r => r.status === 'Đi trễ').length;
+        const excusedCount = records.filter(r => r.status === 'Vắng có phép' || r.status === 'Vắng CP').length;
+        const unexcusedCount = records.filter(r => r.status === 'Vắng không phép' || r.status === 'Vắng KP').length;
+        const waitingCount = records.filter(r => r.status === 'Chưa điểm danh').length;
 
         return jsonResponse({
           success: true,
           shift: shift,
+          dayKey: vnInfo.dayKey,
+          dayName: vnInfo.dayName,
           cutoffTimeStr,
           closingTimeStr,
-          isClosed: false,
-          isPastCutoff: false,
+          isClosed,
+          isPastCutoff,
           stats: {
-            present: stats.present || 0,
-            late: stats.late || 0,
-            absentWithoutLeave: stats.unexcused || 0,
-            absentWithLeave: stats.excused || 0,
-            waiting: Math.max(0, (stats.total || 0) - (stats.present || 0) - (stats.late || 0) - (stats.unexcused || 0) - (stats.excused || 0)),
-            total: stats.total || 0
+            present: presentCount,
+            late: lateCount,
+            absentWithoutLeave: unexcusedCount,
+            absentWithLeave: excusedCount,
+            waiting: waitingCount,
+            total: records.length
           },
           data: records
         });
@@ -344,7 +518,7 @@
         return jsonResponse({ success: !error, message: data?.message || error?.message });
       }
 
-      // 7. /api/attendance/update-status (Điều chỉnh trạng thái)
+      // 7. /api/attendance/update-status (Điều chỉnh trạng thái: Xin phép, Đúng giờ, Vắng)
       if (urlStr.includes('/api/attendance/update-status')) {
         const body = JSON.parse(options.body || '{}');
         const profile = getProfileByStudentId(body.userId);
@@ -359,16 +533,38 @@
           targetStatus = 'Vắng không phép';
         }
 
-        const { data, error } = await client.rpc('admin_update_attendance', {
-          p_profile_id: profile.id,
-          p_date: body.date || getTodayIso(),
-          p_shift: body.shift || 'Sáng',
-          p_status: targetStatus,
-          p_reason: body.reason || 'Quản trị viên điều chỉnh thủ công'
-        });
+        const targetDate = body.date || getTodayIso();
+        const targetShift = body.shift || 'Sáng';
+
+        if (targetStatus === 'Hủy') {
+          await client.from('attendance').delete()
+            .eq('profile_id', profile.id)
+            .eq('business_date', targetDate)
+            .eq('shift', targetShift);
+          return jsonResponse({ success: true, message: 'Đã hủy điểm danh thành công' });
+        }
+
+        // Cập nhật trạng thái và mở khóa để Admin có thể tiếp tục điều chỉnh nếu cần
+        const { data, error } = await client.from('attendance').upsert({
+          profile_id: profile.id,
+          student_id: profile.student_id,
+          business_date: targetDate,
+          shift: targetShift,
+          status: targetStatus,
+          note: body.reason || 'Quản trị viên điều chỉnh thủ công',
+          is_locked: false,
+          scanned_at: new Date().toISOString()
+        }, { onConflict: 'profile_id,business_date,shift' }).select().maybeSingle();
 
         if (error) {
-          return jsonResponse({ success: false, message: error.message }, 400);
+          const rpcRes = await client.rpc('admin_update_attendance', {
+            p_profile_id: profile.id,
+            p_date: targetDate,
+            p_shift: targetShift,
+            p_status: targetStatus,
+            p_reason: body.reason || 'Quản trị viên điều chỉnh thủ công'
+          });
+          if (rpcRes.error) return jsonResponse({ success: false, message: rpcRes.error.message }, 400);
         }
 
         return jsonResponse({ success: true, message: 'Cập nhật thành công', data });
@@ -380,23 +576,19 @@
         const profile = getProfileByStudentId(body.userId);
         if (!profile) return jsonResponse({ success: false, message: 'Không tìm thấy hồ sơ SV' }, 404);
 
-        const { data, error } = await client.rpc('admin_update_attendance', {
-          p_profile_id: profile.id,
-          p_date: body.date || getTodayIso(),
-          p_shift: body.shift || 'Sáng',
-          p_status: 'Hủy',
-          p_reason: 'Quản trị viên hủy điểm danh'
-        });
+        const targetDate = body.date || getTodayIso();
+        const targetShift = body.shift || 'Sáng';
 
-        if (error) {
-          return jsonResponse({ success: false, message: error.message }, 400);
-        }
+        await client.from('attendance').delete()
+          .eq('profile_id', profile.id)
+          .eq('business_date', targetDate)
+          .eq('shift', targetShift);
 
-        return jsonResponse({ success: true, message: 'Hủy điểm danh thành công', data });
+        return jsonResponse({ success: true, message: 'Hủy điểm danh thành công' });
       }
 
       // 9. /api/schedule (Lấy hoặc Lưu lịch tuần)
-      if (urlStr.includes('/api/schedule')) {
+      if (urlStr.includes('/api/schedule') && !urlStr.includes('sync')) {
         const method = (options.method || 'GET').toUpperCase();
         const urlObj = new URL(urlStr, root.location.origin);
         const reqWeek = urlObj.searchParams.get('week') || getMondayIso();
@@ -434,7 +626,6 @@
           const profile = getProfileByStudentId(body.userId);
           if (!profile) return jsonResponse({ success: false, message: 'Không tìm thấy hồ sơ SV' }, 404);
 
-          // Chuẩn hóa schedule (Sáng, Chiều, Tối viết hoa)
           const cleanSched = {};
           for (const d of ['t2', 't3', 't4', 't5', 't6', 't7', 'cn']) {
             const arr = Array.isArray(body.schedule?.[d]) ? body.schedule[d] : [];
@@ -515,16 +706,17 @@
           const s = statsMap.get(a.profile_id);
           if (s) {
             s.total++;
-            if (a.status === 'Có mặt') {
+            const st = (a.status || '').toLowerCase().trim();
+            if (st === 'có mặt' || st === 'co mat' || st === 'present') {
               s.present++;
               s.totalPresent++;
-            } else if (a.status === 'Đi trễ') {
+            } else if (st === 'đi trễ' || st === 'di tre' || st === 'late') {
               s.late++;
               s.totalLate++;
-            } else if (a.status === 'Vắng có phép' || a.status === 'Vắng CP') {
+            } else if (st === 'vắng có phép' || st === 'vang co phep' || st === 'vắng cp' || st === 'excused') {
               s.excused++;
               s.totalAbsentWithLeave++;
-            } else if (a.status === 'Vắng không phép' || a.status === 'Vắng KP') {
+            } else if (st === 'vắng không phép' || st === 'vang khong phep' || st === 'vắng kp' || st === 'unexcused') {
               s.unexcused++;
               s.totalAbsentWithoutLeave++;
             }
@@ -538,28 +730,84 @@
         });
       }
 
-      // 12. /api/attendance/daily-summary
+      // 12. /api/attendance/daily-summary (Báo Cáo Tổng Kết Ngày - Sáng & Chiều)
       if (urlStr.includes('/api/attendance/daily-summary')) {
-        const todayIso = getTodayIso();
-        const { data: atts } = await client.from('attendance').select('status').eq('business_date', todayIso);
+        const vnInfo = getVnTimeInfo();
+        const todayIso = vnInfo.isoDateStr;
+        const { data: atts } = await client.from('attendance').select('*').eq('business_date', todayIso);
 
-        let present = 0, late = 0, excused = 0, unexcused = 0;
-        (atts || []).forEach(a => {
-          if (a.status === 'Có mặt') present++;
-          else if (a.status === 'Đi trễ') late++;
-          else if (a.status === 'Vắng có phép' || a.status === 'Vắng CP') excused++;
-          else if (a.status === 'Vắng không phép' || a.status === 'Vắng KP') unexcused++;
-        });
+        const { data: scheds } = await client.from('weekly_schedules').select('*').eq('week_start', getMondayIso());
+        const schedMap = new Map((scheds || []).map(s => [s.profile_id, s.schedule]));
 
+        const allTurns = [];
+        const dayKey = vnInfo.dayKey;
+        const attList = atts || [];
+
+        for (const shiftName of ['Sáng', 'Chiều']) {
+          const shiftLower = shiftName.toLowerCase();
+          for (const p of cachedProfiles) {
+            const userSched = schedMap.get(p.id);
+            const inSched = (!userSched || !userSched[dayKey] || !Array.isArray(userSched[dayKey]))
+              ? true
+              : userSched[dayKey].map(s => String(s).toLowerCase()).includes(shiftLower);
+
+            const att = attList.find(a => a.profile_id === p.id && a.shift === shiftName);
+            const dept = p.department || (p.student_id?.startsWith('124') ? '24CD111' : (p.student_id?.startsWith('125') ? '25CD111' : '23CD111'));
+
+            if (inSched) {
+              allTurns.push({
+                userId: p.student_id,
+                userName: p.display_name,
+                department: dept,
+                shift: shiftName,
+                status: att ? att.status : 'Vắng không phép',
+                timestamp: att ? att.scanned_at : null,
+                inSchedule: true,
+                note: att ? (att.note || '') : ''
+              });
+            } else if (att && ['Có mặt', 'Đi trễ', 'Vắng có phép', 'Vắng CP'].includes(att.status)) {
+              allTurns.push({
+                userId: p.student_id,
+                userName: p.display_name,
+                department: dept,
+                shift: shiftName,
+                status: att.status,
+                timestamp: att.scanned_at,
+                inSchedule: false,
+                note: 'Ngoài lịch'
+              });
+            }
+          }
+        }
+
+        const present = allTurns.filter(t => t.status === 'Có mặt').length;
+        const late = allTurns.filter(t => t.status === 'Đi trễ').length;
+        const excused = allTurns.filter(t => t.status === 'Vắng có phép' || t.status === 'Vắng CP').length;
+        const unexcused = allTurns.filter(t => t.status === 'Vắng không phép' || t.status === 'Vắng KP').length;
+        const totalExpected = allTurns.filter(t => t.inSchedule).length;
+
+        // Trả về top-level cho khớp chính xác với render Modal trong admin.html
         return jsonResponse({
           success: true,
+          dateStr: vnInfo.dateVnStr,
+          dayName: vnInfo.dayName,
+          dayKey: vnInfo.dayKey,
+          totalExpected: totalExpected,
+          totalPresent: present,
+          totalLate: late,
+          totalExcused: excused,
+          totalUnexcused: unexcused,
+          details: allTurns,
           data: {
-            dateStr: todayIso,
-            totalExpected: cachedProfiles.length * 2,
+            dateStr: vnInfo.dateVnStr,
+            dayName: vnInfo.dayName,
+            dayKey: vnInfo.dayKey,
+            totalExpected: totalExpected,
             totalPresent: present,
             totalLate: late,
             totalExcused: excused,
-            totalUnexcused: unexcused
+            totalUnexcused: unexcused,
+            details: allTurns
           }
         });
       }
@@ -628,12 +876,120 @@
         });
       }
 
-      // 17. /api/schedule/sync (Đồng bộ thời khóa biểu trường)
-      if (urlStr.includes('/api/schedule/sync')) {
-        return jsonResponse({
-          success: true,
-          message: 'Lịch học từ trường đã được đồng bộ đảo ngược vào xưởng!'
-        });
+      // 17. /api/admin/sync-schedule hoặc /api/schedule/sync (Đồng bộ thời khóa biểu LHU)
+      if (urlStr.includes('/api/admin/sync-schedule') || urlStr.includes('/api/schedule/sync')) {
+        const method = (options.method || 'GET').toUpperCase();
+        const urlObj = new URL(urlStr, root.location.origin);
+        const reqWeek = urlObj.searchParams.get('week') || getMondayIso();
+        const monIso = getMondayIso(new Date(reqWeek));
+        const sunIso = getSundayIso(new Date(reqWeek));
+
+        if (method === 'GET') {
+          return jsonResponse({
+            success: true,
+            data: lastSyncJob || null
+          });
+        }
+
+        if (method === 'POST') {
+          const body = JSON.parse(options.body || '{}');
+          const targetWeek = body.week || reqWeek;
+          const weekStart = getMondayIso(new Date(targetWeek));
+          const weekEnd = getSundayIso(new Date(targetWeek));
+
+          lastSyncJob = {
+            id: 'sync-' + Date.now(),
+            status: 'running',
+            week: { start: weekStart, end: weekEnd },
+            total: cachedProfiles.length,
+            processed: 0,
+            success: 0,
+            failed: 0,
+            errors: []
+          };
+
+          // Thực hiện đồng bộ qua LHU API và đảo ngược lịch vào xưởng
+          for (const p of cachedProfiles) {
+            try {
+              const freeSched = {
+                t2: ['Sáng', 'Chiều', 'Tối'],
+                t3: ['Sáng', 'Chiều', 'Tối'],
+                t4: ['Sáng', 'Chiều', 'Tối'],
+                t5: ['Sáng', 'Chiều', 'Tối'],
+                t6: ['Sáng', 'Chiều', 'Tối'],
+                t7: ['Sáng', 'Chiều', 'Tối'],
+                cn: ['Sáng', 'Chiều', 'Tối']
+              };
+
+              try {
+                const lhuRes = await originalFetch('https://tapi.lhu.edu.vn/calen/auth/XemLich_LichSinhVien', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json; charset=utf-8',
+                    'Origin': 'https://calen.lhu.edu.vn',
+                    'Referer': 'https://calen.lhu.edu.vn/'
+                  },
+                  body: JSON.stringify({
+                    StudentID: p.student_id,
+                    Ngay: weekStart,
+                    PageIndex: 1,
+                    PageSize: 100
+                  })
+                });
+
+                if (lhuRes.ok) {
+                  const lhuJson = await lhuRes.json();
+                  const classItems = lhuJson.data && lhuJson.data[2] ? lhuJson.data[2] : [];
+
+                  classItems.forEach(item => {
+                    const itemDate = (item.ThoiGianBD || '').slice(0, 10);
+                    if (itemDate >= weekStart && itemDate <= weekEnd) {
+                      const dayMap = { 2: 't2', 3: 't3', 4: 't4', 5: 't5', 6: 't6', 7: 't7', 8: 'cn', 1: 'cn' };
+                      const dKey = dayMap[item.Thu] || 't2';
+                      let shiftName = 'Sáng';
+                      if (item.Buoi === 2) shiftName = 'Chiều';
+                      else if (item.Buoi === 3) shiftName = 'Tối';
+                      else {
+                        const h = parseInt((item.ThoiGianBD || '').slice(11, 13) || '0', 10);
+                        if (h >= 17) shiftName = 'Tối';
+                        else if (h >= 12) shiftName = 'Chiều';
+                        else shiftName = 'Sáng';
+                      }
+
+                      // Đảo ngược: Xóa ca có lịch học khỏi lịch lên xưởng
+                      freeSched[dKey] = freeSched[dKey].filter(s => s !== shiftName);
+                    }
+                  });
+                }
+              } catch (netErr) {}
+
+              // Lưu vào weekly_schedules trên Supabase
+              await client.rpc('admin_update_week_schedule', {
+                p_profile_id: p.id,
+                p_week_start: weekStart,
+                p_schedule: freeSched,
+                p_expected_revision: null,
+                p_reason: 'Đồng bộ tự động từ thời khóa biểu LHU'
+              });
+
+              lastSyncJob.processed++;
+              lastSyncJob.success++;
+            } catch (userErr) {
+              lastSyncJob.processed++;
+              lastSyncJob.failed++;
+              lastSyncJob.errors.push({ userId: p.student_id, message: userErr.message || 'Lỗi lưu lịch' });
+            }
+          }
+
+          lastSyncJob.status = 'completed';
+          lastSyncJob.message = `Đã đồng bộ lịch cho ${lastSyncJob.success} sinh viên.`;
+
+          return jsonResponse({
+            success: true,
+            message: lastSyncJob.message,
+            data: lastSyncJob
+          });
+        }
       }
 
       // Fallback cho bất kỳ API khác

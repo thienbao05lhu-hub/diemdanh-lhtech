@@ -1444,9 +1444,9 @@
     currentViewingShift = detectCurrentShift();
 
     // 1. Quản lý lấy mã QR động mỗi 30s
-    async function updateDynamicQR() {
+    async function updateDynamicQR(force = false) {
       try {
-        const res = await fetch('/api/get-qr-token');
+        const res = await fetch('/api/get-qr-token' + (force ? '?force=true' : ''));
         const data = await res.json();
         if (data.success) {
           const token = data.token;
@@ -1490,7 +1490,7 @@
       if (btn) btn.disabled = true;
 
       try {
-        await updateDynamicQR();
+        await updateDynamicQR(true);
         startCountdown();
         if (typeof showToast !== 'undefined') {
           showToast.success('Đã cập nhật mã QR động mới!');
@@ -1925,9 +1925,18 @@
         let actionBtn = '';
         if (item.isLocked) {
           actionBtn = `
-            <span class="inline-flex items-center gap-1 text-[10px] text-slate-500 font-medium px-2 py-0.5 rounded border border-slate-800 bg-slate-950/60 ml-auto select-none" title="Ca này đã chốt sổ và bị khóa">
-              <i class="fa-solid fa-lock text-[9px] text-slate-600"></i> Đã khóa
-            </span>
+            <div class="flex items-center justify-end gap-1 shrink-0 ml-auto whitespace-nowrap">
+              <span class="inline-flex items-center gap-1 text-[10px] text-slate-500 font-medium px-2 py-0.5 rounded border border-slate-800 bg-slate-950/60 select-none" title="Ca này đã chốt sổ">
+                <i class="fa-solid fa-lock text-[9px] text-slate-600"></i> Đã khóa
+              </span>
+              <button
+                onclick="handleUpdateAttendanceStatus('${item.userId}', '${item.shift || currentViewingShift}', 'Vắng có phép')"
+                title="Duyệt phép bổ sung cho SV trong ca đã khóa"
+                class="px-2 py-1 rounded-lg text-[10px] font-semibold bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 transition flex items-center gap-1 shadow-sm"
+              >
+                <i class="fa-solid fa-signature text-[9px]"></i> Xin phép
+              </button>
+            </div>
           `;
         } else if (item.status === 'Đi trễ') {
           actionBtn = `
@@ -2110,16 +2119,16 @@
             </td>
             <td class="px-4 py-2.5 font-mono text-slate-300 font-semibold">${u.userId}</td>
             <td class="px-3 py-2.5 text-center">
-              <span class="font-mono font-bold text-emerald-400 text-sm px-2 py-0.5 rounded-md bg-emerald-500/10 border border-emerald-500/20">${u.present}</span>
+              <span class="font-mono font-bold text-emerald-400 text-sm px-2 py-0.5 rounded-md bg-emerald-500/10 border border-emerald-500/20">${u.present ?? u.totalPresent ?? 0}</span>
             </td>
             <td class="px-3 py-2.5 text-center">
-              <span class="font-mono font-bold text-orange-400 text-sm px-2 py-0.5 rounded-md bg-orange-500/10 border border-orange-500/20">${u.late || 0}</span>
+              <span class="font-mono font-bold text-orange-400 text-sm px-2 py-0.5 rounded-md bg-orange-500/10 border border-orange-500/20">${u.late ?? u.totalLate ?? 0}</span>
             </td>
             <td class="px-3 py-2.5 text-center">
-              <span class="font-mono font-bold text-amber-400 text-sm px-2 py-0.5 rounded-md bg-amber-500/10 border border-amber-500/20">${u.excused}</span>
+              <span class="font-mono font-bold text-amber-400 text-sm px-2 py-0.5 rounded-md bg-amber-500/10 border border-amber-500/20">${u.excused ?? u.totalAbsentWithLeave ?? 0}</span>
             </td>
             <td class="px-3 py-2.5 text-center">
-              <span class="font-mono font-bold text-rose-400 text-sm px-2 py-0.5 rounded-md bg-rose-500/10 border border-rose-500/20">${u.unexcused}</span>
+              <span class="font-mono font-bold text-rose-400 text-sm px-2 py-0.5 rounded-md bg-rose-500/10 border border-rose-500/20">${u.unexcused ?? u.totalAbsentWithoutLeave ?? 0}</span>
             </td>
           </tr>
         `;
@@ -3229,22 +3238,30 @@
 
         // Điền số liệu vào Modal
         const badgeEl = document.getElementById('modalDateBadge');
-        if (badgeEl) badgeEl.innerText = `${result.dayName}, ${result.dateStr}`;
+        const dayName = result.dayName || result.data?.dayName || '';
+        const dateStr = result.dateStr || result.data?.dateStr || '';
+        if (badgeEl) badgeEl.innerText = dayName ? `${dayName}, ${dateStr}` : dateStr;
+
+        const totalExpected = result.totalExpected ?? result.data?.totalExpected ?? 0;
+        const totalPresent = result.totalPresent ?? result.data?.totalPresent ?? 0;
+        const totalLate = result.totalLate ?? result.data?.totalLate ?? 0;
+        const totalUnexcused = result.totalUnexcused ?? result.data?.totalUnexcused ?? 0;
+        const totalExcused = result.totalExcused ?? result.data?.totalExcused ?? 0;
 
         if (document.getElementById('summaryTotalExpected')) {
-          document.getElementById('summaryTotalExpected').innerText = result.totalExpected;
+          document.getElementById('summaryTotalExpected').innerText = totalExpected;
         }
         if (document.getElementById('summaryTotalPresent')) {
-          document.getElementById('summaryTotalPresent').innerText = result.totalPresent;
+          document.getElementById('summaryTotalPresent').innerText = totalPresent;
         }
         if (document.getElementById('summaryTotalLate')) {
-          document.getElementById('summaryTotalLate').innerText = result.totalLate || 0;
+          document.getElementById('summaryTotalLate').innerText = totalLate;
         }
         if (document.getElementById('summaryTotalUnexcused')) {
-          document.getElementById('summaryTotalUnexcused').innerText = result.totalUnexcused;
+          document.getElementById('summaryTotalUnexcused').innerText = totalUnexcused;
         }
         if (document.getElementById('summaryTotalExcused')) {
-          document.getElementById('summaryTotalExcused').innerText = result.totalExcused;
+          document.getElementById('summaryTotalExcused').innerText = totalExcused;
         }
 
         // Mở Modal
@@ -3264,7 +3281,8 @@
 
     // Xuất file CSV toàn bộ dữ liệu cả 2 ca trong ngày
     function exportDailySummaryToCSV() {
-      if (!dailySummaryData || !dailySummaryData.details || dailySummaryData.details.length === 0) {
+      const details = dailySummaryData?.details || dailySummaryData?.data?.details;
+      if (!details || details.length === 0) {
         alert('⚠️ Chưa có dữ liệu điểm danh nào trong ngày hôm nay để xuất file!');
         return;
       }
@@ -3272,7 +3290,7 @@
       try {
         let csvContent = 'STT,Mã Sinh Viên,Họ Và Tên,Lớp / Khoa,Ca Làm Việc,Thời Gian Điểm Danh,Trạng Thái,Ghi Chú\n';
 
-        dailySummaryData.details.forEach((item, index) => {
+        details.forEach((item, index) => {
           let timeStr = 'Chưa quét';
           if (item.timestamp) {
             timeStr = new Date(item.timestamp).toLocaleString('vi-VN', {
