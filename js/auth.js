@@ -3,9 +3,17 @@
   if (root.AttendanceRedirecting) return;
   const config = root.ATTENDANCE_CONFIG;
   if (!config || !root.supabase?.createClient) return;
+  // Đồng bộ session giữa sessionStorage (cũ) và localStorage (chuẩn)
+  try {
+    const legacy = root.sessionStorage?.getItem('lhtech-attendance-auth-v1');
+    if (legacy && !root.localStorage?.getItem('lhtech-supabase-auth')) {
+      root.localStorage?.setItem('lhtech-supabase-auth', legacy);
+    }
+  } catch(e) {}
+
   const client = root.supabase.createClient(config.supabaseUrl, config.supabasePublishableKey, {
     auth: {
-      storage: root.sessionStorage, storageKey: 'lhtech-attendance-auth-v1',
+      storage: root.localStorage, storageKey: 'lhtech-supabase-auth',
       persistSession: true, autoRefreshToken: true, flowType: 'implicit',
       detectSessionInUrl: root.location.pathname.endsWith('/reset-password.html'),
     },
