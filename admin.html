@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; connect-src https://oalnswbnjhkkovxjxtlz.supabase.co wss://oalnswbnjhkkovxjxtlz.supabase.co; img-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'none'">
+  <meta name="referrer" content="no-referrer">
+  <title>Quản trị | Điểm danh LHTech</title>
+  <link rel="stylesheet" href="css/app.css">
+  <script defer src="vendor/supabase-2.118.0.js"></script><script defer src="js/config.js"></script><script defer src="js/auth.js"></script><script defer src="js/admin.js"></script>
+</head>
+<body>
+  <header class="topbar"><a class="brand" href="index.html"><span class="brand-mark" aria-hidden="true">LH</span><span>Điểm danh LHTech</span></a><div class="user-controls"><span id="signed-in-name"></span><button class="outline-light" id="logout" type="button">Đăng xuất</button></div></header>
+  <main class="workspace">
+    <p id="page-status" class="status" role="status" aria-live="polite">Đang kiểm tra quyền truy cập…</p>
+    <button id="retry-page" type="button" class="secondary" hidden>Thử lại</button>
+    <div id="protected-content" hidden>
+      <div class="page-heading"><div><p class="subtitle" id="account-role"></p><h1>Quản lý xưởng</h1><p class="muted">Theo dõi thành viên và hoạt động quản trị.</p></div><button id="reload" type="button" class="secondary">Tải lại dữ liệu</button></div>
+      <nav class="section-nav" aria-label="Chức năng quản trị"><button type="button" data-section="profiles" aria-pressed="true">Thành viên</button><button type="button" data-section="audits" aria-pressed="false">Nhật ký hoạt động</button></nav>
+      <section id="profiles-panel" class="panel" aria-labelledby="profiles-title">
+        <div class="panel-heading"><h2 id="profiles-title">Danh sách thành viên</h2><p id="profiles-count" class="muted"></p></div>
+        <form class="filters" id="profiles-filter"><div class="field-grow"><label for="profile-search">Tìm tên hoặc MSSV</label><input id="profile-search" type="search" maxlength="100" placeholder="Nhập tên hoặc mã sinh viên"></div><button type="submit" class="secondary">Tìm kiếm</button></form>
+        <div class="table-scroll"><table><caption class="sr-only">Hồ sơ thành viên được cấp quyền sử dụng xưởng</caption><thead><tr><th>MSSV</th><th>Họ và tên</th><th>Vai trò</th><th>Trạng thái</th></tr></thead><tbody id="profiles-body"></tbody></table></div>
+        <p id="profiles-empty" class="empty" hidden>Chưa tìm thấy thành viên phù hợp.</p>
+        <div class="pagination"><button type="button" class="secondary" id="profiles-prev" disabled>Trang trước</button><span id="profiles-page"></span><button type="button" class="secondary" id="profiles-next" disabled>Trang sau</button></div>
+      </section>
+      <section id="audits-panel" class="panel" aria-labelledby="audits-title" hidden>
+        <div class="panel-heading"><h2 id="audits-title">Nhật ký hoạt động</h2><p id="audits-count" class="muted"></p></div>
+        <form class="filters" id="audits-filter"><div class="field-grow"><label for="audit-action">Lọc theo thao tác</label><input id="audit-action" type="search" maxlength="100" placeholder="Ví dụ: profile.bootstrap_super_admin"></div><button type="submit" class="secondary">Lọc nhật ký</button></form>
+        <div class="table-scroll"><table><caption class="sr-only">Nhật ký hoạt động của quản trị viên</caption><thead><tr><th>Thời gian</th><th>Thao tác</th><th>Người thực hiện</th><th>Chi tiết</th></tr></thead><tbody id="audits-body"></tbody></table></div>
+        <p id="audits-empty" class="empty" hidden>Chưa có hoạt động phù hợp với bộ lọc.</p>
+        <div class="pagination"><button type="button" class="secondary" id="audits-prev" disabled>Trang trước</button><span id="audits-page"></span><button type="button" class="secondary" id="audits-next" disabled>Trang sau</button></div>
+      </section>
+    </div>
+  </main>
+</body>
+</html>

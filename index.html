@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; connect-src https://oalnswbnjhkkovxjxtlz.supabase.co wss://oalnswbnjhkkovxjxtlz.supabase.co; img-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'none'">
+  <meta name="referrer" content="no-referrer">
+  <title>Đăng nhập | Điểm danh LHTech</title>
+  <link rel="stylesheet" href="css/app.css">
+  <script defer src="vendor/supabase-2.118.0.js"></script>
+  <script defer src="js/config.js"></script>
+  <script defer src="js/auth.js"></script>
+  <script defer src="js/login.js"></script>
+</head>
+<body class="login-page">
+  <main class="login-layout">
+    <section class="welcome" aria-labelledby="welcome-title">
+      <a class="brand" href="index.html"><span class="brand-mark" aria-hidden="true">LH</span><span>LHTech</span></a>
+      <div class="welcome-copy"><p class="subtitle">Xưởng thực hành</p><h1 id="welcome-title">Điểm danh.<br>Đúng người,<br>đúng buổi.</h1><p>Không gian quản lý tài khoản và theo dõi tham gia của xưởng.</p></div>
+      <p class="welcome-footer">Hệ thống điểm danh LHTech</p>
+    </section>
+    <section class="login-form-section" aria-labelledby="login-title">
+      <div class="login-card">
+        <h2 id="login-title">Đăng nhập</h2>
+        <p class="muted">Sử dụng tài khoản được quản trị viên cấp.</p>
+        <form id="login-form" method="post">
+          <label for="email">Email</label>
+          <input id="email" name="email" type="email" autocomplete="username" maxlength="254" required placeholder="Email tài khoản của bạn">
+          <label for="password">Mật khẩu</label>
+          <div class="password-field"><input id="password" name="password" type="password" autocomplete="current-password" maxlength="1024" required><button id="show-password" type="button" class="plain" aria-pressed="false" aria-controls="password">Hiện</button></div>
+          <button id="login-button" class="primary wide" type="submit" disabled>Đăng nhập</button>
+        </form>
+        <p id="login-status" class="status" role="status" aria-live="polite">Đang khởi tạo…</p>
+        <button id="retry-session" type="button" class="secondary" hidden>Kiểm tra lại phiên</button>
+        <p class="help">Cần cấp tài khoản hoặc quên mật khẩu? Liên hệ quản trị viên của xưởng.</p>
+        <noscript><p>Bạn cần bật JavaScript để đăng nhập.</p></noscript>
+      </div>
+    </section>
+  </main>
+</body>
+</html>
