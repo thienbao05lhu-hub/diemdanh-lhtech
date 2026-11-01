@@ -1,6 +1,6 @@
 ## Giữ nguyên thiết kế đã chốt
 
-Đã khôi phục app/checkin về giao diện PWA gốc: kích hoạt thiết bị, khung camera, thẻ kết quả, nút báo nghỉ và modal xin nghỉ. Mốc giao diện chính xác là `3377a17`, trước yêu cầu đọc lại toàn bộ dự án; bố cục/CSS được đối chiếu với đúng mốc đó, không lấy bản sau rà soát làm chuẩn. Logic mới dùng đúng các thành phần đó; không thêm panel hoặc thay hệ thống màu/font. Mã sinh viên trên màn hình kích hoạt lấy từ tài khoản Auth đang đăng nhập, không cấp quyền bằng MSSV tự nhập.
+Đã khôi phục app/checkin về giao diện PWA gốc: kích hoạt thiết bị, khung camera, thẻ kết quả, nút báo nghỉ và modal xin nghỉ. Người dùng đã xác nhận rõ kiểu giao diện tối sau yêu cầu đọc lại toàn bộ dự án. Chuẩn cấu trúc/CSS là bản tối `2848827`: Kích Hoạt Thiết Bị, khung camera và hộp thoại báo nghỉ. Giữ nguyên thiết kế này; chỉ hoàn thiện logic và sửa lỗi. Logic mới dùng đúng các thành phần đó; không thêm panel hoặc thay hệ thống màu/font. Mã sinh viên trên màn hình kích hoạt lấy từ tài khoản Auth đang đăng nhập, không cấp quyền bằng MSSV tự nhập.
 
 Bấm nút xác nhận thiết bị cũ để xác minh; dùng nút **Tiếp Tục Quét Lại** cũ để mở camera hoặc xác nhận token từ liên kết QR. Các thông báo dùng thẻ kết quả/toast cũ. Xin nghỉ dùng modal cũ, chỉ mở khi SQL nghỉ đã được áp dụng. Thiết bị cũ đã đăng ký sẽ được xác minh bằng khóa lưu tại trình duyệt; khóa bí mật không hiển thị ra màn hình.
 
