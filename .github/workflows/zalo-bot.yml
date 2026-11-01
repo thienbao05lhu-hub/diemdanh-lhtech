@@ -49,3 +49,4 @@ jobs:
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY || 'sb_publishable_Sz6k8E5HKwtxXbmu1T0HLw_4sXzTjo7' }}
           ZALO_BOT_TOKEN: ${{ secrets.ZALO_BOT_TOKEN || '1993804723126353491:VPyOMCngpRjWbHtPCVsYJnCBezBkpapglMLmvHGMLBxDNLqpqFTiuDByXBAdHSKd' }}
           ZALO_CHAT_ID: ${{ secrets.ZALO_CHAT_ID || '0edc1e512605cf5b9614' }}
+

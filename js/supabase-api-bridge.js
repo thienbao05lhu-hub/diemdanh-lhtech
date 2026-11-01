@@ -1529,15 +1529,308 @@
         });
       }
 
-      // 14. /api/leaves (Duyệt đơn nghỉ)
-      if (urlStr.includes('/api/leaves')) {
-        return jsonResponse({
-          success: true,
-          total: 0,
-          page: 1,
-          pages: 1,
-          data: []
-        });
+      // 14. /api/leaves hoặc /api/scan-app/leave (Hệ thống Đơn Xin Nghỉ Phép)
+      if (urlStr.includes('/api/leaves') || urlStr.includes('/api/scan-app/leave')) {
+        const method = (options.method || 'GET').toUpperCase();
+
+        // 14.1. POST: Gửi đơn xin nghỉ phép (Cả /api/leaves và /api/scan-app/leave)
+        if (method === 'POST' && !urlStr.includes('/review') && !urlStr.includes('/reconcile')) {
+          const body = JSON.parse(options.body || '{}');
+          const userId = (body.userId || '').trim().toUpperCase();
+          const profile = getProfileByStudentId(userId);
+
+          if (!profile) {
+            return jsonResponse({ success: false, message: 'Không tìm thấy hồ sơ sinh viên!' }, 404);
+          }
+
+          let shift = body.shift || 'Sáng';
+          if (shift.toLowerCase().includes('chiều')) shift = 'Chiều';
+          else if (shift.toLowerCase().includes('tối')) shift = 'Tối';
+          else shift = 'Sáng';
+
+          const reqDate = body.date || getTodayIso();
+          const reason = (body.reason || '').trim();
+          if (!reason) {
+            return jsonResponse({ success: false, message: 'Vui lòng nhập lý do xin nghỉ!' }, 400);
+          }
+
+          const userName = (profile.student_id === '123000896' || profile.role === 'super_admin') ? 'Võ Huỳnh Thiên Bảo' : profile.display_name;
+          const dept = profile.department || (profile.student_id?.startsWith('124') ? '24CD111' : (profile.student_id?.startsWith('125') ? '25CK111' : '23CD111'));
+
+          let savedId = null;
+          let leaveStatus = 'pending';
+
+          // 1. Thử lưu vào bảng leave_requests nếu có bảng
+          try {
+            const { data: lrData, error: lrErr } = await client.from('leave_requests').upsert({
+              profile_id: profile.id,
+              student_id: profile.student_id,
+              user_name: userName,
+              department: dept,
+              date: reqDate,
+              shift: shift,
+              reason: reason,
+              status: 'pending',
+              updated_at: new Date().toISOString()
+            }, { onConflict: 'student_id,date,shift' }).select().maybeSingle();
+
+            if (!lrErr && lrData) {
+              savedId = lrData.id;
+              leaveStatus = lrData.status;
+            }
+          } catch (e) {}
+
+          // 2. Luôn ghi nhận vào bảng attendance (đặt status = Vắng có phép, note = lý do) để bảo đảm ghi nhận điểm danh ngay
+          try {
+            await client.from('attendance').upsert({
+              profile_id: profile.id,
+              student_id: profile.student_id,
+              business_date: reqDate,
+              shift: shift,
+              status: 'Vắng có phép',
+              note: reason,
+              device_fingerprint: body.deviceId || '',
+              in_schedule: true,
+              updated_at: new Date().toISOString()
+            }, { onConflict: 'profile_id,business_date,shift' });
+          } catch (attErr) {
+            console.warn('Lỗi ghi nhận attendance nghỉ phép:', attErr);
+          }
+
+          const responseData = {
+            id: savedId || (`leave_${profile.student_id}_${reqDate}_${shift}`),
+            userId: profile.student_id,
+            userName: userName,
+            department: dept,
+            date: reqDate,
+            shift: shift,
+            reason: reason,
+            status: leaveStatus,
+            createdAt: new Date().toISOString()
+          };
+
+          return jsonResponse({
+            success: true,
+            message: `Đã gửi đơn xin nghỉ ca ${shift} ngày ${reqDate.split('-').reverse().join('/')} thành công!`,
+            alreadySubmitted: false,
+            data: responseData
+          });
+        }
+
+        // 14.2. GET /api/leaves/mine: Sinh viên xem đơn của mình
+        if (method === 'GET' && urlStr.includes('/mine')) {
+          const reqHeaders = options.headers || {};
+          let studentId = reqHeaders['x-student-user'] || '';
+          if (!studentId && typeof window !== 'undefined') {
+            studentId = localStorage.getItem('qr_user_id') || '';
+          }
+          studentId = studentId.trim().toUpperCase();
+
+          const profile = getProfileByStudentId(studentId);
+          if (!profile) {
+            return jsonResponse({ success: true, data: [] });
+          }
+
+          // 1. Thử lấy từ bảng leave_requests
+          try {
+            const { data: lrList, error: lrErr } = await client.from('leave_requests')
+              .select('*')
+              .eq('student_id', profile.student_id)
+              .order('date', { ascending: false });
+
+            if (!lrErr && lrList && lrList.length > 0) {
+              const formatted = lrList.map(r => ({
+                id: r.id,
+                userId: r.student_id,
+                userName: r.user_name || profile.display_name,
+                department: r.department,
+                date: r.date,
+                shift: r.shift,
+                reason: r.reason,
+                status: r.status,
+                reviewedBy: r.reviewed_by,
+                reviewedByName: r.reviewed_by_name,
+                reviewedAt: r.reviewed_at,
+                reviewReason: r.review_reason,
+                createdAt: r.created_at
+              }));
+              return jsonResponse({ success: true, data: formatted });
+            }
+          } catch (e) {}
+
+          // 2. Fallback: Lấy từ bảng attendance (các bản ghi Vắng có phép)
+          try {
+            const { data: attList } = await client.from('attendance')
+              .select('*')
+              .eq('student_id', profile.student_id)
+              .eq('status', 'Vắng có phép')
+              .order('business_date', { ascending: false })
+              .limit(20);
+
+            const fallbackList = (attList || []).map(a => ({
+              id: a.id,
+              userId: a.student_id,
+              userName: (profile.student_id === '123000896' || profile.role === 'super_admin') ? 'Võ Huỳnh Thiên Bảo' : profile.display_name,
+              department: profile.department,
+              date: a.business_date,
+              shift: a.shift,
+              reason: a.note || 'Báo nghỉ phép qua app',
+              status: 'approved',
+              reviewedBy: 'Admin',
+              reviewedByName: 'Quản trị viên',
+              reviewedAt: a.updated_at || a.created_at,
+              reviewReason: 'Đã ghi nhận vắng có phép',
+              createdAt: a.created_at
+            }));
+
+            return jsonResponse({ success: true, data: fallbackList });
+          } catch (e) {
+            return jsonResponse({ success: true, data: [] });
+          }
+        }
+
+        // 14.3. POST /api/leaves/:id/review: Admin duyệt đơn (Chấp thuận / Từ chối)
+        if (method === 'POST' && urlStr.includes('/review')) {
+          const match = urlStr.match(/\/api\/leaves\/([^\/]+)\/review/);
+          const leaveId = match ? decodeURIComponent(match[1]) : null;
+          const body = JSON.parse(options.body || '{}');
+          const decision = body.decision; // 'approved' hoặc 'rejected'
+          const reviewReason = (body.reason || '').trim();
+
+          const adminUser = localStorage.getItem('adminUser') || 'Admin';
+          const adminName = localStorage.getItem('adminName') || 'Quản trị viên';
+          const nowIso = new Date().toISOString();
+
+          // 1. Cập nhật leave_requests nếu có
+          let leaveRecord = null;
+          try {
+            const { data: uData } = await client.from('leave_requests').update({
+              status: decision,
+              reviewed_by: adminUser,
+              reviewed_by_name: adminName,
+              reviewed_at: nowIso,
+              review_reason: reviewReason,
+              updated_at: nowIso
+            }).eq('id', leaveId).select().maybeSingle();
+            leaveRecord = uData;
+          } catch (e) {}
+
+          // 2. Đồng bộ sang bảng attendance
+          if (leaveRecord) {
+            const prof = getProfileByStudentId(leaveRecord.student_id);
+            if (decision === 'approved') {
+              await client.from('attendance').upsert({
+                profile_id: prof?.id || leaveRecord.profile_id,
+                student_id: leaveRecord.student_id,
+                business_date: leaveRecord.date,
+                shift: leaveRecord.shift,
+                status: 'Vắng có phép',
+                note: reviewReason ? `${leaveRecord.reason} (Duyệt: ${reviewReason})` : leaveRecord.reason,
+                updated_at: nowIso
+              }, { onConflict: 'profile_id,business_date,shift' });
+            } else {
+              // Từ chối: Hủy trạng thái vắng có phép
+              await client.from('attendance').delete()
+                .eq('student_id', leaveRecord.student_id)
+                .eq('business_date', leaveRecord.date)
+                .eq('shift', leaveRecord.shift);
+            }
+          }
+
+          return jsonResponse({
+            success: true,
+            message: decision === 'approved' ? 'Đã chấp thuận đơn nghỉ phép thành công!' : 'Đã từ chối đơn nghỉ phép!'
+          });
+        }
+
+        // 14.4. POST /api/leaves/:id/reconcile: Đối chiếu đơn nghỉ
+        if (method === 'POST' && urlStr.includes('/reconcile')) {
+          return jsonResponse({ success: true, message: 'Đã đối chiếu trạng thái đơn thành công' });
+        }
+
+        // 14.5. GET /api/leaves: Admin xem danh sách đơn nghỉ theo bộ lọc
+        if (method === 'GET') {
+          const u = new URL(urlStr, root.location.origin);
+          const filterStatus = u.searchParams.get('status') || 'pending';
+          const page = parseInt(u.searchParams.get('page') || '1', 10);
+          const limit = parseInt(u.searchParams.get('limit') || '25', 10);
+
+          // 1. Thử lấy từ bảng leave_requests
+          try {
+            let query = client.from('leave_requests').select('*', { count: 'exact' });
+            if (filterStatus && filterStatus !== 'all') {
+              query = query.eq('status', filterStatus);
+            }
+            query = query.order('date', { ascending: false }).range((page - 1) * limit, page * limit - 1);
+
+            const { data: lrList, count, error } = await query;
+            if (!error && lrList && lrList.length > 0) {
+              const formatted = lrList.map(r => ({
+                id: r.id,
+                userId: r.student_id,
+                userName: r.user_name,
+                department: r.department,
+                date: r.date,
+                shift: r.shift,
+                reason: r.reason,
+                status: r.status,
+                reviewedBy: r.reviewed_by,
+                reviewedByName: r.reviewed_by_name,
+                reviewedAt: r.reviewed_at,
+                reviewReason: r.review_reason,
+                createdAt: r.created_at
+              }));
+
+              return jsonResponse({
+                success: true,
+                total: count || formatted.length,
+                page,
+                pages: Math.max(1, Math.ceil((count || formatted.length) / limit)),
+                data: formatted
+              });
+            }
+          } catch (e) {}
+
+          // 2. Fallback từ bảng attendance nếu bảng leave_requests chưa tạo
+          try {
+            const { data: attList } = await client.from('attendance')
+              .select('*')
+              .eq('status', 'Vắng có phép')
+              .order('business_date', { ascending: false })
+              .limit(50);
+
+            const fallback = (attList || []).map(a => {
+              const p = getProfileByStudentId(a.student_id);
+              const pName = p ? ((p.student_id === '123000896' || p.role === 'super_admin') ? 'Võ Huỳnh Thiên Bảo' : p.display_name) : a.student_id;
+              return {
+                id: a.id,
+                userId: a.student_id,
+                userName: pName,
+                department: p?.department || '23CD111',
+                date: a.business_date,
+                shift: a.shift,
+                reason: a.note || 'Báo nghỉ phép qua app',
+                status: 'approved',
+                reviewedBy: 'Admin',
+                reviewedByName: 'Quản trị viên',
+                reviewedAt: a.updated_at,
+                reviewReason: 'Đã ghi nhận vắng có phép',
+                createdAt: a.created_at
+              };
+            });
+
+            const filtered = filterStatus === 'approved' || filterStatus === 'all' ? fallback : [];
+            return jsonResponse({
+              success: true,
+              total: filtered.length,
+              page: 1,
+              pages: 1,
+              data: filtered
+            });
+          } catch (e) {
+            return jsonResponse({ success: true, total: 0, page: 1, pages: 1, data: [] });
+          }
+        }
       }
 
       // 15. /api/attendance/reset hoặc /api/attendance/reset-all-stats

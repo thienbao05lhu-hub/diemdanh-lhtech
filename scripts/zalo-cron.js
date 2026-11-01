@@ -151,3 +151,4 @@ async function runCronReport(forcedType, forcedShift) {
 
 const args = process.argv.slice(2);
 runCronReport(args[0], args[1]).catch(console.error);
+
