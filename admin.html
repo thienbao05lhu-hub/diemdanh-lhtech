@@ -9,8 +9,8 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
   <script src="vendor/qrcode.min.js"></script>
   <script src="vendor/supabase-2.118.0.js"></script>
-  <script src="js/config.js?v=20261101_04"></script>
-  <script src="js/supabase-api-bridge.js?v=20261101_08"></script>
+  <script src="js/config.js?v=20261101-safe-read"></script>
+  <script src="js/supabase-read-api.js?v=20261101-safe-read"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
     body { font-family: 'Plus Jakarta Sans', sans-serif; }
@@ -63,6 +63,7 @@
       animation: toastSlideOut 0.25s cubic-bezier(0.7, 0, 0.84, 0) forwards;
     }
   </style>
+  <script defer src="js/maintenance.js?v=20261101-safe-read"></script>
 </head>
 <body class="bg-slate-950 text-slate-100 min-h-screen">
   <!-- Header -->
@@ -3395,28 +3396,6 @@
       }
     }
 
-    // Fallback hàm gửi tin nhắn Zalo Bot toàn cục
-    window.sendZaloMessage = window.sendZaloMessage || async function(text) {
-      const token = '1993804723126353491:VPyOMCngpRjWbHtPCVsYJnCBezBkpapglMLmvHGMLBxDNLqpqFTiuDByXBAdHSKd';
-      const chatId = '0edc1e512605cf5b9614';
-      const endpoint = 'https://bot-api.zaloplatforms.com/bot' + token + '/sendMessage';
-      const params = new URLSearchParams();
-      params.append('chat_id', chatId);
-      params.append('text', text);
-      try {
-        await fetch(endpoint, {
-          method: 'POST',
-          mode: 'no-cors',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
-          body: params.toString()
-        });
-        return true;
-      } catch (e) {
-        console.error('Lỗi fallback gửi Zalo:', e);
-        return false;
-      }
-    };
-
     // Gửi Báo Cáo Zalo Thủ Công Ngay Bây Giờ (Admin)
     async function handleForceZaloReport() {
       // Lấy thông tin ca hiện tại đang hiển thị trên giao diện (Sáng / Chiều / Tối)
@@ -3491,62 +3470,7 @@
     // 2. Polling cập nhật thống kê chuyên cần cá nhân mỗi 6 giây
     setInterval(fetchPersonalStats, 6000);
 
-    // 3. Tự động gửi báo cáo Zalo theo các mốc thời gian:
-    // - Báo cáo tổng hợp đầu ca lúc 08:31 (Sáng), 13:31 (Chiều), 18:31 (Tối)
-    // - Báo cáo chốt ca lúc 11:00 (Sáng), 17:00 (Chiều), 22:00 (Tối)
-    setInterval(() => {
-      try {
-        const now = new Date();
-        const vnStr = now.toLocaleTimeString('en-US', { timeZone: 'Asia/Ho_Chi_Minh', hour12: false, hour: '2-digit', minute: '2-digit' });
-        const [h, m] = vnStr.split(':').map(Number);
-        const vnDate = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' });
-
-        // 3.1. Báo cáo tổng hợp đầu ca (Từ 08:31, 13:31, 18:31 trở đi - Tự động gửi bù nếu mở web muộn)
-        const totalMins = h * 60 + m;
-        let earlyShift = null;
-        if (totalMins >= 511 && totalMins < 660) earlyShift = 'Sáng';        // 08:31 -> 11:00
-        else if (totalMins >= 811 && totalMins < 1020) earlyShift = 'Chiều'; // 13:31 -> 17:00
-        else if (totalMins >= 1111 && totalMins < 1320) earlyShift = 'Tối'; // 18:31 -> 22:00
-
-        if (earlyShift) {
-          const sentKeyEarly = `auto_zalo_early_${vnDate}_${earlyShift}`;
-          if (!localStorage.getItem(sentKeyEarly)) {
-            localStorage.setItem(sentKeyEarly, 'true');
-            fetch('/api/attendance/force-zalo-report', {
-              method: 'POST',
-              headers: getAdminHeaders(),
-              body: JSON.stringify({ shift: earlyShift, type: 'early' })
-            }).then(r => r.json()).then(res => {
-              if (res.success && typeof showToast !== 'undefined') {
-                showToast.info(`Tự động gửi Báo cáo Đầu Ca ${earlyShift} qua Zalo!`);
-              }
-            }).catch(() => {});
-          }
-        }
-
-        // 3.2. Báo cáo chốt ca (Từ 11:00, 17:00, 22:00 trở đi - Tự động gửi bù nếu mở web muộn)
-        let closeShift = null;
-        if (totalMins >= 660 && totalMins < 780) closeShift = 'Sáng';         // 11:00 -> 13:00
-        else if (totalMins >= 1020 && totalMins < 1110) closeShift = 'Chiều'; // 17:00 -> 18:30
-        else if (totalMins >= 1320) closeShift = 'Tối';                       // 22:00 -> 24:00
-
-        if (closeShift) {
-          const sentKeyClose = `auto_zalo_close_${vnDate}_${closeShift}`;
-          if (!localStorage.getItem(sentKeyClose)) {
-            localStorage.setItem(sentKeyClose, 'true');
-            fetch('/api/attendance/force-zalo-report', {
-              method: 'POST',
-              headers: getAdminHeaders(),
-              body: JSON.stringify({ shift: closeShift, type: 'closing' })
-            }).then(r => r.json()).then(res => {
-              if (res.success && typeof showToast !== 'undefined') {
-                showToast.info(`Tự động gửi Báo cáo Chốt Ca ${closeShift} qua Zalo!`);
-              }
-            }).catch(() => {});
-          }
-        }
-      } catch (e) {}
-    }, 15000);
+    // Lịch gửi đã tạm dừng trong giai đoạn giới hạn ghi.
   </script>
   <script src="js/admin-auth.js?v=20261101_04"></script>
   <script src="js/weekly-schedule.js?v=20261101_04"></script>

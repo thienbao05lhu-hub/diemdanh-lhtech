@@ -25,4 +25,4 @@ Sau khi áp dụng, quét điểm danh, duyệt nghỉ, sửa/hủy điểm danh
 
 Đối chiếu hồ sơ/vai trò/UID thật; thu hồi và thay Zalo token đã có trong frontend, thay GitHub token đã hiển thị. Hoàn thiện frontend xác thực thật, RPC điểm danh/đơn nghỉ có kiểm tra Auth UID/giờ/khóa và audit nguyên tử; chuyển Zalo/LHU ra server. Chỉ mở lại từng RPC sau kiểm thử quyền và nghiệp vụ.
 
-Hiện công cụ chưa có connector/credential quản trị Supabase. File mới chỉ được soát nguồn và kiểm tra tĩnh cục bộ; chưa chạy PostgreSQL hoặc project thật, chưa tuyên bố đã vá production. Cần chủ project chạy và trả kết quả kiểm tra, hoặc cấp kết nối quản trị được ủy quyền qua kênh phù hợp, không gửi secret qua chat.
+Chủ project đã chạy bản khóa quyền trên Supabase thật và gửi ảnh thông báo hoàn tất cùng 7 policy contained_read/SELECT/authenticated ngày 01/11/2026. Công cụ chưa có connector quản trị và chưa kiểm thử phiên Auth/UI thật sau thay đổi. Giao diện đang được đồng bộ với trạng thái giới hạn ghi; chỉ mở lại nghiệp vụ sau bản RPC an toàn và kiểm thử phù hợp.

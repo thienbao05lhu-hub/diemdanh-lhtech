@@ -23,8 +23,8 @@
   <!-- Thư viện quét mã QR qua Camera -->
   <script src="vendor/html5-qrcode.min.js"></script>
   <script src="vendor/supabase-2.118.0.js"></script>
-  <script src="js/config.js"></script>
-  <script src="js/supabase-api-bridge.js?v=20261101_08"></script>
+  <script src="js/config.js?v=20261101-safe-read"></script>
+  <script src="js/supabase-read-api.js?v=20261101-safe-read"></script>
 
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
@@ -57,6 +57,7 @@
     .toast-enter { animation: toastSlideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
     .toast-exit { animation: toastSlideOut 0.25s cubic-bezier(0.7, 0, 0.84, 0) forwards; }
   </style>
+  <script defer src="js/maintenance.js?v=20261101-safe-read"></script>
 </head>
 <body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col justify-between selection:bg-emerald-500 selection:text-white">
 
@@ -490,6 +491,8 @@
 
     // Khởi động Camera quét QR
     function startScanner() {
+      showScanResult('warning', 'Tạm dừng điểm danh', 'Hệ thống đang cập nhật bảo mật. Chưa có lượt điểm danh mới được ghi.');
+      return;
       if (html5QrCode) {
         return; // Đã chạy
       }

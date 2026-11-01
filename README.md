@@ -1,12 +1,20 @@
 # Điểm danh LHTech — frontend Supabase
 
+## Cập nhật 01/11/2026: đang giới hạn ghi
+
+Chủ project đã xác nhận chạy bản khóa quyền và gửi ảnh 7 bảng với policy `contained_read` chỉ SELECT cho authenticated. Dashboard dùng `js/supabase-read-api.js`: mỗi yêu cầu kiểm tra Supabase Auth và hồ sơ đang hoạt động; không dùng mật khẩu dự phòng, vai trò localStorage, hồ sơ tĩnh hoặc nhật ký mẫu. Login dùng email/MSSV và mật khẩu Auth thật. Token Zalo đã gỡ khỏi nguồn hiện tại; token cũ trong lịch sử vẫn cần chủ project thu hồi.
+
+Điểm danh, duyệt nghỉ, chỉnh sửa trên dashboard, đồng bộ LHU và Zalo đang tạm dừng. API ghi trả lỗi bảo trì, không trả thành công giả; camera và lịch gửi Zalo tự động đã tạm ngừng. Các bảng đọc dữ liệu thật theo RLS. Trang lịch riêng `schedule.html` tiếp tục dùng các RPC lịch tuần có kiểm tra quyền/revision mà SQL đã giữ lại.
+
+Trước khi mở lại ghi, cần thay RPC tương ứng, kiểm thử Auth/role/UID/giờ/khóa/đồng thời và nghiệm thu thật. Các hướng dẫn schema phía dưới không có nghĩa mọi nút dashboard đã được mở.
+
 Bản chuyển đổi đang triển khai: đăng nhập bằng Supabase Auth, thiết lập/khôi phục mật khẩu qua email, quản lý hồ sơ/vai trò, lịch xưởng theo tuần có lịch sử/khôi phục và nhật ký. Điểm danh QR, duyệt nghỉ, đồng bộ LHU, Zalo, ESP32 và chuyển dữ liệu cũ chưa hoàn tất. Chưa dùng bản này để thay hệ thống đang vận hành.
 
 Website là HTML/CSS/JavaScript tĩnh, không cần npm hay bước build. Bản SDK Supabase chính thức 2.118.0 được phục vụ trong `vendor/`, kèm giấy phép MIT.
 
 Đưa **nội dung của thư mục này** lên gốc repository `thienbao05lhu-hub/diemdanh-lhtech`. Trong GitHub, chọn Settings > Pages > Deploy from a branch > main > /(root). Địa chỉ dự kiến khi Pages được bật: `https://thienbao05lhu-hub.github.io/diemdanh-lhtech/`.
 
-Cấu hình công khai trong `js/config.js` chỉ chứa project URL và publishable key. Tài khoản đăng nhập phải tồn tại trong Supabase Auth và có hồ sơ tương ứng trong bảng `profiles`. Phiên đăng nhập được lưu bằng SDK trong sessionStorage của tab; mật khẩu không được lưu trong storage. Quyền dữ liệu vẫn do PostgreSQL/RLS kiểm tra.
+Cấu hình công khai trong `js/config.js` chỉ chứa project URL và publishable key. Tài khoản đăng nhập phải tồn tại trong Supabase Auth và có hồ sơ tương ứng trong bảng `profiles`. SDK quản lý phiên trong localStorage với khóa `lhtech-supabase-auth`; mật khẩu không được lưu trong storage. Quyền dữ liệu do PostgreSQL/RLS kiểm tra.
 
 Để dùng liên kết xác nhận/thiết lập mật khẩu, đặt Site URL của Supabase Auth thành `https://thienbao05lhu-hub.github.io/diemdanh-lhtech/` và thêm Redirect URL chính xác `https://thienbao05lhu-hub.github.io/diemdanh-lhtech/reset-password.html`. Trang `reset-password.html` gửi yêu cầu email qua Auth và chỉ mở form mật khẩu sau khi Auth xác minh phiên. Liên kết quay về trang chủ được chuyển tới trang thiết lập trước khi xử lý đăng nhập thông thường. Việc thiết lập mật khẩu giữ nguyên Auth UID và hồ sơ đã có.
 

@@ -1,52 +1,16 @@
-name: Zalo Bot Attendance Reporter
+name: Zalo reports - maintenance
 
 on:
-  schedule:
-    # 08:31 VN (01:31 UTC) - Báo cáo tổng hợp đầu ca Sáng
-    - cron: '31 1 * * *'
-    # 11:00 VN (04:00 UTC) - Báo cáo chốt ca Sáng
-    - cron: '0 4 * * *'
-    # 13:31 VN (06:31 UTC) - Báo cáo tổng hợp đầu ca Chiều
-    - cron: '31 6 * * *'
-    # 17:00 VN (10:00 UTC) - Báo cáo chốt ca Chiều
-    - cron: '0 10 * * *'
-    # 18:31 VN (11:31 UTC) - Báo cáo tổng hợp đầu ca Tối
-    - cron: '31 11 * * *'
-    # 22:00 VN (15:00 UTC) - Báo cáo chốt ca Tối
-    - cron: '0 15 * * *'
   workflow_dispatch:
-    inputs:
-      report_type:
-        description: 'Loại báo cáo (early / closing)'
-        required: false
-        default: 'early'
-      shift:
-        description: 'Ca làm việc (Sáng / Chiều / Tối)'
-        required: false
-        default: 'Chiều'
+
+permissions:
+  contents: read
 
 jobs:
-  send-report:
+  maintenance:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - name: Run Zalo Attendance Reporter
+      - name: Reports remain paused during security maintenance
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            node scripts/zalo-cron.js "${{ github.event.inputs.report_type }}" "${{ github.event.inputs.shift }}"
-          else
-            node scripts/zalo-cron.js
-          fi
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL || 'https://oalnswbnjhkkovxjxtlz.supabase.co' }}
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY || 'sb_publishable_Sz6k8E5HKwtxXbmu1T0HLw_4sXzTjo7' }}
-          ZALO_BOT_TOKEN: ${{ secrets.ZALO_BOT_TOKEN || '1993804723126353491:VPyOMCngpRjWbHtPCVsYJnCBezBkpapglMLmvHGMLBxDNLqpqFTiuDByXBAdHSKd' }}
-          ZALO_CHAT_ID: ${{ secrets.ZALO_CHAT_ID || '0edc1e512605cf5b9614' }}
-
+          echo "Zalo reports are paused. Configure and verify a server-side worker before enabling scheduled reports."
+          exit 1

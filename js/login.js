@@ -33,42 +33,13 @@
     busy = true; button.disabled = true; button.textContent = 'Đang đăng nhập…'; retry.hidden = true;
     api.setStatus(status);
     try {
-      let emailVal = document.getElementById('email').value.trim();
-      const rawMssv = /^\d{8,10}$/.test(emailVal) ? emailVal : (emailVal.includes('@') ? emailVal.split('@')[0] : '');
-      if (/^\d{8,10}$/.test(emailVal)) {
-        emailVal = `${emailVal}@student.lhu.edu.vn`;
-      }
-      let signedIn = false;
-      try {
-        const result = await api.client.auth.signInWithPassword({ email: emailVal, password: password.value });
-        if (!result.error && result.data?.session) {
-          signedIn = true;
-          const current = await api.identity();
-          if (current) {
-            window.location.replace(api.destination(current.profile));
-            return;
-          }
-        }
-      } catch (authErr) {}
-
-      // Fallback: Xác thực qua RPC admin_verify_password (Postgres bcrypt)
-      if (rawMssv) {
-        try {
-          const { data: vData } = await api.client.rpc('admin_verify_password', {
-            p_student_id: rawMssv,
-            p_password: password.value
-          });
-          if (vData && vData.success && vData.profile) {
-            localStorage.setItem('adminUser', vData.profile.student_id);
-            localStorage.setItem('adminName', vData.profile.display_name);
-            localStorage.setItem('adminRole', vData.profile.role === 'super_admin' ? 'superadmin' : vData.profile.role);
-            window.location.replace(api.destination(vData.profile));
-            return;
-          }
-        } catch (rpcErr) {}
-      }
-
-      throw new Error('Sai MSSV hoặc mật khẩu!');
+      const identifier = document.getElementById('email').value.trim();
+      const email = /^\d{6,20}$/.test(identifier) ? `${identifier}@student.lhu.edu.vn` : identifier;
+      const result = await api.client.auth.signInWithPassword({ email, password: password.value });
+      if (result.error) throw result.error;
+      const current = await api.identity();
+      if (!current) throw Object.assign(new Error('Missing authenticated session'), { code: 'invalid_credentials' });
+      window.location.replace(api.destination(current.profile));
     } catch (error) {
       api.setStatus(status, api.message(error), true);
       if (error.code === 'PROFILE_MISSING') await api.client.auth.signOut({ scope: 'local' }).catch(() => {});

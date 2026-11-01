@@ -4,11 +4,14 @@
  */
 
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://oalnswbnjhkkovxjxtlz.supabase.co';
-const ANON_KEY = process.env.SUPABASE_ANON_KEY || 'sb_publishable_Sz6k8E5HKwtxXbmu1T0HLw_4sXzTjo7';
-const ZALO_BOT_TOKEN = process.env.ZALO_BOT_TOKEN || '1993804723126353491:VPyOMCngpRjWbHtPCVsYJnCBezBkpapglMLmvHGMLBxDNLqpqFTiuDByXBAdHSKd';
-const ZALO_CHAT_ID = process.env.ZALO_CHAT_ID || '0edc1e512605cf5b9614';
+const ANON_KEY = process.env.SUPABASE_SERVER_KEY;
+const ZALO_BOT_TOKEN = process.env.ZALO_BOT_TOKEN;
+const ZALO_CHAT_ID = process.env.ZALO_CHAT_ID;
 
 async function runCronReport(forcedType, forcedShift) {
+  if (!ANON_KEY || ANON_KEY.startsWith('sb_publishable_') || !ZALO_BOT_TOKEN || !ZALO_CHAT_ID) {
+    throw new Error('Thiếu credential server. Tác vụ Zalo đang tạm dừng.');
+  }
   const vnNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Ho_Chi_Minh' }));
   const y = vnNow.getFullYear();
   const m = String(vnNow.getMonth() + 1).padStart(2, '0');
@@ -44,14 +47,16 @@ async function runCronReport(forcedType, forcedShift) {
 
   // 1. Lấy danh sách hồ sơ sinh viên
   const pRes = await fetch(`${SUPABASE_URL}/rest/v1/profiles?select=*&active=eq.true`, {
-    headers: { 'apikey': ANON_KEY, 'Authorization': `Bearer ${ANON_KEY}` }
+    headers: { 'apikey': ANON_KEY }
   });
+  if (!pRes.ok) throw new Error('Không đọc được dữ liệu Supabase; chưa gửi Zalo.');
   const profiles = await pRes.json();
 
   // 2. Lấy dữ liệu điểm danh hôm nay theo ca
   const aRes = await fetch(`${SUPABASE_URL}/rest/v1/attendance?select=*&business_date=eq.${todayIso}&shift=eq.${encodeURIComponent(shift)}`, {
-    headers: { 'apikey': ANON_KEY, 'Authorization': `Bearer ${ANON_KEY}` }
+    headers: { 'apikey': ANON_KEY }
   });
+  if (!aRes.ok) throw new Error('Không đọc được dữ liệu Supabase; chưa gửi Zalo.');
   const atts = await aRes.json();
 
   // 3. Lấy thời khóa biểu tuần này
@@ -62,8 +67,9 @@ async function runCronReport(forcedType, forcedShift) {
   const monIso = `${mon.getFullYear()}-${String(mon.getMonth() + 1).padStart(2, '0')}-${String(mon.getDate()).padStart(2, '0')}`;
 
   const sRes = await fetch(`${SUPABASE_URL}/rest/v1/weekly_schedules?select=*&week_start=eq.${monIso}`, {
-    headers: { 'apikey': ANON_KEY, 'Authorization': `Bearer ${ANON_KEY}` }
+    headers: { 'apikey': ANON_KEY }
   });
+  if (!sRes.ok) throw new Error('Không đọc được dữ liệu Supabase; chưa gửi Zalo.');
   const scheds = await sRes.json();
   const schedMap = new Map((scheds || []).map(s => [s.profile_id, s.schedule]));
   const attMap = new Map(atts.map(a => [a.profile_id, a]));
@@ -132,7 +138,7 @@ async function runCronReport(forcedType, forcedShift) {
     reportMsg = reportMsg.trimEnd();
   }
 
-  console.log('Nội dung báo cáo:\n' + reportMsg);
+  console.log('[Zalo Cron] Đã tạo nội dung báo cáo; không ghi dữ liệu cá nhân vào log.');
 
   // 6. Gửi tin nhắn qua Zalo Bot API
   const endpoint = `https://bot-api.zaloplatforms.com/bot${ZALO_BOT_TOKEN}/sendMessage`;
@@ -145,10 +151,10 @@ async function runCronReport(forcedType, forcedShift) {
   if (data.ok) {
     console.log('✅ Gửi báo cáo Zalo thành công!', data.result?.message_id);
   } else {
-    console.error('❌ Lỗi gửi Zalo:', data);
+    throw new Error('Zalo chưa xác nhận gửi thành công.');
   }
 }
 
 const args = process.argv.slice(2);
-runCronReport(args[0], args[1]).catch(console.error);
+runCronReport(args[0], args[1]).catch(() => { console.error('Tác vụ Zalo chưa hoàn tất. Kiểm tra cấu hình và quyền server.'); process.exitCode = 1; });
 
