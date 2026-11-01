@@ -8,9 +8,10 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
   <script src="vendor/qrcode.min.js"></script>
+  <script src="js/attendance-csv.js?v=20261101-logic1"></script>
   <script src="vendor/supabase-2.118.0.js"></script>
   <script src="js/config.js?v=20261101-safe-read"></script>
-  <script src="js/supabase-read-api.js?v=20261101-leaves1"></script>
+  <script src="js/supabase-read-api.js?v=20261101-logic1"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
     body { font-family: 'Plus Jakarta Sans', sans-serif; }
@@ -1919,7 +1920,7 @@
       }
 
       if (!filteredList || filteredList.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="5" class="px-4 py-8 text-center text-slate-500">${keyword ? 'Không tìm thấy sinh viên nào khớp với từ khóa "' + keyword + '".' : 'Chưa có sinh viên nào trong danh sách ca này.'}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="5" class="px-4 py-8 text-center text-slate-500">${keyword ? 'Không tìm thấy sinh viên nào khớp với từ khóa "' + escapeHtml(keyword) + '".' : 'Chưa có sinh viên nào trong danh sách ca này.'}</td></tr>`;
         return;
       }
 
@@ -2027,14 +2028,14 @@
           `;
         }
 
-        const noteTag = item.note ? `<span class="ml-1 text-[9px] text-amber-400 italic">(${item.note})</span>` : '';
+        const noteTag = item.note ? `<span class="ml-1 text-[9px] text-amber-400 italic">(${escapeHtml(item.note)})</span>` : '';
         const reasonTag = item.reason ? `<p class="text-[10px] text-amber-300/80 italic mt-0.5 max-w-[220px] truncate" title="Lý do nghỉ: ${escapeHtml(item.reason)}"><i class="fa-regular fa-message text-[9px] mr-1"></i>${escapeHtml(item.reason)}</p>` : '';
 
         return `
           <tr class="hover:bg-slate-800/40 transition">
             <td class="px-4 py-2 font-mono font-bold text-emerald-400">${item.userId}</td>
             <td class="px-4 py-2 font-medium text-white whitespace-nowrap">
-              <p class="leading-tight">${item.userName || 'N/A'}${noteTag}</p>
+              <p class="leading-tight">${escapeHtml(item.userName || 'N/A')}${noteTag}</p>
               ${reasonTag}
             </td>
             <td class="px-3 py-2 text-slate-400">${timeStr}</td>
@@ -2250,7 +2251,12 @@
         const result = await res.json();
         if (result.success) {
           if (requestedWeek && requestedWeek !== window.WeeklyScheduleUI?.selectedWeek()) return false;
-          rawScheduleList = result.data || [];
+          // Giữ bản nháp chưa lưu, kể cả khi một lượt lưu hàng loạt chỉ thành công một phần.
+          // Giữ luôn revision đã đọc để không tự ghi đè phiên bản người khác vừa sửa.
+          const drafts = new Map(rawScheduleList.filter(user => unsavedScheduleUserIds.has(user.userId))
+            .map(user => [user.userId, { schedule: user.schedule, scheduleWeek: user.scheduleWeek }]));
+          rawScheduleList = (result.data || []).map(user => drafts.has(user.userId)
+            ? { ...user, ...drafts.get(user.userId) } : user);
           window.WeeklyScheduleUI?.updateMetadata(result.metadata || {}, rawScheduleList);
           renderScheduleTable();
           return true;
@@ -2497,6 +2503,7 @@
         if (sangEl && sangEl.checked) schedule[d].push('sáng');
         if (chieuEl && chieuEl.checked) schedule[d].push('chiều');
         if (toiEl && toiEl.checked) schedule[d].push('tối');
+        if (!sangEl && !chieuEl && !toiEl) schedule[d] = [...(rawScheduleList.find(user => user.userId === userId)?.schedule?.[d] || [])];
       });
 
       try {
@@ -2589,7 +2596,9 @@
       const userIdsToSave = Array.from(unsavedScheduleUserIds);
 
       try {
-        const promises = userIdsToSave.map(async userId => {
+        const results = [];
+        for (const userId of userIdsToSave) {
+          try {
           const user = rawScheduleList.find(u => u.userId === userId);
           const schedule = {};
           days.forEach(d => {
@@ -2618,10 +2627,12 @@
             if (user) { user.schedule = json.data.schedule; user.scheduleWeek = json.data.scheduleWeek; }
             unsavedScheduleUserIds.delete(userId);
           }
-          return { userId, ok: res.ok, json };
-        });
+          results.push({ userId, ok: res.ok, json });
+          } catch (error) {
+            results.push({ userId, ok: false, json: { success: false, message: 'Chưa xác nhận được kết quả lưu. Giữ bản nháp để đối chiếu.' } });
+          }
+        }
 
-        const results = await Promise.all(promises);
         const failed = results.filter(r => !r.ok || !r.json || !r.json.success);
 
         if (failed.length > 0) {
@@ -3207,30 +3218,7 @@
 
         if (btnText) btnText.innerText = 'Đang tải...';
 
-        // Định dạng tiêu đề cột CSV
-        let csvContent = 'STT,Mã Sinh Viên,Họ Và Tên,Lớp / Khoa,Ca Làm Việc,Thời Gian Điểm Danh,Trạng Thái,Ghi Chú\n';
-
-        // Duyệt từng bản ghi
-        data.forEach((item, index) => {
-          let timeStr = 'Chưa quét';
-          if (item.timestamp) {
-            timeStr = new Date(item.timestamp).toLocaleString('vi-VN', {
-              timeZone: 'Asia/Ho_Chi_Minh',
-              hour: '2-digit', minute: '2-digit', second: '2-digit',
-              day: '2-digit', month: '2-digit', year: 'numeric'
-            });
-          }
-
-          const cleanId = `"${item.userId}"`;
-          const cleanName = `"${(item.userName || '').replace(/"/g, '""')}"`;
-          const cleanDept = `"${(item.department || '').replace(/"/g, '""')}"`;
-          const cleanShift = `"Ca ${item.shift || currentViewingShift}"`;
-          const cleanTime = `"${timeStr}"`;
-          const cleanStatus = `"${item.status || 'Chưa điểm danh'}"`;
-          const cleanNote = `"${item.note || (item.inSchedule ? 'Trong lịch' : 'Ngoài lịch')}"`;
-
-          csvContent += `${index + 1},${cleanId},${cleanName},${cleanDept},${cleanShift},${cleanTime},${cleanStatus},${cleanNote}\n`;
-        });
+        const csvContent = window.AttendanceCsv.attendance(data, currentViewingShift);
 
         // Thêm ký tự UTF-8 BOM (\uFEFF) ở đầu để Excel trên Windows hiển thị đúng tiếng Việt có dấu
         const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -3341,28 +3329,7 @@
       }
 
       try {
-        let csvContent = 'STT,Mã Sinh Viên,Họ Và Tên,Lớp / Khoa,Ca Làm Việc,Thời Gian Điểm Danh,Trạng Thái,Ghi Chú\n';
-
-        details.forEach((item, index) => {
-          let timeStr = 'Chưa quét';
-          if (item.timestamp) {
-            timeStr = new Date(item.timestamp).toLocaleString('vi-VN', {
-              timeZone: 'Asia/Ho_Chi_Minh',
-              hour: '2-digit', minute: '2-digit', second: '2-digit',
-              day: '2-digit', month: '2-digit', year: 'numeric',
-            });
-          }
-
-          const cleanId = `"${item.userId}"`;
-          const cleanName = `"${(item.userName || '').replace(/"/g, '""')}"`;
-          const cleanDept = `"${(item.department || '').replace(/"/g, '""')}"`;
-          const cleanShift = `"Ca ${item.shift}"`;
-          const cleanTime = `"${timeStr}"`;
-          const cleanStatus = `"${item.status}"`;
-          const cleanNote = `"${item.note || (item.inSchedule ? 'Trong lịch' : 'Ngoài lịch')}"`;
-
-          csvContent += `${index + 1},${cleanId},${cleanName},${cleanDept},${cleanShift},${cleanTime},${cleanStatus},${cleanNote}\n`;
-        });
+        const csvContent = window.AttendanceCsv.attendance(details);
 
         // Tạo file CSV với UTF-8 BOM (\uFEFF) để Excel hiển thị tiếng Việt có dấu chuẩn xác
         const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });

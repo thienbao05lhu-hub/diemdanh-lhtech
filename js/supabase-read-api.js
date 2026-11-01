@@ -56,6 +56,10 @@
         APP_LEAVE_TRANSITION: 'Quyết định không phù hợp với trạng thái hiện tại của đơn.',
         APP_LEAVE_NOT_FOUND: 'Không tìm thấy đơn nghỉ.',
         APP_SHIFT_LOCKED: 'Ca đã chốt hoặc đã hết giờ. Không được thay đổi đơn nghỉ.',
+        APP_SCHEDULE_STALE: 'Lịch đã được sửa ở nơi khác. Bản nháp được giữ lại; hãy đối chiếu lịch mới trước khi lưu lại.',
+        APP_INVALID_SCHEDULE: 'Lịch chưa hợp lệ. Chỉ chọn các ca Sáng, Chiều, Tối cho đúng bảy ngày.',
+        APP_REVISION_NOT_FOUND: 'Phiên bản lịch này không còn trong lịch sử được lưu.',
+        APP_PROFILE_NOT_FOUND: 'Hồ sơ không tồn tại hoặc đã bị khóa.',
       };
       for (const [code,text] of Object.entries(errors)) if (String(result.error.message).includes(code)) fail(409,text);
     }
@@ -117,6 +121,48 @@
     return { start: start.toISOString().slice(0, 10), end: end.toISOString().slice(0, 10) };
   }
   function emptySchedule() { return Object.fromEntries(['t2','t3','t4','t5','t6','t7','cn'].map(day => [day, []])); }
+  function canonicalSchedule(value) {
+    const days = Object.keys(emptySchedule()), shifts = ['Sáng','Chiều','Tối'];
+    if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).some(day => !days.includes(day))) fail(400,'Lịch tuần không hợp lệ.');
+    const result = {};
+    for (const day of days) {
+      const entries = value[day] === undefined ? [] : value[day];
+      if (!Array.isArray(entries) || entries.some(shift => typeof shift !== 'string'
+        || !shifts.some(label => label.toLocaleLowerCase('vi') === shift.trim().toLocaleLowerCase('vi')))) fail(400,'Ca trong lịch tuần không hợp lệ.');
+      result[day] = shifts.filter(label => entries.some(shift => label.toLocaleLowerCase('vi') === shift.trim().toLocaleLowerCase('vi')));
+    }
+    return result;
+  }
+  async function writeSchedule(path, body) {
+    if (!Number.isSafeInteger(body.expectedRevision) || body.expectedRevision < 0) fail(400,'Thiếu phiên bản lịch đã đọc. Tải lại lịch trước khi sửa.');
+    const selected = week(body.week);
+    if (body.week !== selected.start) fail(400,'Tuần phải bắt đầu từ thứ hai.');
+    if (typeof body.userId !== 'string' || !/^\d{6,20}$/.test(body.userId)) fail(400,'Mã sinh viên không hợp lệ.');
+    const target = checked(await client.from('profiles').select(fields).eq('student_id',body.userId).eq('active',true).maybeSingle());
+    if (!target || target.student_id !== body.userId || !target.active) fail(404,'Không tìm thấy hồ sơ đang hoạt động.');
+    const reason = body.reason === undefined ? (path.endsWith('/rollback') ? 'Khôi phục phiên bản từ lịch sử trên dashboard.' : 'Cập nhật lịch tuần từ dashboard.') : body.reason;
+    if (typeof reason !== 'string' || !reason.trim() || reason.trim().length > 500) fail(400,'Lý do thay đổi cần từ 1 đến 500 ký tự.');
+    let result, requestedSchedule;
+    if (path.endsWith('/rollback')) {
+      if (!Number.isSafeInteger(body.revision) || body.revision < 1) fail(400,'Phiên bản cần khôi phục không hợp lệ.');
+      result = await qrRpc('admin_rollback_week_schedule',{ p_profile_id:target.id,p_week_start:selected.start,
+        p_revision:body.revision,p_expected_revision:body.expectedRevision,p_reason:reason.trim() });
+    } else {
+      requestedSchedule = canonicalSchedule(body.schedule);
+      result = await qrRpc('admin_save_week_schedule',{ p_profile_id:target.id,p_week_start:selected.start,
+        p_schedule:requestedSchedule,p_expected_revision:body.expectedRevision,p_reason:reason.trim() });
+    }
+    if (!result || result.profile_id !== target.id || result.week_start !== selected.start
+      || !Number.isSafeInteger(result.revision) || result.revision < 1 || !['manual','rollback','lhu','migration'].includes(result.source))
+      fail(503,'Chưa xác nhận được lịch đã lưu. Tải lại dữ liệu để kiểm tra trước khi thử lại.');
+    const schedule = canonicalSchedule(result.schedule);
+    if ((path.endsWith('/rollback') && result.revision !== body.expectedRevision + 1)
+      || (!path.endsWith('/rollback') && ![body.expectedRevision,body.expectedRevision + 1].includes(result.revision))
+      || (requestedSchedule && JSON.stringify(requestedSchedule) !== JSON.stringify(schedule)))
+      fail(503,'Kết quả lịch chưa khớp yêu cầu. Tải lại dữ liệu để đối chiếu.');
+    return response({success:true,data:{userId:target.student_id,schedule,
+      scheduleWeek:{revision:result.revision,source:result.source,updatedAt:result.updated_at}},metadata:{week:selected}});
+  }
   function profileLabel(id) { const p = profiles.find(row => row.id === id); return p ? `${p.display_name} (${p.student_id})` : 'Không xác định'; }
   function publicLeave(row) {
     return { id: row.id, userId: row.student_id, userName: row.user_name,
@@ -160,6 +206,9 @@
     // Quyền được xác minh từ Auth + profile cho mỗi request; không tin storage hiển thị.
     const current = await identity(path !== '/api/leaves/mine');
     if (path === '/api/admin/verify' || path === '/api/admin/check') return response(sessionReply(current));
+    if (method === 'POST' && ['/api/schedule','/api/schedule/rollback'].includes(path)) {
+      return writeSchedule(path, JSON.parse(options.body || '{}'));
+    }
     const reviewMatch = /^\/api\/leaves\/([0-9a-f-]{36})\/review$/.exec(path);
     if (reviewMatch && method === 'POST') {
       const caps = await leaveCapabilities();

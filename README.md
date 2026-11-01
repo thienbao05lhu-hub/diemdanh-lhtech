@@ -1,3 +1,11 @@
+## Logic dashboard đã nối lại, giữ nguyên giao diện tối
+
+Nút lưu lịch từng người, lưu hàng loạt và khôi phục lịch sử trên dashboard cũ đã nối với RPC kiểm tra Auth/role/revision. Lưu không tự lấy phiên bản mới để ghi đè người khác. Gửi hàng loạt theo thứ tự, giữ bản nháp và phiên bản đã đọc khi một người lỗi; khóa tạm editor trong lúc lưu. Phản hồi đọc về trễ không ghi đè bản nháp vừa chỉnh.
+
+Hai nút CSV giữ nguyên giao diện, xuất đủ dữ liệu ba ca và tiếng Việt; escape phẩy/nháy/xuống dòng và chặn ô bị hiểu thành công thức. Giờ duyệt nghỉ không được ghi là giờ quét. Tên/ghi chú/từ khóa ở bảng điểm danh được hiển thị như văn bản.
+
+Thay đổi này không yêu cầu SQL mới: dùng các RPC lịch tuần 30 đã được containment giữ lại. Nếu thiếu RPC/quyền, thao tác trả lỗi và không báo đã lưu. Đã kiểm thử cục bộ với Auth/DOM mô phỏng và SQL fixture; chưa thay thế nghiệm thu cloud/thiết bị thật. SQL xin nghỉ 110 vẫn chờ xác nhận áp dụng riêng, LHU/Zalo/sửa điểm danh thủ công chưa được bật.
+
 ## Giữ nguyên thiết kế đã chốt
 
 Đã khôi phục app/checkin về giao diện PWA gốc: kích hoạt thiết bị, khung camera, thẻ kết quả, nút báo nghỉ và modal xin nghỉ. Người dùng đã xác nhận rõ kiểu giao diện tối sau yêu cầu đọc lại toàn bộ dự án. Chuẩn cấu trúc/CSS là bản tối `2848827`: Kích Hoạt Thiết Bị, khung camera và hộp thoại báo nghỉ. Giữ nguyên thiết kế này; chỉ hoàn thiện logic và sửa lỗi. Logic mới dùng đúng các thành phần đó; không thêm panel hoặc thay hệ thống màu/font. Mã sinh viên trên màn hình kích hoạt lấy từ tài khoản Auth đang đăng nhập, không cấp quyền bằng MSSV tự nhập.

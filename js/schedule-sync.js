@@ -30,7 +30,7 @@
     const unsaved = unsavedScheduleUserIds.size > 0;
     button.disabled = !authenticated || busy || manualSaves > 0 || unsaved;
     button.setAttribute('aria-busy', String(busy));
-    document.getElementById('scheduleEditor').disabled = busy;
+    document.getElementById('scheduleEditor').disabled = busy || manualSaves > 0;
     document.getElementById('btnSaveAllSchedules').disabled = busy || manualSaves > 0;
     const weekInput = document.getElementById('scheduleWeekInput');
     if (weekInput) weekInput.disabled = busy || manualSaves > 0;
