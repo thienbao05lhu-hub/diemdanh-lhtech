@@ -57,6 +57,25 @@
       reject.addEventListener('click', () => review(request.id, 'rejected', input, actions));
       actions.append(approve, reject);
       card.append(label, input, actions);
+    } else if (admin && request.status === 'approved') {
+      const actions = node('div', 'flex gap-2 flex-wrap pt-1');
+      const revoke = node('button', 'rounded-lg bg-slate-800 hover:bg-rose-950/40 border border-slate-700 hover:border-rose-500/40 text-slate-300 hover:text-rose-300 px-3 py-1.5 text-xs font-semibold transition disabled:opacity-50 cursor-pointer', 'Hủy duyệt (Đưa về Chờ duyệt)');
+      revoke.type = 'button';
+      revoke.addEventListener('click', async () => {
+        if (!confirm('Bạn có chắc muốn hủy duyệt đơn này? Trạng thái điểm danh Vắng có phép sẽ bị hủy bỏ.')) return;
+        await review(request.id, 'pending', { value: 'Hủy chấp thuận bởi Admin' }, actions);
+      });
+      actions.append(revoke);
+      card.append(actions);
+    } else if (admin && request.status === 'rejected') {
+      const actions = node('div', 'flex gap-2 flex-wrap pt-1');
+      const reApprove = node('button', 'rounded-lg bg-slate-800 hover:bg-emerald-950/40 border border-slate-700 hover:border-emerald-500/40 text-slate-300 hover:text-emerald-300 px-3 py-1.5 text-xs font-semibold transition disabled:opacity-50 cursor-pointer', 'Xét duyệt lại (Chấp thuận)');
+      reApprove.type = 'button';
+      reApprove.addEventListener('click', async () => {
+        await review(request.id, 'approved', { value: 'Xét duyệt lại: Chấp thuận' }, actions);
+      });
+      actions.append(reApprove);
+      card.append(actions);
     } else if (admin && request.status === 'reviewing') {
       card.append(node('p', 'text-[11px] text-slate-400', request.needsRecovery
         ? 'Có gián đoạn khi ghi dữ liệu. Bấm đối chiếu để kiểm tra trạng thái đã lưu.'
