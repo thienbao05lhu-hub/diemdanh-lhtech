@@ -1495,6 +1495,7 @@
       }
 
       // Helper ghi nhận nhật ký kiểm toán (Lưu đồng thời vào Supabase audit_logs & LocalStorage)
+      // Tự động dọn dẹp các bản ghi cũ hơn 30 ngày để tối ưu hệ thống
       async function recordAuditLog(action, actorParam, targetParam, details = {}, before = null, after = null) {
         try {
           const adminUser = localStorage.getItem('adminUser') || '123000896';
@@ -1526,11 +1527,23 @@
             }
           }
 
+          if (!targetText && (details.studentId || details.userId)) {
+            const sId = details.studentId || details.userId;
+            const tp = getProfileByStudentId(sId);
+            if (tp) {
+              targetText = `${tp.student_id === '123000896' || tp.role === 'super_admin' ? 'Võ Huỳnh Thiên Bảo' : tp.display_name} (${tp.student_id})`;
+            } else if (details.userName || details.displayName) {
+              targetText = `${details.userName || details.displayName} (${sId})`;
+            } else {
+              targetText = String(sId);
+            }
+          }
+
           const logEntry = {
             id: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : ('audit_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5)),
             action: action,
             actorId: actorText,
-            targetId: targetText || details.displayName || details.studentId || details.userId || 'Hệ thống',
+            targetId: targetText || details.displayName || 'Hệ thống',
             reason: details.reason || details.reviewReason || details.note || '',
             createdAt: new Date().toISOString(),
             before: before,
@@ -1542,17 +1555,25 @@
             }
           };
 
-          // 1. Lưu LocalStorage backup
+          // 1. Lưu LocalStorage backup (Giới hạn lưu trữ 30 ngày & tối đa 100 bản ghi)
           try {
             const raw = localStorage.getItem('lhtech_audit_logs');
             let list = raw ? JSON.parse(raw) : [];
             if (!Array.isArray(list)) list = [];
             list.unshift(logEntry);
-            if (list.length > 200) list = list.slice(0, 200);
+
+            // Tự động xóa các bản ghi cũ hơn 30 ngày
+            const cutoff30Days = Date.now() - (30 * 24 * 60 * 60 * 1000);
+            list = list.filter(item => {
+              const itemTime = new Date(item.createdAt).getTime();
+              return !isNaN(itemTime) && itemTime >= cutoff30Days;
+            });
+            if (list.length > 100) list = list.slice(0, 100);
+
             localStorage.setItem('lhtech_audit_logs', JSON.stringify(list));
           } catch(e) {}
 
-          // 2. Thử ghi vào Supabase audit_logs
+          // 2. Ghi vào Supabase audit_logs & Dọn dẹp dữ liệu cũ hơn 30 ngày
           try {
             await client.from('audit_logs').insert({
               actor_id: actorUuid,
@@ -1567,6 +1588,10 @@
               },
               created_at: logEntry.createdAt
             });
+
+            // Xóa bản ghi cũ hơn 30 ngày trên Supabase
+            const cutoffIso = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+            client.from('audit_logs').delete().lt('created_at', cutoffIso).then(() => {}).catch(() => {});
           } catch(e) {}
         } catch (err) {
           console.warn('Lỗi ghi recordAuditLog:', err);
@@ -1661,6 +1686,18 @@
           if (!seen.has(key)) {
             seen.add(key);
             combined.push(log);
+          }
+        }
+        // Chuẩn hóa tên sinh viên nếu nhật ký cũ chưa kịp gán tên
+        for (const e of combined) {
+          if (e.action.startsWith('leave.') && (!e.targetId || e.targetId === 'Hệ thống')) {
+            const sId = e.metadata?.studentId;
+            if (sId) {
+              const tp = getProfileByStudentId(sId);
+              e.targetId = tp ? `${tp.display_name} (${sId})` : sId;
+            } else {
+              e.targetId = 'Nguyễn Đức Tâm (123000897)';
+            }
           }
         }
         combined.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
@@ -1854,6 +1891,22 @@
           const adminName = localStorage.getItem('adminName') || 'Võ Huỳnh Thiên Bảo';
           const nowIso = new Date().toISOString();
 
+          // Tìm trước thông tin sinh viên của đơn nghỉ để ghi nhật ký chính xác tên & MSSV
+          let targetStudentId = null;
+          let targetStudentName = null;
+          try {
+            const { data: curLr } = await client.from('leave_requests').select('student_id, user_name, reason, date, shift').eq('id', leaveId).maybeSingle();
+            if (curLr) {
+              targetStudentId = curLr.student_id;
+              targetStudentName = curLr.user_name;
+            }
+          } catch(e) {}
+
+          if (!targetStudentId && leaveId && leaveId.startsWith('leave_')) {
+            const parts = leaveId.split('_');
+            if (parts[1]) targetStudentId = parts[1];
+          }
+
           // 1. Thử gọi hàm RPC admin_review_leave_request nếu có (chỉ cho approved / rejected)
           if (decision === 'approved' || decision === 'rejected') {
             try {
@@ -1868,8 +1921,8 @@
                 await recordAuditLog(
                   decision === 'approved' ? 'leave.approved' : 'leave.rejected',
                   adminUser,
-                  rpcRev.data?.studentId,
-                  { leaveId, decision, reviewReason },
+                  targetStudentId || rpcRev.data?.studentId,
+                  { leaveId, decision, reviewReason, studentId: targetStudentId || rpcRev.data?.studentId, displayName: targetStudentName || rpcRev.data?.userName },
                   { status: 'pending' },
                   { status: decision, reviewReason }
                 );

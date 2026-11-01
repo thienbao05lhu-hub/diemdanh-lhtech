@@ -29,20 +29,12 @@
     list.replaceChildren();
     for (const event of events) {
       const card = document.createElement('article');
-      card.className = 'p-3 rounded-xl border border-slate-800 bg-slate-950/50 space-y-2';
-      card.append(text('p', `${labels[event.action] || event.action} · ${event.targetId || 'Hệ thống'}`, 'text-xs font-semibold text-slate-100'));
+      card.className = 'p-3 rounded-xl border border-slate-800 bg-slate-950/50 space-y-1.5 transition-all hover:border-slate-700';
+      const targetLabel = (event.targetId && event.targetId !== 'Hệ thống') ? ` · ${event.targetId}` : '';
+      card.append(text('p', `${labels[event.action] || event.action}${targetLabel}`, 'text-xs font-semibold text-slate-100'));
       const time = new Date(event.createdAt).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' });
       card.append(text('p', `${time} · Người thực hiện: ${event.actorId}`, 'text-[11px] text-slate-400'));
       if (event.reason) card.append(text('p', `Lý do: ${event.reason}`, 'text-xs text-slate-300 break-words'));
-      if (event.before || event.after || event.metadata) {
-        const details = document.createElement('details');
-        details.className = 'text-[11px] text-slate-400';
-        details.append(text('summary', 'Xem dữ liệu trước và sau', 'cursor-pointer py-1'));
-        const pre = text('pre', JSON.stringify({ before: event.before, after: event.after, metadata: event.metadata }, null, 2),
-          'mt-2 whitespace-pre-wrap break-words max-h-72 overflow-auto rounded-lg bg-slate-900 p-3 text-slate-300');
-        details.append(pre);
-        card.append(details);
-      }
       list.append(card);
     }
   }
