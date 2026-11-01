@@ -11,9 +11,10 @@
   <script defer src="js/config.js?v=20261101-safe-read"></script>
   <script defer src="js/auth.js?v=20261101-qr1"></script>
   <script defer src="vendor/html5-qrcode.min.js"></script>
-  <script defer src="js/checkin.js?v=20261101-qr1"></script>
+  <script defer src="js/checkin.js?v=20261101-leaves1"></script>
   <script defer src="js/schedule-utils.js"></script>
   <script defer src="js/student-schedule.js"></script>
+  <script defer src="js/student-leaves.js?v=20261101-leaves1"></script>
 </head>
 <body>
   <header class="topbar">
@@ -53,6 +54,20 @@
         <button id="load-student-week" class="secondary" style="margin-top:12px">Xem lịch tuần</button>
         <p id="student-week-range"></p><p id="student-week-status" class="status" role="status"></p>
         <div id="student-week-grid" class="table-scroll"></div>
+      </section>
+      <section id="student-leaves-panel" class="panel" style="padding:24px;margin-bottom:20px" hidden aria-labelledby="leave-title">
+        <div class="page-heading"><h2 id="leave-title">Xin nghỉ phép</h2><button id="reload-leaves" class="secondary">Tải lại đơn</button></div>
+        <p id="leave-availability" role="status">Đang kiểm tra quyền gửi đơn…</p>
+        <form id="leave-form">
+          <label for="my-leave-date">Ngày xin nghỉ</label><input id="my-leave-date" type="date" required disabled>
+          <label for="my-leave-shift" style="margin-top:12px">Ca xin nghỉ</label>
+          <select id="my-leave-shift" required disabled><option>Sáng</option><option>Chiều</option><option>Tối</option></select>
+          <label for="my-leave-reason" style="margin-top:12px">Lý do (tối đa 500 ký tự)</label>
+          <textarea id="my-leave-reason" rows="3" maxlength="500" required disabled></textarea>
+          <button id="send-leave" type="submit" class="primary" style="margin-top:12px" disabled>Gửi đơn xin nghỉ</button>
+        </form>
+        <p id="my-leave-status" class="status" role="status" aria-live="polite"></p>
+        <p id="my-leaves-summary" class="muted"></p><div id="my-leaves-list"></div>
       </section>
       <section class="panel" style="padding:24px" aria-labelledby="history-title">
         <div class="page-heading"><h2 id="history-title">Lịch sử của tôi</h2><button id="reload-history" class="secondary">Tải lại</button></div>

@@ -91,6 +91,13 @@ language sql stable security invoker set search_path='' as $$
     and (p_now at time zone 'Asia/Ho_Chi_Minh')::time<s.end_time;
 $$;
 
+-- Khóa ca cả khi chưa có session, dùng chung với nghiệp vụ nghỉ phép.
+create or replace function private.lock_attendance_slot(p_date date,p_shift text) returns void
+language sql volatile security invoker set search_path='' as $$
+  select pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended('lhtech.attendance:'||(p_date-date '2000-01-01')::text||':'||p_shift,0));
+$$;
+revoke all on function private.lock_attendance_slot(date,text) from public,anon,authenticated;
+
 create or replace function private.register_my_device(p_device_token text)
 returns jsonb language plpgsql security definer set search_path='' as $$
 declare actor uuid:=auth.uid(); h text; old_hash text; legacy text;
@@ -129,6 +136,7 @@ begin
   n:=private.qr_server_now();
   select * into w from private.attendance_window(n);
   if not found then raise exception 'APP_OUTSIDE_WINDOW'; end if;
+  perform private.lock_attendance_slot(w.business_date,w.shift);
   insert into private.qr_sessions(business_date,shift,starts_at,ends_at)
     values(w.business_date,w.shift,w.starts_at,w.ends_at) on conflict(business_date,shift) do nothing returning id into new_id;
   select * into s from private.qr_sessions where business_date=w.business_date and shift=w.shift for update;
@@ -172,6 +180,8 @@ begin
     and token_hash=encode(sha256(convert_to(p_device_fingerprint,'UTF8')),'hex')) then raise exception 'APP_DEVICE_MISMATCH'; end if;
   select * into c from private.qr_challenges where token_hash=encode(sha256(convert_to(p_qr_token,'UTF8')),'hex');
   if not found then raise exception 'APP_INVALID_QR'; end if;
+  perform private.lock_attendance_slot((select business_date from private.qr_sessions where id=c.session_id),
+    (select shift from private.qr_sessions where id=c.session_id));
   select * into s from private.qr_sessions where id=c.session_id for update;
   n:=private.qr_server_now();
   select * into w from private.attendance_window(n);
@@ -207,6 +217,7 @@ begin
   if not found then raise exception 'APP_FORBIDDEN'; end if;
   if p_date is null or not isfinite(p_date) or p_shift is null or p_shift not in ('Sáng','Chiều','Tối')
     or length(btrim(coalesce(p_reason,''))) not between 1 and 500 then raise exception 'APP_INVALID_INPUT'; end if;
+  perform private.lock_attendance_slot(p_date,p_shift);
   select * into s from private.qr_sessions where business_date=p_date and shift=p_shift for update;
   if not found then raise exception 'APP_SESSION_NOT_FOUND'; end if;
   if s.closed_at is null then
@@ -277,7 +288,7 @@ begin
     left join public.profiles p on p.id=a.profile_id
   )
   select coalesce(jsonb_agg(jsonb_build_object('profileId',r.profile_id,'userId',r.student_id,'userName',r.display_name,
-    'department','','shift',p_shift,'status',coalesce(r.status,'Chưa điểm danh'),'timestamp',r.scanned_at,
+    'department','','shift',p_shift,'status',coalesce(r.status,'Chưa điểm danh'),'timestamp',case when r.status in ('Có mặt','Đi trễ') then r.scanned_at else null end,
     'inSchedule',r.expected,'isLocked',coalesce(r.is_locked,false),'note',coalesce(r.note,''),'reason',coalesce(r.note,''))
     order by r.student_id),'[]') into result from rows r;
   return jsonb_build_object('date',p_date,'shift',p_shift,'sessionId',s.id,'records',result,

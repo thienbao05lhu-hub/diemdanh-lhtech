@@ -46,10 +46,31 @@
         APP_SESSION_CLOSED: 'Ca này đã chốt, không thể mở lại mã QR.',
         APP_SESSION_NOT_FOUND: 'Ca này chưa mở phiên QR.',
         APP_FORBIDDEN: 'Tài khoản không có quyền thực hiện thao tác này.',
+        APP_INVALID_INPUT: 'Thông tin gửi lên chưa hợp lệ.',
+        APP_LEAVE_STALE: 'Đơn đã được xử lý ở nơi khác. Tải lại danh sách trước khi quyết định.',
+        APP_LEAVE_REASON_REQUIRED: 'Cần nhập lý do khi từ chối hoặc hủy duyệt.',
+        APP_LEAVE_SELF_REVIEW: 'Bạn không được tự xét duyệt đơn của mình.',
+        APP_LEAVE_ATTENDANCE_CONFLICT: 'Điểm danh đã có thay đổi hoặc đã có mặt. Không thay đổi đơn và điểm danh.',
+        APP_LEAVE_RECOVERY_REQUIRED: 'Đơn cũ cần đối chiếu dữ liệu trước khi xử lý; chưa có thay đổi được lưu.',
+        APP_LEAVE_OWNERSHIP: 'Đơn cũ chưa khớp hồ sơ. Cần đối chiếu trước khi xử lý.',
+        APP_LEAVE_TRANSITION: 'Quyết định không phù hợp với trạng thái hiện tại của đơn.',
+        APP_LEAVE_NOT_FOUND: 'Không tìm thấy đơn nghỉ.',
+        APP_SHIFT_LOCKED: 'Ca đã chốt hoặc đã hết giờ. Không được thay đổi đơn nghỉ.',
       };
       for (const [code,text] of Object.entries(errors)) if (String(result.error.message).includes(code)) fail(409,text);
     }
     return checked(result);
+  }
+  async function leaveCapabilities() {
+    const result = await client.rpc('get_leave_capabilities');
+    if (result.error && ['PGRST202','42501'].includes(result.error.code)) {
+      root.dispatchEvent(new CustomEvent('leave-capability', { detail: { leaveEnabled: false } }));
+      return null;
+    }
+    const data = checked(result);
+    if (!data || data.version !== 1 || typeof data.leaveEnabled !== 'boolean') fail(503,'Chưa xác minh được quyền xử lý đơn nghỉ.');
+    root.dispatchEvent(new CustomEvent('leave-capability', { detail: { leaveEnabled: data.leaveEnabled } }));
+    return data;
   }
   async function identity(admin = true) {
     const result = await client.auth.getUser();
@@ -101,7 +122,8 @@
     return { id: row.id, userId: row.student_id, userName: row.user_name,
       department: row.department || '', date: row.date, shift: row.shift, reason: row.reason,
       status: row.status, reviewedBy: row.reviewed_by, reviewedByName: row.reviewed_by_name,
-      reviewedAt: row.reviewed_at, reviewReason: row.review_reason, createdAt: row.created_at };
+      reviewedAt: row.reviewed_at, reviewReason: row.review_reason, createdAt: row.created_at,
+      profileId: row.profile_id, revision: Number.isSafeInteger(row.revision) ? row.revision : null };
   }
   function shiftRows(shift, stamp, schedules, records) {
     const dayKey = ['cn','t2','t3','t4','t5','t6','t7'][date(stamp).getUTCDay()];
@@ -138,6 +160,21 @@
     // Quyền được xác minh từ Auth + profile cho mỗi request; không tin storage hiển thị.
     const current = await identity(path !== '/api/leaves/mine');
     if (path === '/api/admin/verify' || path === '/api/admin/check') return response(sessionReply(current));
+    const reviewMatch = /^\/api\/leaves\/([0-9a-f-]{36})\/review$/.exec(path);
+    if (reviewMatch && method === 'POST') {
+      const caps = await leaveCapabilities();
+      if (!caps?.leaveEnabled || !caps.canReview) return response({ success: false, message: maintenance }, 503);
+      const body = JSON.parse(options.body || '{}');
+      if (!Number.isSafeInteger(body.expectedRevision) || body.expectedRevision < 1
+        || !['approved','rejected','pending'].includes(body.decision) || typeof body.reason !== 'string') fail(400,'Quyết định chưa hợp lệ.');
+      const result = await qrRpc('admin_decide_leave_request', { p_leave_id: reviewMatch[1],
+        p_decision: body.decision, p_reason: body.reason, p_expected_revision: body.expectedRevision });
+      if (result?.success !== true || result.data?.id !== reviewMatch[1] || result.data?.status !== body.decision
+        || result.data?.revision !== body.expectedRevision + 1) fail(503,'Chưa xác nhận được kết quả. Tải lại danh sách trước khi thử lại.');
+      return response({ success: true, message: body.decision === 'approved' ? 'Đã chấp thuận đơn nghỉ.'
+        : body.decision === 'rejected' ? 'Đã từ chối đơn nghỉ.' : 'Đã hủy duyệt; dữ liệu điểm danh được đối chiếu trước khi hoàn tác.',
+        data: publicLeave(result.data) });
+    }
     if (path === '/api/get-qr-token' && method === 'GET') {
       const caps = await qrCapabilities();
       if (!caps?.qrEnabled) return response({ success: false, message: maintenance }, 503);
@@ -262,10 +299,13 @@
       if (!Number.isSafeInteger(page) || page < 1 || page > 10000 || !Number.isSafeInteger(limit) || limit < 1 || limit > 100) fail(400, 'Phân trang không hợp lệ.');
       let q = client.from('leave_requests').select('*', { count: 'exact' });
       const status = url.searchParams.get('status');
+      if (status && !['pending','reviewing','approved','rejected','all'].includes(status)) fail(400,'Trạng thái lọc không hợp lệ.');
+      const caps = await leaveCapabilities();
       if (status && status !== 'all') q = q.eq('status', status);
-      const result = await q.order('created_at', { ascending: false }).range((page-1)*limit, page*limit-1);
+      const result = await q.order('created_at', { ascending: false }).order('id', { ascending: false }).range((page-1)*limit, page*limit-1);
       const rows = checked(result) || [], total = result.count || 0;
-      return response({ success: true, data: rows.map(publicLeave), total, page, pages: Math.max(1,Math.ceil(total/limit)) });
+      return response({ success: true, data: rows.map(publicLeave), total, page, pages: Math.max(1,Math.ceil(total/limit)),
+        leaveEnabled: caps?.leaveEnabled === true, canReview: caps?.canReview === true, profileId: current.id });
     }
     if (path === '/api/admin/audit-logs') {
       const page = Number(url.searchParams.get('page') || 1), limit = 20;

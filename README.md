@@ -1,3 +1,9 @@
+## Cập nhật xin nghỉ/xét duyệt — chờ áp dụng SQL mới
+
+Chủ project đã xác nhận chạy SQL QR và gửi kết quả ACL/RLS đúng. Bản mới bổ sung đơn nghỉ theo Auth UID và xét duyệt bằng số phiên bản; chưa chạy SQL nghỉ trên Supabase thay người dùng. Đọc [hướng dẫn](maintenance/safe-leaves.md), chạy toàn bộ [restore-safe-leaves.sql](maintenance/restore-safe-leaves.sql) rồi [check-safe-leaves.sql](maintenance/check-safe-leaves.sql). Không cần chạy lại SQL QR hay các installer PWA cũ.
+
+Trước khi SQL mới có hiệu lực, form/nút duyệt vẫn khóa; đơn cũ vẫn đọc theo RLS. Sau khi bật, gửi đơn chỉ tạo chờ duyệt, xét duyệt không ghi đè có mặt/ca khóa và hủy duyệt có đối chiếu nguồn gốc. Sửa điểm danh thủ công, LHU, Zalo, ESP32 và đánh vắng tự động chưa hoàn tất. Phần QR/nghỉ vẫn cần nghiệm thu thật; các ghi chú phía dưới thuộc giai đoạn trước.
+
 ## Cập nhật QR có kiểm soát — 01/11/2026
 
 Đã có giao diện Auth/thiết bị/QR mới, Admin chốt phiên và mở khóa thiết bị. Chỉ bật sau khi chủ project chạy toàn bộ [restore-safe-qr.sql](maintenance/restore-safe-qr.sql) trên Supabase đã áp dụng containment. Nếu chưa chạy hoặc RPC bị khóa, giao diện giữ chế độ tạm dừng. Đọc [hướng dẫn nghiệm thu](maintenance/safe-qr.md) và [SQL kiểm tra quyền](maintenance/check-safe-qr.sql).

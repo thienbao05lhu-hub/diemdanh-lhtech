@@ -1,3 +1,7 @@
+## Bước sau QR: xin nghỉ và xét duyệt
+
+Đã chạy QR thì chỉ cần chạy `restore-safe-leaves.sql` cho bước mới, sau đó kiểm tra `check-safe-leaves.sql`. Xem `safe-leaves.md`. Không chạy lại các installer mở quyền cũ. Bản containment hiện tại khóa cả các RPC nghỉ mới nếu cần dừng ghi.
+
 ## Bước tiếp theo: QR an toàn
 
 Chạy `restore-safe-qr.sql` sau containment, rồi `check-safe-qr.sql`. Xem `safe-qr.md` để thử với tài khoản riêng. Chưa chạy SQL mới thì giao diện không bật QR. Không chạy lại installer PWA mở quyền cũ. Bản `security-containment.sql` mới cũng khóa đăng ký thiết bị/chốt ca/QR/reset khi cần dừng ghi.

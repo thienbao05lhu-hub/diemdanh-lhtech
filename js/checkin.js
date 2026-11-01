@@ -80,7 +80,7 @@
       if (!Array.isArray(rows)) throw new Error('Invalid history response');
       for (const row of rows) {
         const tr = document.createElement('tr');
-        const stamp = row.scannedAt ? new Date(row.scannedAt) : null;
+        const stamp = ['Có mặt','Đi trễ'].includes(row.status) && row.scannedAt ? new Date(row.scannedAt) : null;
         const time = stamp && Number.isFinite(stamp.getTime())
           ? stamp.toLocaleTimeString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }) : '—';
         for (const value of [row.date, row.shift, row.status, time]) {
