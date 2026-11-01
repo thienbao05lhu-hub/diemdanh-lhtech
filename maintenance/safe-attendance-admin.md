@@ -5,7 +5,7 @@ Giữ nguyên giao diện tối đã chốt: không thêm nút, form, panel ho�
 ## Cập nhật database
 
 1. Sao lưu trước khi thay đổi. Mở SQL Editor của project `oalnswbnjhkkovxjxtlz` bằng tài khoản chủ.
-2. Đã áp dụng QR 100. Nếu chưa chạy `artifacts/restore-safe-leaves.sql`, chạy toàn bộ file đó trước. Chưa có xác nhận người dùng đã áp dụng 110 trong phiên này; không bỏ qua điều kiện này.
+2. Đã áp dụng QR 100. Nếu chưa chạy `artifacts/restore-safe-leaves.sql`, chạy toàn bộ file đó trước. Cập nhật 01/11/2026: chủ project đã xác nhận chạy thành công 120; preflight của 120 kiểm tra điều kiện 110. Không cần chạy lại nếu đã hoàn tất.
 3. Chạy toàn bộ `artifacts/restore-safe-attendance-admin.sql`, bản sao đúng của `supabase/schemas/120_safe_attendance_admin.sql`. Không sửa UID hoặc mật khẩu. Thành công trả: **Đã bật chỉnh trạng thái và hủy quét an toàn. LHU, Zalo và reset hàng loạt vẫn tạm khóa.**
 4. Chạy từng SELECT trong `supabase/diagnostics/check-safe-attendance-admin.sql`. Bảng public vẫn không ghi trực tiếp; private không đọc/ghi từ client; anonymous không có quyền. RPC legacy vẫn tắt. Hai trigger version phải đang hoạt động.
 5. Tải lại Admin rồi tải lại bảng điểm danh trước khi thao tác. Trước khi SQL có hiệu lực, nút cũ vẫn báo chờ cập nhật, không có thành công giả. Không chạy lại các installer PWA mở quyền cũ.

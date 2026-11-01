@@ -6,6 +6,7 @@
   const el = id => document.getElementById(id);
   const labels = { pending: 'Chờ duyệt', reviewing: 'Cần đối chiếu', approved: 'Đã chấp thuận', rejected: 'Đã từ chối' };
   let page = 1, total = 0, generation = 0, loading = false, deciding = false;
+  const draftReasons = new Map();
   const authenticated = () => Boolean(root.AdminAuth?.isAuthenticated());
   function node(tag, className, text) {
     const element = document.createElement(tag);
@@ -34,6 +35,13 @@
       const input = node('textarea', 'mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-teal-400');
       input.rows = 2;
       input.maxLength = 500;
+      const draft = draftReasons.get(request.id);
+      if (draft?.revision === request.revision) input.value = draft.value;
+      else draftReasons.delete(request.id);
+      input.addEventListener('input', () => {
+        if (input.value) draftReasons.set(request.id,{revision:request.revision,value:input.value});
+        else draftReasons.delete(request.id);
+      });
       input.id = `leaveReviewReason_${request.id}`;
       label.htmlFor = input.id;
       const actions = node('div', 'flex gap-2 flex-wrap');
@@ -111,6 +119,7 @@
       const result = await response.json();
       if (version !== generation || !authenticated()) return;
       if (!response.ok || result.success !== true) throw new Error(result.message || 'Chưa nhận được kết quả. Tải lại danh sách trước khi thử lại.');
+      draftReasons.delete(request.id);
       toast('success', result.message);
       if (typeof root.fetchTodayAttendance === 'function') void root.fetchTodayAttendance();
       if (typeof root.fetchPersonalStats === 'function') void root.fetchPersonalStats();
@@ -125,11 +134,11 @@
   el('leaveRequestsPrev').addEventListener('click', () => { if (!loading && page > 1) { page--; void load(); } });
   el('leaveRequestsNext').addEventListener('click', () => { if (!loading && page * 25 < total) { page++; void load(); } });
   document.addEventListener('admin-auth-changed', event => {
-    generation++;
+    generation++; draftReasons.clear();
     if (event.detail.authenticated) void load(true);
     else { el('leaveRequestsList').replaceChildren(); notice('Đăng nhập Admin để xem đơn nghỉ.'); }
   });
-  setInterval(() => { if (!document.hidden && !section.contains(document.activeElement)) void load(); }, 30000);
-  root.LeaveRequestsUI = Object.freeze({ loadAdmin: load });
+  setInterval(() => { if (!root.AdminLiveRefresh && !document.hidden && !section.contains(document.activeElement)) void load(); }, 30000);
+  root.LeaveRequestsUI = Object.freeze({ loadAdmin: load, isBusy: () => loading || deciding });
   void load();
 })(globalThis);

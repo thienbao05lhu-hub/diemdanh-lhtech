@@ -171,7 +171,7 @@
   }
 
   window.ScheduleSyncUI = {
-    start, isBusy, updateControls,
+    start, isBusy, updateControls, isManualSaveActive: () => manualSaves > 0,
     beginManualSave() { manualSaves += 1; updateControls(); },
     endManualSave() { manualSaves = Math.max(0, manualSaves - 1); updateControls(); },
   };

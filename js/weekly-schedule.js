@@ -132,6 +132,7 @@
     }
   }
 
-  window.WeeklyScheduleUI = { selectedWeek: () => selected, updateMetadata, openHistory };
+  window.WeeklyScheduleUI = { selectedWeek: () => selected, updateMetadata, openHistory,
+    hasUnsavedChanges: () => unsavedScheduleUserIds.size > 0 };
   updateMetadata();
 })();

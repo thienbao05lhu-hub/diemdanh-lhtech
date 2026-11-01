@@ -1,3 +1,7 @@
+## Bước hiện tại: cập nhật tự động Admin
+
+Chủ project đã xác nhận SQL 120 chạy thành công; điều kiện 110 được kiểm tra trong 120. Không cần chạy lại các bước đó. Chạy toàn bộ `enable-live-refresh.sql`, rồi từng SELECT của `check-live-refresh.sql`. Đọc `live-refresh.md` để thử quét, kết nối lại và giữ bản nháp trên giao diện tối hiện có. Bước 130 này đang chuẩn bị, chưa được áp dụng vào Supabase từ công cụ. Các ghi chú trạng thái bên dưới thuộc những bước trước.
+
 ## Sau bước nghỉ: chỉnh điểm danh Admin an toàn
 
 Nếu chưa chạy SQL nghỉ, chạy `restore-safe-leaves.sql` trước. Sau đó chạy `restore-safe-attendance-admin.sql`, kiểm tra `check-safe-attendance-admin.sql` và đọc `safe-attendance-admin.md`. Không chạy lại installer mở quyền cũ. Giao diện tối giữ nguyên; nút cũ chỉ sửa khi có snapshot/phiên bản mới hợp lệ. Chưa có xác nhận SQL 110/120 đã chạy thật.

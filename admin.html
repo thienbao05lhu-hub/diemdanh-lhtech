@@ -1670,11 +1670,17 @@
       fetchTodayAttendance();
     }
 
+    let adminReadGeneration = 0, todayReadVersion = 0, statsReadVersion = 0;
+    document.addEventListener('admin-auth-changed', () => { adminReadGeneration++; todayReadVersion++; statsReadVersion++; });
     // Lấy dữ liệu điểm danh ca hôm nay từ /api/attendance/today
     async function fetchTodayAttendance() {
+      const readGeneration = adminReadGeneration;
+      const requestedShift = currentViewingShift;
+      const readVersion = ++todayReadVersion;
       try {
-        const res = await fetch(`/api/attendance/today?shift=${encodeURIComponent(currentViewingShift)}`);
+        const res = await fetch(`/api/attendance/today?shift=${encodeURIComponent(requestedShift)}`);
         const result = await res.json();
+        if (readGeneration !== adminReadGeneration || !window.AdminAuth?.isAuthenticated() || readVersion !== todayReadVersion || requestedShift !== currentViewingShift) return;
         if (result.success) {
           currentAttendanceTodayData = result.data || [];
 
@@ -1717,10 +1723,12 @@
 
     // 2. Lấy dữ liệu sinh viên, điểm danh, lịch học và thống kê chuyên cần
     async function fetchAllData() {
+      const readGeneration = adminReadGeneration;
       try {
         // Lấy danh sách SV
         const resUsers = await fetch('/api/users');
         const users = await resUsers.json();
+        if (readGeneration !== adminReadGeneration || !window.AdminAuth?.isAuthenticated()) return;
         if (users.success) {
           document.getElementById('totalUsers').innerText = users.count || users.data.length;
           renderUsers(users.data);
@@ -2125,11 +2133,14 @@
     let rawPersonalStats = [];
 
     async function fetchPersonalStats() {
+      const readGeneration = adminReadGeneration;
+      const readVersion = ++statsReadVersion;
       try {
         const res = await fetch('/api/attendance/stats/all', {
           headers: getAdminHeaders(),
         });
         const result = await res.json();
+        if (readGeneration !== adminReadGeneration || !window.AdminAuth?.isAuthenticated() || readVersion !== statsReadVersion) return;
         if (result.success) {
           rawPersonalStats = result.data || [];
           renderPersonalStats(rawPersonalStats);
@@ -2248,11 +2259,13 @@
     // QUẢN LÝ LỊCH LÊN XƯỞNG MẶC ĐỊNH (T2 -> CN, Ca Sáng / Ca Chiều)
     // ==============================================================
     async function fetchScheduleList() {
+      const readGeneration = adminReadGeneration;
       if (unsavedScheduleUserIds.size > 0) return true;
       const requestedWeek = window.WeeklyScheduleUI?.selectedWeek();
       try {
         const res = await fetch(`/api/schedule${requestedWeek ? '?week=' + encodeURIComponent(requestedWeek) : ''}`, { headers: getAdminHeaders(), cache: 'no-store' });
         const result = await res.json();
+        if (readGeneration !== adminReadGeneration || !window.AdminAuth?.isAuthenticated()) return;
         if (result.success) {
           if (requestedWeek && requestedWeek !== window.WeeklyScheduleUI?.selectedWeek()) return false;
           // Giữ bản nháp chưa lưu, kể cả khi một lượt lưu hàng loạt chỉ thành công một phần.
@@ -3464,17 +3477,18 @@
     fetchAllData();
 
     // ⭐ POLLING ĐỊNH KỲ:
-    // 1. Polling điểm danh hôm nay mỗi 3 giây
-    setInterval(fetchTodayAttendance, 3000);
-    // 2. Polling cập nhật thống kê chuyên cần cá nhân mỗi 6 giây
-    setInterval(fetchPersonalStats, 6000);
+    // 1. Dự phòng khi module cập nhật tự động chưa tải: điểm danh 15 giây
+    setInterval(() => { if (!window.AdminLiveRefresh && !document.hidden && window.AdminAuth?.isAuthenticated()) void fetchTodayAttendance(); }, 15000);
+    // 2. Dự phòng thống kê 30 giây; module mới quản lý lịch đọc khi hoạt động
+    setInterval(() => { if (!window.AdminLiveRefresh && !document.hidden && window.AdminAuth?.isAuthenticated()) void fetchPersonalStats(); }, 30000);
 
     // Lịch gửi đã tạm dừng trong giai đoạn giới hạn ghi.
   </script>
   <script src="js/admin-auth.js?v=20261101_04"></script>
-  <script src="js/weekly-schedule.js?v=20261101_04"></script>
-  <script src="js/schedule-sync.js?v=20261101_04"></script>
+  <script src="js/weekly-schedule.js?v=20261101-live1"></script>
+  <script src="js/schedule-sync.js?v=20261101-live1"></script>
   <script src="js/admin-tools.js?v=20261101_08"></script>
-  <script src="js/leave-requests.js?v=20261101-leaves1"></script>
+  <script src="js/leave-requests.js?v=20261101-live1"></script>
+  <script defer src="js/admin-live.js?v=20261101-live1"></script>
 </body>
 </html>

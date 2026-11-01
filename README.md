@@ -1,3 +1,9 @@
+## Cập nhật tự động Admin — SQL 120 đã được xác nhận, chuẩn bị SQL 130
+
+Chủ project xác nhận chạy thành công SQL chỉnh/hủy điểm danh 120 ngày 01/11/2026; preflight của 120 yêu cầu 110. Bước mới thêm tín hiệu Realtime và tải lại dữ liệu theo Auth/RLS, giữ nguyên giao diện tối đã chốt. Chạy [enable-live-refresh.sql](maintenance/enable-live-refresh.sql), kiểm tra [check-live-refresh.sql](maintenance/check-live-refresh.sql), rồi nghiệm thu theo [live-refresh.md](maintenance/live-refresh.md). SQL 130 chưa được công cụ áp dụng lên Supabase. Trước khi bật Realtime, web vẫn tải lại định kỳ khi có quyền.
+
+Các ghi chú cũ bên dưới mô tả trạng thái tại thời điểm từng bước; trạng thái mới nhất ở đoạn này. LHU, Zalo, reset hàng loạt, ESP32 và đánh vắng tự động vẫn chưa hoàn tất. Chưa nghiệm thu WebSocket/camera/phiên Auth thật bằng công cụ.
+
 ## Điều chỉnh điểm danh Admin — chờ áp dụng SQL 120
 
 Giữ nguyên các nút của giao diện tối, nối Đúng giờ / Xin phép / Hủy phép / Hủy quét với kiểm tra phiên bản tại database. Chỉ sửa đúng bản ghi đã xem, không sửa ca khóa/đã hết giờ, không tự sửa điểm danh của chính mình. Đơn nghỉ approved được xử lý qua luồng đơn nghỉ; CP thủ công có snapshot để hoàn tác đúng thay đổi. Dòng trống sau xóa cũng có phiên bản, không mặc định trở lại zero.
