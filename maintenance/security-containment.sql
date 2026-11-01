@@ -128,8 +128,7 @@ begin
     'private.admin_get_active_qr()', 'public.admin_get_active_qr()',
     'private.admin_get_shift_attendance(date,text)',
     'public.admin_get_shift_attendance(date,text)',
-    'private.admin_reset_device(uuid,text)', 'public.admin_reset_device(uuid,text)',
-    'private.get_my_attendance(integer)', 'public.get_my_attendance(integer)'
+    'private.admin_reset_device(uuid,text)', 'public.admin_reset_device(uuid,text)'
   ] loop
     v_oid := pg_catalog.to_regprocedure(v_signature);
     if v_oid is not null then
