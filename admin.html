@@ -9,8 +9,8 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
   <script src="vendor/qrcode.min.js"></script>
   <script src="vendor/supabase-2.118.0.js"></script>
-  <script src="js/config.js?v=20261101_01"></script>
-  <script src="js/supabase-api-bridge.js?v=20261101_01"></script>
+  <script src="js/config.js?v=20261101_02"></script>
+  <script src="js/supabase-api-bridge.js?v=20261101_02"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
     body { font-family: 'Plus Jakarta Sans', sans-serif; }
@@ -2984,18 +2984,32 @@
     // 5. Hàm Cấp quyền Admin (Dành cho Super Admin)
     async function handleGrantAdmin(targetUserId, targetUserName, isChangePass = false) {
       const promptMsg = isChangePass
-        ? `Nhập mật khẩu Admin MỚI cho [${targetUserName}] (${targetUserId}):`
-        : `Nhập mật khẩu Admin muốn cấp cho [${targetUserName}] (${targetUserId}):`;
+        ? `Nhập mật khẩu Admin MỚI cho [${targetUserName}] (${targetUserId}) (tối thiểu 6 ký tự):`
+        : `Nhập mật khẩu Admin muốn cấp cho [${targetUserName}] (${targetUserId}) (tối thiểu 6 ký tự):`;
       const newPassword = prompt(promptMsg);
-      if (!newPassword || !newPassword.trim()) return;
+      if (newPassword === null) return;
+      const cleanPw = newPassword.trim();
+      if (!cleanPw) {
+        showToast.warning('Vui lòng không để trống mật khẩu Admin!');
+        return;
+      }
+      if (cleanPw.length < 6) {
+        showToast.warning('Mật khẩu Admin phải có tối thiểu 6 ký tự!');
+        return;
+      }
 
       try {
         const res = await fetch('/api/admin/grant', {
           method: 'POST',
           headers: getAdminHeaders(),
-          body: JSON.stringify({ targetUserId, newPassword: newPassword.trim() }),
+          body: JSON.stringify({ targetUserId, newPassword: cleanPw }),
         });
         const data = await res.json();
+        if (res.status === 401) {
+          showToast.warning('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại!');
+          showAdminOverlay();
+          return;
+        }
         if (res.ok && data.success) {
           showToast.success(data.message || 'Cấp quyền Admin thành công!');
           fetchAllData();
@@ -3533,10 +3547,10 @@
       } catch (e) {}
     }, 15000);
   </script>
-  <script src="js/admin-auth.js?v=20261101_01"></script>
-  <script src="js/weekly-schedule.js?v=20261101_01"></script>
-  <script src="js/schedule-sync.js?v=20261101_01"></script>
-  <script src="js/admin-tools.js?v=20261101_01"></script>
-  <script src="js/leave-requests.js?v=20261101_01"></script>
+  <script src="js/admin-auth.js?v=20261101_02"></script>
+  <script src="js/weekly-schedule.js?v=20261101_02"></script>
+  <script src="js/schedule-sync.js?v=20261101_02"></script>
+  <script src="js/admin-tools.js?v=20261101_02"></script>
+  <script src="js/leave-requests.js?v=20261101_02"></script>
 </body>
 </html>
