@@ -1,3 +1,7 @@
+## Bước tiếp theo: QR an toàn
+
+Chạy `restore-safe-qr.sql` sau containment, rồi `check-safe-qr.sql`. Xem `safe-qr.md` để thử với tài khoản riêng. Chưa chạy SQL mới thì giao diện không bật QR. Không chạy lại installer PWA mở quyền cũ. Bản `security-containment.sql` mới cũng khóa đăng ký thiết bị/chốt ca/QR/reset khi cần dừng ghi.
+
 # Khóa quyền khẩn cấp cho bản Supabase đã chạy SQL cũ
 
 Ngày 01/11/2026, chủ dự án xác nhận đã chạy các SQL PWA/leave/audit trên Supabase thật. Vì vậy các quyền mở trong installer phải được xử lý tại database, không chỉ sửa giao diện hoặc push GitHub.

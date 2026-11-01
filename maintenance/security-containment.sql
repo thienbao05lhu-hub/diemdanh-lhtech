@@ -101,7 +101,8 @@ begin
         'admin_reset_device','get_my_attendance','student_submit_attendance',
         'admin_set_attendance_status','admin_set_user_role_and_password',
         'admin_verify_password','student_submit_leave_request','admin_review_leave_request',
-        'admin_force_new_qr','admin_update_week_schedule'
+        'admin_force_new_qr','admin_update_week_schedule',
+        'register_my_device','admin_close_attendance_session'
       ])
   loop
     execute format('revoke all on function %I.%I(%s) from public, anon, authenticated',
@@ -125,10 +126,8 @@ begin
     'public.admin_save_week_schedule(uuid,date,jsonb,integer,text)',
     'private.admin_rollback_week_schedule(uuid,date,integer,integer,text)',
     'public.admin_rollback_week_schedule(uuid,date,integer,integer,text)',
-    'private.admin_get_active_qr()', 'public.admin_get_active_qr()',
     'private.admin_get_shift_attendance(date,text)',
-    'public.admin_get_shift_attendance(date,text)',
-    'private.admin_reset_device(uuid,text)', 'public.admin_reset_device(uuid,text)'
+    'public.admin_get_shift_attendance(date,text)'
   ] loop
     v_oid := pg_catalog.to_regprocedure(v_signature);
     if v_oid is not null then

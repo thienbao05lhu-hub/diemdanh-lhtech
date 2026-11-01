@@ -1,269 +1,181 @@
-/**
- * Quét mã QR Điểm danh phía Sinh viên + Tự động khóa thiết bị chống điểm danh hộ
- */
+/* Điểm danh theo Auth UID; mọi quyết định giờ/ca/thiết bị thuộc database. */
 (function (root) {
   'use strict';
-
   const api = root.Attendance;
   if (!api) return;
-
-  const status = document.getElementById('page-status');
-  const content = document.getElementById('protected-content');
-  const retry = document.getElementById('retry-page');
-  const camStatus = document.getElementById('camera-status');
-  const resultCard = document.getElementById('scan-result-card');
-  const resultAlert = document.getElementById('scan-result-alert');
-
-  let html5QrScanner = null;
-  let isScanning = false;
-  let currentProfile = null;
-  let isSubmitting = false;
-
-  api.bindLogout(status);
-
-  // 1. Nhận diện và khóa cứng dấu vân tay thiết bị (Device Fingerprint)
-  function getDeviceFingerprint() {
-    let fp = root.localStorage.getItem('lhtech_device_fp');
-    if (!fp || fp.length < 10) {
-      const entropy = [
-        navigator.userAgent || '',
-        `${screen.width}x${screen.height}`,
-        Intl.DateTimeFormat().resolvedOptions().timeZone || '',
-        Math.random().toString(36).substring(2, 15),
-        Date.now().toString(36),
-      ].join('::');
-      try {
-        fp = 'dev_' + btoa(unescape(encodeURIComponent(entropy))).replace(/[^a-zA-Z0-9]/g, '').slice(0, 42);
-      } catch (e) {
-        fp = 'dev_' + Math.random().toString(36).slice(2) + Date.now();
-      }
-      if (fp.length < 12) {
-        fp = 'dev_' + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
-      }
-      root.localStorage.setItem('lhtech_device_fp', fp);
-    }
-    return fp;
+  const el = id => document.getElementById(id);
+  let current = null, capability = null, verified = false, busy = false;
+  let scanner = null, cameraOn = false, refreshing = false, deadline = 0;
+  const messages = {
+    APP_OUTSIDE_WINDOW: 'Đã ngoài giờ nhận điểm danh. Hãy quay lại trong ca.',
+    APP_SESSION_CLOSED: 'Phiên điểm danh đã chốt. Liên hệ quản trị viên nếu cần kiểm tra.',
+    APP_DEVICE_IN_USE: 'Trình duyệt này đã gắn với tài khoản khác.',
+    APP_DEVICE_MISMATCH: 'Thiết bị chưa khớp. Dùng trình duyệt đã đăng ký hoặc liên hệ quản trị viên để mở khóa.',
+  };
+  function errorText(error) {
+    for (const [code, text] of Object.entries(messages)) if (String(error?.message).includes(code)) return text;
+    return api.message(error);
   }
-
-  // 2. Gửi điểm danh lên Supabase RPC
-  async function submitAttendance(rawToken) {
-    if (isSubmitting) return;
-    isSubmitting = true;
-
-    // Trích xuất token nếu chuỗi quét là đường link (URL)
-    let token = (rawToken || '').trim();
-    if (token.includes('?')) {
-      try {
-        const u = new URL(token, root.location.origin);
-        token = u.searchParams.get('t') || u.searchParams.get('token') || token;
-      } catch (e) {}
+  function status(id, text, error = false) { api.setStatus(el(id), text, error); }
+  async function rpc(name, args) { return api.checkResult(await api.client.rpc(name, args)).data; }
+  function ready() {
+    return !busy && verified && capability?.qrEnabled === true && capability?.canScan === true && performance.now() < deadline;
+  }
+  function controls() {
+    el('verify-device').disabled = busy || capability?.qrEnabled !== true;
+    el('start-camera').disabled = !ready() || cameraOn;
+    el('submit-token').disabled = !ready();
+    el('qr-token').disabled = !ready();
+  }
+  function deviceToken() {
+    const key = 'lhtech_device_token_v2';
+    let value = root.localStorage.getItem(key);
+    if (value && value.length >= 10 && value.length <= 255) return value;
+    // Chỉ tái sử dụng khóa lưu ở trình duyệt; server kiểm tra nó với binding cũ.
+    value = root.localStorage.getItem('qr_device_id') || root.localStorage.getItem('lhtech_device_fp');
+    if (!value || value.length < 10 || value.length > 255) {
+      value = Array.from(root.crypto.getRandomValues(new Uint8Array(32)), n => n.toString(16).padStart(2, '0')).join('');
     }
-
-    const deviceFingerprint = getDeviceFingerprint();
-
-    showResult('info', 'Đang gửi thông tin điểm danh...');
-
+    root.localStorage.setItem(key, value);
+    return value;
+  }
+  async function stopCamera() {
+    if (scanner && cameraOn) {
+      cameraOn = false;
+      try { await scanner.stop(); await scanner.clear(); } catch (_) { /* Stop may already be complete. */ }
+    }
+    el('stop-camera').hidden = true;
+    controls();
+  }
+  async function capabilities() {
+    if (refreshing || !current) return;
+    refreshing = true;
+    const started = performance.now();
     try {
-      const res = await api.client.rpc('submit_attendance', {
-        p_qr_token: token,
-        p_device_fingerprint: deviceFingerprint,
-      });
-
-      if (res.error) {
-        const errCode = res.error.message || res.error.code;
-        if (errCode === 'APP_DEVICE_MISMATCH') {
-          showResult('error', '⚠️ THIẾT BỊ KHÔNG KHỚP: Tài khoản của bạn đã được gắn cố định với thiết bị khác để chống điểm danh hộ. Nếu bạn đổi điện thoại, hãy gặp giảng viên/quản trị viên để mở khóa thiết bị.');
-        } else if (errCode === 'APP_INVALID_QR') {
-          showResult('warning', '⏳ MÃ QR HẾT HẠN HOẶC SAI: Mã QR động được đổi mới mỗi 30 giây. Vui lòng quét lại mã đang hiển thị trên màn hình xưởng.');
-        } else if (errCode === 'APP_SHIFT_LOCKED') {
-          showResult('error', 'Ca điểm danh này đã được chốt và khóa sổ.');
-        } else {
-          showResult('error', api.message(res.error) || 'Lỗi điểm danh');
-        }
-      } else {
-        const d = res.data;
-        if (d && d.alreadyScanned) {
-          showResult('info', `ℹ️ ${d.message}`);
-        } else if (d && d.success) {
-          showResult('success', `✅ ${d.message} • Thời gian: ${new Date().toLocaleTimeString('vi-VN')}`);
-          // Rung điện thoại báo hiệu thành công nếu trình duyệt hỗ trợ
-          if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
-        } else {
-          showResult('success', 'Điểm danh thành công!');
-        }
-        loadMyHistory();
-      }
-    } catch (err) {
-      showResult('error', 'Không thể kết nối đến máy chủ. Vui lòng kiểm tra lại mạng.');
-    } finally {
-      isSubmitting = false;
-      // Chờ 3 giây trước khi cho phép quét tiếp
-      setTimeout(() => { isSubmitting = false; }, 3000);
-    }
+      const data = await rpc('get_attendance_capabilities');
+      if (!data || data.version !== 1 || data.profileId !== current.profile.id) throw new Error('Invalid capability response');
+      capability = data;
+      const remaining = Date.parse(data.window?.endsAt) - Date.parse(data.serverTime);
+      // Trừ cả thời gian request để không giữ nút bật quá cận server.
+      deadline = started + (Number.isFinite(remaining) ? Math.max(0, remaining) : 0);
+      if (!data.deviceBound) verified = false;
+      status('session-status', !data.qrEnabled ? 'Điểm danh đang tạm dừng để cập nhật.'
+        : !data.window ? 'Hiện ngoài giờ nhận điểm danh.'
+        : data.sessionClosed ? `Ca ${data.window.shift} đã chốt.`
+        : !data.sessionId ? `Ca ${data.window.shift}: đang chờ quản trị viên mở mã QR.`
+        : `Ca ${data.window.shift} đang nhận điểm danh.`);
+      if (!ready()) await stopCamera();
+    } catch (error) {
+      capability = null; deadline = 0;
+      status('session-status', error?.code === 'PGRST202' || error?.code === '42501'
+        ? 'Điểm danh đang chờ quản trị viên hoàn tất cập nhật.' : errorText(error), true);
+      await stopCamera();
+    } finally { refreshing = false; controls(); }
   }
-
-  function showResult(type, message) {
-    if (!resultCard || !resultAlert) return;
-    resultCard.hidden = false;
-    resultAlert.className = `scan-alert ${type}`;
-    resultAlert.textContent = message;
-    resultCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  }
-
-  // 3. Tải lịch sử điểm danh của bản thân
-  async function loadMyHistory() {
-    const body = document.getElementById('my-attendance-body');
-    const emptyNotice = document.getElementById('history-empty');
-    if (!body) return;
-
+  async function history() {
+    el('reload-history').disabled = true;
+    el('history-rows').replaceChildren();
     try {
-      const res = await api.client.rpc('get_my_attendance', { p_limit: 15 });
-      if (res.error) {
-        console.error('Lỗi tải lịch sử:', res.error);
-        return;
-      }
-
-      const rows = res.data || [];
-      body.innerHTML = '';
-
-      if (rows.length === 0) {
-        if (emptyNotice) emptyNotice.hidden = false;
-        return;
-      }
-      if (emptyNotice) emptyNotice.hidden = true;
-
-      rows.forEach(r => {
+      const rows = await rpc('get_my_attendance', { p_limit: 30 });
+      if (!Array.isArray(rows)) throw new Error('Invalid history response');
+      for (const row of rows) {
         const tr = document.createElement('tr');
-
-        // Ngày
-        const tdDate = document.createElement('td');
-        tdDate.textContent = r.date;
-        tr.appendChild(tdDate);
-
-        // Ca
-        const tdShift = document.createElement('td');
-        tdShift.textContent = `Ca ${r.shift}`;
-        tr.appendChild(tdShift);
-
-        // Trạng thái badge
-        const tdStatus = document.createElement('td');
-        const b = document.createElement('span');
-        b.className = 'badge';
-        if (r.status === 'Có mặt') b.classList.add('present');
-        else if (r.status === 'Đi trễ') b.classList.add('late');
-        else if (r.status === 'Vắng có phép') b.classList.add('excused');
-        else if (r.status === 'Vắng không phép') b.classList.add('unexcused');
-        b.textContent = r.status;
-        tdStatus.appendChild(b);
-        tr.appendChild(tdStatus);
-
-        // Giờ quét
-        const tdTime = document.createElement('td');
-        if (r.scannedAt) {
-          const d = new Date(r.scannedAt);
-          tdTime.textContent = d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-        } else {
-          tdTime.textContent = '—';
+        const stamp = row.scannedAt ? new Date(row.scannedAt) : null;
+        const time = stamp && Number.isFinite(stamp.getTime())
+          ? stamp.toLocaleTimeString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' }) : '—';
+        for (const value of [row.date, row.shift, row.status, time]) {
+          const td = document.createElement('td'); td.textContent = value || '—'; tr.append(td);
         }
-        tr.appendChild(tdTime);
-
-        body.appendChild(tr);
-      });
-    } catch (e) {
-      console.error('Ngoại lệ khi tải lịch sử:', e);
-    }
-  }
-
-  // 4. Khởi chạy Camera QR Scanner
-  function startCameraScanner() {
-    if (!root.Html5Qrcode) {
-      if (camStatus) camStatus.textContent = 'Trình duyệt chưa sẵn sàng mở camera.';
-      return;
-    }
-
-    if (html5QrScanner) {
-      try {
-        html5QrScanner.stop().catch(() => {}).finally(() => {
-          html5QrScanner = null;
-          isScanning = false;
-          if (camStatus) camStatus.textContent = 'Camera đã tắt.';
-        });
-      } catch (e) {}
-      return;
-    }
-
-    if (camStatus) camStatus.textContent = 'Đang bật camera… Hãy cấp quyền truy cập nếu được hỏi.';
-
-    html5QrScanner = new root.Html5Qrcode('qr-reader');
-    const qrConfig = { fps: 10, qrbox: { width: 250, height: 250 } };
-
-    html5QrScanner.start(
-      { facingMode: 'environment' },
-      qrConfig,
-      (decodedText) => {
-        // Quét thành công
-        if (!isSubmitting) {
-          submitAttendance(decodedText);
-        }
-      },
-      (error) => {
-        // Lỗi khung hình (bình thường khi chưa khớp QR)
+        el('history-rows').append(tr);
       }
-    ).then(() => {
-      isScanning = true;
-      if (camStatus) camStatus.textContent = 'Camera đang hoạt động. Hãy hướng vào mã QR.';
-    }).catch(err => {
-      isScanning = false;
-      html5QrScanner = null;
-      if (camStatus) {
-        camStatus.textContent = 'Không mở được camera (chưa cấp quyền hoặc không có thiết bị). Bạn có thể dùng ô nhập mã bên dưới.';
-      }
-    });
+      status('history-status', rows.length ? 'Tối đa 30 lần ghi nhận gần nhất.' : 'Chưa có dữ liệu điểm danh.');
+    } catch (error) { status('history-status', errorText(error), true); }
+    finally { el('reload-history').disabled = false; }
   }
-
-  // 5. Khởi tạo trang
-  async function init() {
-    api.setStatus(status, 'Đang xác thực tài khoản…');
-    if (retry) retry.hidden = true;
-
+  function parseToken(value) {
+    let token = String(value || '').trim();
+    if (!/^[a-f0-9]{32}$/.test(token)) {
+      try { const url = new URL(token); token = url.searchParams.get('t') || url.searchParams.get('token') || ''; }
+      catch (_) { token = ''; }
+    }
+    if (!/^[a-f0-9]{32}$/.test(token)) throw { message: 'APP_INVALID_QR' };
+    return token;
+  }
+  async function submit(value) {
+    if (!ready()) { status('scan-result', 'Hãy xác minh thiết bị và chờ phiên điểm danh mở.', true); return; }
+    busy = true; controls(); status('scan-result', 'Đang gửi điểm danh…');
     try {
-      const current = await api.requireIdentity();
-      if (!current) return;
-
-      currentProfile = current.profile;
-      document.getElementById('signed-in-name').textContent = `${currentProfile.displayName} (${currentProfile.studentId})`;
-      content.hidden = false;
-      api.setStatus(status);
-
-      // Bật camera
-      startCameraScanner();
-
-      // Nút bật/tắt camera
-      document.getElementById('btn-toggle-camera')?.addEventListener('click', startCameraScanner);
-
-      // Form nhập token thủ công
-      document.getElementById('manual-token-form')?.addEventListener('submit', (e) => {
-        e.preventDefault();
-        const input = document.getElementById('input-qr-token');
-        if (input && input.value) {
-          submitAttendance(input.value);
-        }
-      });
-
-      // Nút tải lại lịch sử
-      document.getElementById('btn-reload-history')?.addEventListener('click', loadMyHistory);
-
-      // Tải lịch sử ban đầu
-      loadMyHistory();
-
-    } catch (err) {
-      api.setStatus(status, api.message(err), true);
-      if (retry) retry.hidden = false;
-    }
+      const token = parseToken(value);
+      await stopCamera();
+      const identity = await api.identity();
+      if (!identity || identity.profile.id !== current.profile.id) throw { code: 'SESSION_CHANGED' };
+      const result = await rpc('submit_attendance', { p_qr_token: token, p_device_fingerprint: deviceToken() });
+      const data = result?.data;
+      if (result?.success !== true || data?.profileId !== current.profile.id || !data.id || !data.scannedAt
+        || !['Có mặt','Đi trễ'].includes(data.status)) throw new Error('Invalid attendance response');
+      status('scan-result', `${result.alreadyScanned ? 'Đã ghi nhận trước đó' : 'Điểm danh thành công'}: ca ${data.shift}, ${data.status}.`);
+      el('qr-token').value = '';
+      await history();
+    } catch (error) {
+      if (String(error?.message).includes('APP_DEVICE_')) verified = false;
+      status('scan-result', errorText(error), true);
+    } finally { busy = false; await capabilities(); controls(); }
   }
-
-  if (retry) retry.addEventListener('click', init);
-  init();
-
+  el('verify-device').addEventListener('click', async () => {
+    busy = true; verified = false; controls(); await stopCamera();
+    try {
+      const identity = await api.identity();
+      if (!identity || identity.profile.id !== current.profile.id) throw { code: 'SESSION_CHANGED' };
+      const result = await rpc('register_my_device', { p_device_token: deviceToken() });
+      if (result?.profileId !== current.profile.id || result.deviceVerified !== true) throw new Error('Invalid device response');
+      verified = true; status('device-status', 'Đã xác minh trình duyệt này.');
+    } catch (error) { status('device-status', errorText(error), true); }
+    finally { busy = false; controls(); }
+  });
+  el('token-form').addEventListener('submit', event => { event.preventDefault(); void submit(el('qr-token').value); });
+  el('start-camera').addEventListener('click', async () => {
+    if (!ready() || cameraOn) return;
+    el('start-camera').disabled = true;
+    try {
+      scanner ||= new root.Html5Qrcode('qr-reader');
+      await scanner.start({ facingMode: 'environment' }, { fps: 10, qrbox: { width: 220, height: 220 } },
+        text => { if (cameraOn && !busy) void submit(text); }, () => {});
+      cameraOn = true; el('stop-camera').hidden = false; status('camera-status', 'Đưa mã QR vào khung camera.');
+      if (!ready() || document.hidden) await stopCamera();
+    } catch (_) { status('camera-status', 'Không mở được camera. Kiểm tra quyền camera hoặc dán mã vừa quét vào ô bên dưới.', true); }
+    controls();
+  });
+  el('stop-camera').addEventListener('click', () => void stopCamera());
+  el('reload-history').addEventListener('click', () => void history());
+  el('retry-page').addEventListener('click', () => void init());
+  api.bindLogout(el('page-status'));
+  api.client.auth.onAuthStateChange(event => {
+    if (event === 'SIGNED_OUT' || event === 'SIGNED_IN') {
+      verified = false; capability = null; deadline = 0; void stopCamera();
+    }
+  });
+  async function init() {
+    el('retry-page').hidden = true;
+    try {
+      current = await api.requireIdentity(); if (!current) return;
+      el('current-user').textContent = `${current.profile.displayName} (${current.profile.studentId})`;
+      el('admin-link').hidden = !api.adminRoles.includes(current.profile.role);
+      el('protected-content').hidden = false; status('page-status', '');
+      const params = new URLSearchParams(root.location.search);
+      const token = params.get('t') || params.get('token');
+      if (token) { el('qr-token').value = token.slice(0, 2048); root.history.replaceState(null, '', root.location.pathname); }
+      await capabilities(); await history();
+    } catch (error) { status('page-status', errorText(error), true); el('retry-page').hidden = false; }
+  }
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) { verified = false; capability = null; void stopCamera(); }
+    else void capabilities();
+  });
+  setInterval(() => {
+    if (!document.hidden) {
+      controls(); if (performance.now() >= deadline && cameraOn) void stopCamera();
+    }
+  }, 1000);
+  setInterval(() => { if (!document.hidden) void capabilities(); }, 10000);
+  void init();
 })(globalThis);
-

@@ -1,3 +1,9 @@
+## Cập nhật QR có kiểm soát — 01/11/2026
+
+Đã có giao diện Auth/thiết bị/QR mới, Admin chốt phiên và mở khóa thiết bị. Chỉ bật sau khi chủ project chạy toàn bộ [restore-safe-qr.sql](maintenance/restore-safe-qr.sql) trên Supabase đã áp dụng containment. Nếu chưa chạy hoặc RPC bị khóa, giao diện giữ chế độ tạm dừng. Đọc [hướng dẫn nghiệm thu](maintenance/safe-qr.md) và [SQL kiểm tra quyền](maintenance/check-safe-qr.sql).
+
+QR chưa nghiệm thu trên Supabase/điện thoại thật; kiểm thử cục bộ dùng Auth/DOM mô phỏng. Duyệt nghỉ, sửa điểm danh, đồng bộ LHU, Zalo và ESP32 chưa được mở. Các ghi chú bên dưới mô tả các giai đoạn trước.
+
 # Điểm danh LHTech — frontend Supabase
 
 ## Cập nhật 01/11/2026: đang giới hạn ghi

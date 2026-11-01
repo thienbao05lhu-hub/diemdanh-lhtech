@@ -1,4 +1,4 @@
-/* Adapter chỉ đọc cho dashboard cũ trong thời gian khôi phục quyền ghi. */
+/* Dashboard cũ: chỉ đọc, cộng các RPC QR đã kiểm tra và có capability server. */
 (function (root) {
   'use strict';
   const config = root.ATTENDANCE_CONFIG;
@@ -27,6 +27,30 @@
       'Không đọc được dữ liệu từ Supabase. Hãy kiểm tra phiên đăng nhập và thử lại.');
     return result.data;
   }
+  async function qrCapabilities() {
+    const result = await client.rpc('get_attendance_capabilities');
+    if (result.error && ['PGRST202','42501'].includes(result.error.code)) {
+      root.dispatchEvent(new CustomEvent('attendance-capability', { detail: { qrEnabled: false } }));
+      return null;
+    }
+    const data = checked(result);
+    if (!data || data.version !== 1 || typeof data.qrEnabled !== 'boolean') fail(503, 'Chưa xác minh được trạng thái điểm danh.');
+    root.dispatchEvent(new CustomEvent('attendance-capability', { detail: { qrEnabled: data.qrEnabled } }));
+    return data;
+  }
+  async function qrRpc(name, args) {
+    const result = await client.rpc(name, args);
+    if (result.error) {
+      const errors = {
+        APP_OUTSIDE_WINDOW: 'Hiện ngoài giờ nhận điểm danh.',
+        APP_SESSION_CLOSED: 'Ca này đã chốt, không thể mở lại mã QR.',
+        APP_SESSION_NOT_FOUND: 'Ca này chưa mở phiên QR.',
+        APP_FORBIDDEN: 'Tài khoản không có quyền thực hiện thao tác này.',
+      };
+      for (const [code,text] of Object.entries(errors)) if (String(result.error.message).includes(code)) fail(409,text);
+    }
+    return checked(result);
+  }
   async function identity(admin = true) {
     const result = await client.auth.getUser();
     if (result.error || !result.data?.user) fail(401, 'Vui lòng đăng nhập bằng Supabase Auth.');
@@ -53,11 +77,11 @@
     fail(503, 'Dữ liệu vượt giới hạn tải của giao diện hiện tại. Cần bổ sung báo cáo phân trang.');
   }
   async function refreshProfiles() { profiles = await readAll('profiles', fields); return profiles; }
-  function today() {
+  function today(now = new Date()) {
     const p = Object.fromEntries(new Intl.DateTimeFormat('en-GB', {
       timeZone: 'Asia/Ho_Chi_Minh', year: 'numeric', month: '2-digit', day: '2-digit',
       hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
-    }).formatToParts(new Date()).map(part => [part.type, part.value]));
+    }).formatToParts(now).map(part => [part.type, part.value]));
     return { date: `${p.year}-${p.month}-${p.day}`, minutes: Number(p.hour) * 60 + Number(p.minute) };
   }
   function date(value) {
@@ -114,8 +138,32 @@
     // Quyền được xác minh từ Auth + profile cho mỗi request; không tin storage hiển thị.
     const current = await identity(path !== '/api/leaves/mine');
     if (path === '/api/admin/verify' || path === '/api/admin/check') return response(sessionReply(current));
+    if (path === '/api/get-qr-token' && method === 'GET') {
+      const caps = await qrCapabilities();
+      if (!caps?.qrEnabled) return response({ success: false, message: maintenance }, 503);
+      const data = await qrRpc('admin_get_active_qr');
+      if (!data || !/^[a-f0-9]{32}$/.test(data.token) || !data.expiresAt || !data.serverTime) fail(503,'Chưa nhận được mã QR hợp lệ.');
+      return response({ success: true, ...data });
+    }
+    if (method === 'POST' && ['/api/users/reset-device','/api/attendance/close-session'].includes(path)) {
+      const caps = await qrCapabilities();
+      if (!caps?.qrEnabled) return response({ success: false, message: maintenance }, 503);
+      const body = JSON.parse(options.body || '{}');
+      if (path === '/api/users/reset-device') {
+        await refreshProfiles();
+        const target = profiles.find(p => p.student_id === body.userId);
+        if (!target) fail(404,'Không tìm thấy hồ sơ.');
+        const data = await qrRpc('admin_reset_device', { p_profile_id: target.id, p_reason: body.reason || 'Quản trị viên xác nhận mở khóa thiết bị trên dashboard.' });
+        if (data?.success !== true || data.profileId !== target.id) fail(503,'Chưa xác nhận được kết quả mở khóa.');
+        return response({ success: true, message: 'Đã mở khóa thiết bị. Sinh viên cần xác minh lại trình duyệt.' });
+      }
+      date(body.date);
+      const data = await qrRpc('admin_close_attendance_session', { p_date: body.date, p_shift: body.shift, p_reason: body.reason });
+      if (data?.closed !== true) fail(503,'Chưa xác nhận được kết quả chốt ca.');
+      return response({ success: true, message: 'Đã chốt và khóa các bản ghi trong ca.', data });
+    }
     if (method !== 'GET') return response({ success: false, code: 'WRITE_MAINTENANCE', message: maintenance }, 503);
-    if (['/api/get-qr-token','/api/admin/sync-schedule','/api/schedule/sync'].includes(path)) {
+    if (['/api/admin/sync-schedule','/api/schedule/sync'].includes(path)) {
       return response({ success: false, code: 'WRITE_MAINTENANCE', message: maintenance }, 503);
     }
     if (path === '/api/leaves/mine') {
@@ -151,7 +199,28 @@
         revisions: (history || []).map(row => ({ ...row, actorId: profileLabel(row.actor_id), changedAt: row.created_at })) } });
     }
     if (path === '/api/attendance/today' || path === '/api/attendance/daily-summary') {
-      const clock = today(), selected = week(clock.date);
+      const caps = await qrCapabilities();
+      const clock = caps ? today(new Date(caps.serverTime)) : today(), selected = week(clock.date);
+      if (caps?.qrEnabled) {
+        const shift = url.searchParams.get('shift') || (clock.minutes < 720 ? 'Sáng' : clock.minutes < 1080 ? 'Chiều' : 'Tối');
+        if (!['Sáng','Chiều','Tối'].includes(shift)) fail(400,'Ca không hợp lệ.');
+        if (path.endsWith('/today')) {
+          const data = await qrRpc('admin_get_shift_attendance',{p_date:clock.date,p_shift:shift});
+          if (!Array.isArray(data?.records)) fail(503,'Chưa tải được danh sách phiên điểm danh.');
+          return response({success:true,...data,data:data.records});
+        }
+        const details = [];
+        for (const label of ['Sáng','Chiều','Tối']) {
+          const data = await qrRpc('admin_get_shift_attendance',{p_date:clock.date,p_shift:label});
+          if (!Array.isArray(data?.records)) fail(503,'Chưa tải đủ dữ liệu tổng kết.');
+          details.push(...data.records);
+        }
+        return response({ success:true,dateStr:clock.date.split('-').reverse().join('/'),
+          dayName:new Intl.DateTimeFormat('vi-VN',{weekday:'long',timeZone:'Asia/Ho_Chi_Minh'}).format(new Date(caps.serverTime)),
+          totalExpected:details.filter(r=>r.inSchedule).length,totalPresent:details.filter(r=>r.status==='Có mặt').length,
+          totalLate:details.filter(r=>r.status==='Đi trễ').length,totalExcused:details.filter(r=>r.status==='Vắng có phép').length,
+          totalUnexcused:details.filter(r=>r.status==='Vắng không phép').length,details });
+      }
       const schedules = await readAll('weekly_schedules','profile_id,schedule', { week_start: selected.start });
       const records = await readAll('attendance','profile_id,student_id,business_date,shift,status,scanned_at,is_locked,note', { business_date: clock.date });
       if (path.endsWith('/today')) {

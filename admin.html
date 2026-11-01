@@ -3,14 +3,14 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Dashboard Giám Sát — Điểm Danh QR Động (ESP32) & Zalo Bot</title>
+  <title>Quản trị điểm danh · LHTech</title>
   <meta http-equiv="Content-Security-Policy" content="default-src 'self' https: data: blob: 'unsafe-inline' 'unsafe-eval'; connect-src https://oalnswbnjhkkovxjxtlz.supabase.co wss://oalnswbnjhkkovxjxtlz.supabase.co https:; font-src https: data:; style-src 'self' 'unsafe-inline' https:; img-src 'self' data: blob: https:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https:;">
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
   <script src="vendor/qrcode.min.js"></script>
   <script src="vendor/supabase-2.118.0.js"></script>
   <script src="js/config.js?v=20261101-safe-read"></script>
-  <script src="js/supabase-read-api.js?v=20261101-safe-read"></script>
+  <script src="js/supabase-read-api.js?v=20261101-qr1"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
     body { font-family: 'Plus Jakarta Sans', sans-serif; }
@@ -326,11 +326,12 @@
         <!-- Khung vẽ QR động -->
         <div class="bg-white p-2.5 rounded-xl shadow-lg border border-slate-200 my-1">
           <div id="qrcodeCanvas"></div>
+          <button id="closeQrSession" type="button" onclick="handleCloseQrSession()" disabled class="mt-3 px-3 py-2 rounded-lg border border-rose-400 text-rose-300 text-xs disabled:opacity-50">Chốt ca đang mở</button>
         </div>
 
         <div class="mt-2">
           <p class="text-xs text-slate-400">Mã Token: <span id="currentQrTokenText" class="font-mono font-bold text-emerald-400 text-sm">---</span></p>
-          <p class="text-[10px] text-slate-500 mt-0.5">ESP32 gọi <code class="text-slate-400">/api/get-qr-token</code> mỗi 30s</p>
+          <p class="text-[10px] text-slate-500 mt-0.5">QR hiệu lực tối đa 30 giây trong giờ ca. ESP32 chờ bản tích hợp riêng.</p>
         </div>
       </div>
 
@@ -1452,44 +1453,72 @@
     }
     currentViewingShift = detectCurrentShift();
 
-    // 1. Quản lý lấy mã QR động mỗi 30s
-    async function updateDynamicQR(force = false) {
-      try {
-        const res = await fetch('/api/get-qr-token' + (force ? '?force=true' : ''));
-        const data = await res.json();
-        if (data.success) {
-          const token = data.token;
-          remainingSeconds = data.expiresIn || 30;
-          document.getElementById('currentQrTokenText').innerText = token;
-
-          // Vẽ QR lên khung
-          const container = document.getElementById('qrcodeCanvas');
-          container.innerHTML = '';
-          qrGenerator = new QRCode(container, {
-            text: token,
-            width: 140,
-            height: 140,
-            colorDark: "#0f172a",
-            colorLight: "#ffffff",
-            correctLevel: QRCode.CorrectLevel.M
-          });
-        }
-      } catch (err) {
-        console.error('Lỗi lấy QR Token:', err);
-      }
+    // QR chỉ hiển thị trong thời gian server cho phép; không giữ mã cũ khi lỗi.
+    let qrDeadline = 0, qrLoading = false, qrNextPoll = 0, activeQrSession = null;
+    function clearDynamicQR(message = 'Chưa có mã QR đang hiệu lực.') {
+      qrDeadline = 0; activeQrSession = null;
+      document.getElementById('qrcodeCanvas').replaceChildren();
+      document.getElementById('currentQrTokenText').textContent = message;
+      document.getElementById('qrCountdown').textContent = '—';
+      document.getElementById('closeQrSession').disabled = true;
     }
-
-    // Đếm ngược giây
+    async function updateDynamicQR() {
+      if (qrLoading) return false;
+      qrLoading = true;
+      const started = performance.now();
+      qrNextPoll = started + 15000;
+      try {
+        const res = await fetch('/api/get-qr-token');
+        const data = await res.json();
+        if (!res.ok || data.success !== true) { clearDynamicQR(data.message || 'Chưa lấy được mã QR.'); return false; }
+        const lifetime = Date.parse(data.expiresAt) - Date.parse(data.serverTime);
+        if (!/^[a-f0-9]{32}$/.test(data.token) || !Number.isFinite(lifetime) || lifetime <= performance.now() - started) {
+          clearDynamicQR('Mã đã hết hạn. Đang chờ mã tiếp theo.'); return false;
+        }
+        qrDeadline = started + lifetime;
+        activeQrSession = { date: data.date, shift: data.shift };
+        remainingSeconds = Math.max(0, Math.ceil((qrDeadline - performance.now()) / 1000));
+        document.getElementById('currentQrTokenText').textContent = data.token;
+        document.getElementById('qrCountdown').textContent = `${remainingSeconds}s`;
+        document.getElementById('closeQrSession').disabled = false;
+        const container = document.getElementById('qrcodeCanvas');
+        container.replaceChildren();
+        qrGenerator = new QRCode(container, { text: data.token, width: 140, height: 140,
+          colorDark: '#0f172a', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.M });
+        return true;
+      } catch (_) { clearDynamicQR('Không kết nối được hệ thống. Mã cũ đã ngừng hiển thị.'); return false; }
+      finally { qrLoading = false; }
+    }
     function startCountdown() {
       clearInterval(countdownInterval);
       countdownInterval = setInterval(() => {
-        remainingSeconds--;
-        if (remainingSeconds <= 0) {
-          remainingSeconds = 30;
-          updateDynamicQR();
+        if (document.hidden) { clearDynamicQR('Mở lại trang để tải mã đang hiệu lực.'); return; }
+        const now = performance.now();
+        if (qrDeadline > now) {
+          remainingSeconds = Math.ceil((qrDeadline - now) / 1000);
+          document.getElementById('qrCountdown').textContent = `${remainingSeconds}s`;
+        } else {
+          if (qrDeadline) clearDynamicQR('Mã đã hết hạn. Đang tải mã mới.');
+          if (!qrLoading && now >= qrNextPoll) void updateDynamicQR();
         }
-        document.getElementById('qrCountdown').innerText = `${remainingSeconds}s`;
-      }, 1000);
+      }, 250);
+    }
+    async function handleCloseQrSession() {
+      if (!activeQrSession) return;
+      const session = { ...activeQrSession };
+      const reason = window.prompt(`Chốt ca ${session.shift} ngày ${session.date}. Ca đã chốt không mở lại. Nhập lý do:`);
+      if (!reason || !reason.trim()) return;
+      const button = document.getElementById('closeQrSession'); button.disabled = true;
+      try {
+        const res = await fetch('/api/attendance/close-session', { method: 'POST', headers: getAdminHeaders(),
+          body: JSON.stringify({ ...session, reason: reason.trim() }) });
+        const data = await res.json();
+        if (!res.ok || data.success !== true) throw new Error(data.message || 'Chưa chốt được ca.');
+        clearDynamicQR('Ca đã chốt.');
+        showToast.success(data.message);
+        await fetchAllData();
+      } catch (error) { showToast.error(error.message || 'Không kết nối được hệ thống.'); }
+      finally { button.disabled = !activeQrSession; }
     }
 
     // Làm mới riêng mã QR động
@@ -1499,9 +1528,9 @@
       if (btn) btn.disabled = true;
 
       try {
-        await updateDynamicQR(true);
+        const updated = await updateDynamicQR();
         startCountdown();
-        if (typeof showToast !== 'undefined') {
+        if (updated && typeof showToast !== 'undefined') {
           showToast.success('Đã cập nhật mã QR động mới!');
         }
       } catch (err) {
@@ -3119,7 +3148,8 @@
           return;
         }
 
-        showToast.success(data.message || 'Đã mở khóa thiết bị thành công!');
+        if (!res.ok || data.success !== true) { showToast.error(data.message || 'Chưa mở khóa được thiết bị.'); return; }
+        showToast.success(data.message);
         fetchAllData();
       } catch (e) {
         showToast.error('Lỗi kết nối khi mở khóa thiết bị.');

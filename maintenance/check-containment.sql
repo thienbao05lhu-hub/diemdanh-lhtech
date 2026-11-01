@@ -18,7 +18,8 @@ where n.nspname in ('public','private') and p.prokind='f'
   and p.proname in ('submit_attendance','student_submit_attendance',
     'admin_set_attendance_status','admin_set_user_role_and_password',
     'admin_verify_password','student_submit_leave_request',
-    'admin_review_leave_request','admin_update_attendance')
+    'admin_review_leave_request','admin_update_attendance',
+    'register_my_device','admin_close_attendance_session','admin_get_active_qr','admin_reset_device')
 order by n.nspname,p.proname;
 
 -- Chỉ metadata policy, không đọc dữ liệu nghiệp vụ.
