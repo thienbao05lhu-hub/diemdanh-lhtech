@@ -11,7 +11,7 @@
   <script src="js/attendance-csv.js?v=20261101-logic1"></script>
   <script src="vendor/supabase-2.118.0.js"></script>
   <script src="js/config.js?v=20261101-safe-read"></script>
-  <script src="js/supabase-read-api.js?v=20261101-logic1"></script>
+  <script src="js/supabase-read-api.js?v=20261101-edit1"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
     body { font-family: 'Plus Jakarta Sans', sans-serif; }
@@ -2048,11 +2048,13 @@
 
     // Cập nhật trạng thái điểm danh thủ công (Admin & Super Admin)
     async function handleUpdateAttendanceStatus(userId, shift, newStatus) {
+      const observed = currentAttendanceTodayData.find(row => row.userId === userId && row.shift === shift);
       try {
         const res = await fetch('/api/attendance/update-status', {
           method: 'POST',
           headers: getAdminHeaders(),
-          body: JSON.stringify({ userId, shift, newStatus }),
+          body: JSON.stringify({ userId, shift, newStatus, businessDate: observed?.businessDate,
+            expectedId: observed?.recordId, expectedRevision: observed?.recordRevision }),
         });
         const result = await res.json();
 
@@ -2077,6 +2079,7 @@
 
     // Hủy lượt điểm danh đã quét (Admin & Super Admin)
     async function handleCancelAttendance(userId, shift) {
+      const observed = currentAttendanceTodayData.find(row => row.userId === userId && row.shift === shift);
       const confirmed = await showConfirmDialog({
         title: 'Hủy Lượt Điểm Danh',
         message: `Xác nhận hủy lượt điểm danh Ca ${shift} của sinh viên <strong class="text-white">${userId}</strong>?`,
@@ -2092,7 +2095,8 @@
         const res = await fetch('/api/attendance/cancel', {
           method: 'DELETE',
           headers: getAdminHeaders(),
-          body: JSON.stringify({ userId, shift }),
+          body: JSON.stringify({ userId, shift, businessDate: observed?.businessDate,
+            expectedId: observed?.recordId, expectedRevision: observed?.recordRevision }),
         });
         const result = await res.json();
 

@@ -103,7 +103,7 @@ begin
         'admin_verify_password','student_submit_leave_request','admin_review_leave_request',
         'admin_force_new_qr','admin_update_week_schedule',
         'register_my_device','admin_close_attendance_session',
-        'student_create_leave_request','admin_decide_leave_request'
+        'student_create_leave_request','admin_decide_leave_request','admin_adjust_attendance'
       ])
   loop
     execute format('revoke all on function %I.%I(%s) from public, anon, authenticated',
@@ -161,7 +161,7 @@ begin
         'admin_set_user_role_and_password','admin_verify_password',
         'student_submit_leave_request','admin_review_leave_request','admin_update_attendance',
         'register_my_device','admin_close_attendance_session','admin_get_active_qr','admin_reset_device',
-        'student_create_leave_request','admin_decide_leave_request'
+        'student_create_leave_request','admin_decide_leave_request','admin_adjust_attendance'
       ])
   loop
     if pg_catalog.has_function_privilege('anon',v_function.oid,'EXECUTE')

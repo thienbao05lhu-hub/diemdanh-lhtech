@@ -283,12 +283,12 @@ begin
   ), actual as (select * from public.attendance where business_date=p_date and shift=p_shift),
   rows as (
     select coalesce(e.profile_id,a.profile_id) as profile_id,coalesce(e.student_id,a.student_id) as student_id,
-      coalesce(e.display_name,p.display_name) as display_name,e.profile_id is not null as expected,a.status,a.scanned_at,a.is_locked,a.note
+      coalesce(e.display_name,p.display_name) as display_name,e.profile_id is not null as expected,a.id as record_id,coalesce((to_jsonb(a)->>'edit_revision')::integer,1) as record_revision,a.status,a.scanned_at,a.is_locked,a.note
     from expected e full join actual a on a.profile_id=e.profile_id
     left join public.profiles p on p.id=a.profile_id
   )
   select coalesce(jsonb_agg(jsonb_build_object('profileId',r.profile_id,'userId',r.student_id,'userName',r.display_name,
-    'department','','shift',p_shift,'status',coalesce(r.status,'Chưa điểm danh'),'timestamp',case when r.status in ('Có mặt','Đi trễ') then r.scanned_at else null end,
+    'department','','shift',p_shift,'recordId',r.record_id,'recordRevision',case when r.record_id is null then 0 else r.record_revision end,'status',coalesce(r.status,'Chưa điểm danh'),'timestamp',case when r.status in ('Có mặt','Đi trễ') then r.scanned_at else null end,
     'inSchedule',r.expected,'isLocked',coalesce(r.is_locked,false),'note',coalesce(r.note,''),'reason',coalesce(r.note,''))
     order by r.student_id),'[]') into result from rows r;
   return jsonb_build_object('date',p_date,'shift',p_shift,'sessionId',s.id,'records',result,

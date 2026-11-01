@@ -1,3 +1,9 @@
+## Điều chỉnh điểm danh Admin — chờ áp dụng SQL 120
+
+Giữ nguyên các nút của giao diện tối, nối Đúng giờ / Xin phép / Hủy phép / Hủy quét với kiểm tra phiên bản tại database. Chỉ sửa đúng bản ghi đã xem, không sửa ca khóa/đã hết giờ, không tự sửa điểm danh của chính mình. Đơn nghỉ approved được xử lý qua luồng đơn nghỉ; CP thủ công có snapshot để hoàn tác đúng thay đổi. Dòng trống sau xóa cũng có phiên bản, không mặc định trở lại zero.
+
+Chủ project cần chạy SQL nghỉ 110 trước nếu chưa áp dụng, sau đó [restore-safe-attendance-admin.sql](maintenance/restore-safe-attendance-admin.sql). Xem [hướng dẫn](maintenance/safe-attendance-admin.md) và [kiểm tra quyền](maintenance/check-safe-attendance-admin.sql). Chưa có SQL mới thì chức năng trả lỗi chờ cập nhật, không báo đã ghi giả. Không thêm hoặc đổi bố cục/CSS/nút đã chốt. Chưa nghiệm thu runtime Supabase/camera thật.
+
 ## Logic dashboard đã nối lại, giữ nguyên giao diện tối
 
 Nút lưu lịch từng người, lưu hàng loạt và khôi phục lịch sử trên dashboard cũ đã nối với RPC kiểm tra Auth/role/revision. Lưu không tự lấy phiên bản mới để ghi đè người khác. Gửi hàng loạt theo thứ tự, giữ bản nháp và phiên bản đã đọc khi một người lỗi; khóa tạm editor trong lúc lưu. Phản hồi đọc về trễ không ghi đè bản nháp vừa chỉnh.

@@ -1,3 +1,7 @@
+## Sau bước nghỉ: chỉnh điểm danh Admin an toàn
+
+Nếu chưa chạy SQL nghỉ, chạy `restore-safe-leaves.sql` trước. Sau đó chạy `restore-safe-attendance-admin.sql`, kiểm tra `check-safe-attendance-admin.sql` và đọc `safe-attendance-admin.md`. Không chạy lại installer mở quyền cũ. Giao diện tối giữ nguyên; nút cũ chỉ sửa khi có snapshot/phiên bản mới hợp lệ. Chưa có xác nhận SQL 110/120 đã chạy thật.
+
 ## Bước sau QR: xin nghỉ và xét duyệt
 
 Đã chạy QR thì chỉ cần chạy `restore-safe-leaves.sql` cho bước mới, sau đó kiểm tra `check-safe-leaves.sql`. Xem `safe-leaves.md`. Không chạy lại các installer mở quyền cũ. Bản containment hiện tại khóa cả các RPC nghỉ mới nếu cần dừng ghi.

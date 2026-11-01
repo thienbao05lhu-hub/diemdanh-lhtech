@@ -13,6 +13,8 @@
   const maintenance = 'Hệ thống đang giới hạn ghi để cập nhật bảo mật. Chức năng này tạm dừng; chưa có dữ liệu được ghi.';
   const fields = 'id,student_id,display_name,role,active,updated_at';
   let profiles = [];
+  const attendanceSnapshots = new Map(), attendanceWrites = new Set();
+  const uuid = value => typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
   // Xóa mật khẩu dự phòng từng được lưu; không đọc hoặc gửi các giá trị này.
   for (const key of Object.keys(root.localStorage)) {
     if (key === 'adminPass' || key.startsWith('admin_custom_pw_')) root.localStorage.removeItem(key);
@@ -60,6 +62,12 @@
         APP_INVALID_SCHEDULE: 'Lịch chưa hợp lệ. Chỉ chọn các ca Sáng, Chiều, Tối cho đúng bảy ngày.',
         APP_REVISION_NOT_FOUND: 'Phiên bản lịch này không còn trong lịch sử được lưu.',
         APP_PROFILE_NOT_FOUND: 'Hồ sơ không tồn tại hoặc đã bị khóa.',
+        APP_ATTENDANCE_STALE: 'Điểm danh vừa thay đổi. Tải lại bảng trước khi thao tác lại.',
+        APP_ATTENDANCE_LEAVE_MANAGED: 'Ca này có đơn nghỉ đã duyệt. Hãy dùng Hủy duyệt trong danh sách đơn nghỉ trước.',
+        APP_ATTENDANCE_RECOVERY: 'Bản ghi nghỉ cũ cần đối chiếu nguồn gốc; chưa có dữ liệu bị xóa.',
+        APP_ATTENDANCE_TRANSITION: 'Thao tác không phù hợp trạng thái hiện tại. Tải lại bảng để kiểm tra.',
+        APP_ATTENDANCE_DATE: 'Dữ liệu không còn thuộc ngày hiện tại. Tải lại bảng điểm danh.',
+        APP_SELF_ATTENDANCE_EDIT: 'Không được tự điều chỉnh điểm danh của tài khoản đang đăng nhập.',
       };
       for (const [code,text] of Object.entries(errors)) if (String(result.error.message).includes(code)) fail(409,text);
     }
@@ -75,6 +83,53 @@
     if (!data || data.version !== 1 || typeof data.leaveEnabled !== 'boolean') fail(503,'Chưa xác minh được quyền xử lý đơn nghỉ.');
     root.dispatchEvent(new CustomEvent('leave-capability', { detail: { leaveEnabled: data.leaveEnabled } }));
     return data;
+  }
+  function rememberAttendance(actorId, data) {
+    const prefix = `${actorId}|${data.date}|${data.shift}|`;
+    for (const key of attendanceSnapshots.keys())
+      if (!key.startsWith(`${actorId}|${data.date}|`) || key.startsWith(prefix)) attendanceSnapshots.delete(key);
+    for (const row of data.records) {
+      if (!uuid(row.profileId) || !/^\d{6,20}$/.test(row.userId || '') || !Number.isSafeInteger(row.recordRevision)
+        || (row.recordId === null ? row.recordRevision < 0 : !uuid(row.recordId) || row.recordRevision < 1)) continue;
+      attendanceSnapshots.set(prefix + row.userId, { profileId:row.profileId,date:data.date,
+        recordId:row.recordId,revision:row.recordRevision });
+    }
+  }
+  async function adjustAttendance(path, body, current) {
+    const capability = await client.rpc('get_admin_attendance_capabilities');
+    if (capability.error && ['PGRST202','42501'].includes(capability.error.code))
+      return response({success:false,message:'Điều chỉnh điểm danh đang chờ cập nhật bảo mật; chưa có dữ liệu được sửa.'},503);
+    const caps = checked(capability);
+    if (caps?.version !== 1 || caps.profileId !== current.id || caps.editingEnabled !== true)
+      return response({success:false,message:maintenance},503);
+    if (!/^\d{6,20}$/.test(body.userId || '') || !['Sáng','Chiều','Tối'].includes(body.shift)
+      || !Number.isSafeInteger(body.expectedRevision) || body.expectedRevision < 0
+      || (body.expectedId !== null && (!uuid(body.expectedId) || body.expectedRevision < 1)))
+      fail(400,'Thiếu phiên bản điểm danh đã xem. Tải lại bảng trước khi thao tác.');
+    if (body.businessDate !== caps.businessDate) fail(409,'Bảng không còn thuộc ngày hiện tại. Tải lại bảng điểm danh.');
+    const key = `${current.id}|${caps.businessDate}|${body.shift}|${body.userId}`;
+    const observed = attendanceSnapshots.get(key);
+    if (!observed || observed.recordId !== body.expectedId || observed.revision !== body.expectedRevision)
+      fail(409,'Dữ liệu đã thay đổi hoặc chưa được tải. Tải lại bảng điểm danh trước khi thao tác.');
+    const actions = {'Vắng có phép':'mark_excused','Có mặt':'mark_on_time','Chưa điểm danh':'cancel_excused'};
+    const action = path.endsWith('/cancel') ? 'cancel_scan' : Object.hasOwn(actions,body.newStatus) ? actions[body.newStatus] : null;
+    if (!action) fail(400,'Thao tác điểm danh không hợp lệ.');
+    const labels = {mark_excused:'Admin chọn Xin phép/Vắng CP từ bảng điểm danh.',mark_on_time:'Admin chọn Đúng giờ từ bảng điểm danh.',
+      cancel_excused:'Admin chọn Hủy phép từ bảng điểm danh.',cancel_scan:'Admin xác nhận Hủy quét từ bảng điểm danh.'};
+    const reason = body.reason === undefined ? labels[action] : body.reason;
+    if (typeof reason !== 'string' || !reason.trim() || reason.trim().length > 500) fail(400,'Lý do thao tác chưa hợp lệ.');
+    if (attendanceWrites.has(key)) fail(409,'Thao tác đang xử lý. Chờ kết quả rồi tải lại bảng.');
+    attendanceWrites.add(key); attendanceSnapshots.delete(key);
+    try {
+      const result = await qrRpc('admin_adjust_attendance',{p_profile_id:observed.profileId,p_date:observed.date,
+        p_shift:body.shift,p_action:action,p_expected_id:observed.recordId,p_expected_revision:observed.revision,p_reason:reason.trim()});
+      if (result?.success !== true || result.profileId !== observed.profileId || result.studentId !== body.userId
+        || result.date !== observed.date || result.shift !== body.shift || result.action !== action || typeof result.removed !== 'boolean'
+        || (result.removed ? result.recordId !== null || !Number.isSafeInteger(result.recordRevision) || result.recordRevision < 1
+          : !uuid(result.recordId) || result.recordRevision !== (observed.recordId === null ? 1 : observed.revision+1)))
+        fail(503,'Chưa xác nhận được kết quả. Tải lại bảng điểm danh để kiểm tra trước khi thử lại.');
+      return response({success:true,message:result.removed?'Đã hủy bản ghi được chọn.':'Đã điều chỉnh bản ghi được chọn.',data:result});
+    } finally { attendanceWrites.delete(key); }
   }
   async function identity(admin = true) {
     const result = await client.auth.getUser();
@@ -200,12 +255,16 @@
       const result = await client.auth.signOut({ scope: 'local' });
       if (result.error) fail(503, 'Chưa đăng xuất được. Vui lòng thử lại.');
       profiles = [];
+      attendanceSnapshots.clear();
       for (const key of ['adminUser','adminName','adminRole','adminPass']) root.localStorage.removeItem(key);
       return response({ success: true, message: 'Đã đăng xuất.' });
     }
     // Quyền được xác minh từ Auth + profile cho mỗi request; không tin storage hiển thị.
     const current = await identity(path !== '/api/leaves/mine');
     if (path === '/api/admin/verify' || path === '/api/admin/check') return response(sessionReply(current));
+    if ((path === '/api/attendance/update-status' && method === 'POST') || (path === '/api/attendance/cancel' && method === 'DELETE')) {
+      return adjustAttendance(path,JSON.parse(options.body || '{}'),current);
+    }
     if (method === 'POST' && ['/api/schedule','/api/schedule/rollback'].includes(path)) {
       return writeSchedule(path, JSON.parse(options.body || '{}'));
     }
@@ -293,7 +352,8 @@
         if (path.endsWith('/today')) {
           const data = await qrRpc('admin_get_shift_attendance',{p_date:clock.date,p_shift:shift});
           if (!Array.isArray(data?.records)) fail(503,'Chưa tải được danh sách phiên điểm danh.');
-          return response({success:true,...data,data:data.records});
+          rememberAttendance(current.id,data);
+          return response({success:true,...data,data:data.records.map(row=>({...row,businessDate:data.date}))});
         }
         const details = [];
         for (const label of ['Sáng','Chiều','Tối']) {

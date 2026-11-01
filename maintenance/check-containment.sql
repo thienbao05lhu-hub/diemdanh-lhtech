@@ -20,7 +20,7 @@ where n.nspname in ('public','private') and p.prokind='f'
     'admin_verify_password','student_submit_leave_request',
     'admin_review_leave_request','admin_update_attendance',
     'register_my_device','admin_close_attendance_session','admin_get_active_qr','admin_reset_device',
-    'student_create_leave_request','admin_decide_leave_request')
+    'student_create_leave_request','admin_decide_leave_request','admin_adjust_attendance')
 order by n.nspname,p.proname;
 
 -- Chỉ metadata policy, không đọc dữ liệu nghiệp vụ.
