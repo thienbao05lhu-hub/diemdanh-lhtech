@@ -14,10 +14,10 @@
 
 - Dùng một tài khoản admin và hai sinh viên Auth đã xác nhận, có hồ sơ active. Không gửi mật khẩu vào chat, không dùng tài khoản thật để tạo điểm danh thử.
 - Trong giờ ca Việt Nam, mở Admin để tạo phiên QR. Lịch tuần hiện có được chụp vào phiên ở lần mở đầu tiên. Sinh viên chưa có lịch vẫn có thể quét và được ghi `inSchedule=false`; không tự tạo lịch rảnh hoặc đánh vắng.
-- Sinh viên đăng nhập, bấm **Đăng ký / xác minh thiết bị này**, rồi bấm mở camera hoặc dán mã hiện hành. Chỉ hiển thị thành công sau khi server trả bản ghi đúng UID. URL có `?t=` được điền vào ô, không tự gửi điểm danh.
+- Sinh viên đăng nhập, dùng nút **Xác Nhận & Khóa Thiết Bị** của thiết kế cũ, rồi bấm **Tiếp Tục Quét Lại** để mở camera. Thiết bị đã có binding sẽ được xác minh bằng khóa lưu ở trình duyệt. Chỉ hiển thị thành công sau khi server trả bản ghi đúng UID. URL có `?t=` được giữ chờ xác nhận qua nút Tiếp Tục Quét Lại, không tự gửi điểm danh.
 - Quét lại không tạo bản ghi mới hoặc sửa thời gian quét đầu. Mã hết hạn, sai thiết bị, tài khoản inactive, ca đã khóa phải bị từ chối. Camera chỉ mở sau thao tác người dùng; khi chuyển ứng dụng/tab phải xác minh lại thiết bị.
 - Dùng **Mở khóa thiết bị** trên Admin cho sinh viên thử để đăng ký trình duyệt mới. Admin thường không reset thiết bị của admin khác; super_admin mới được quyền đó.
-- Nút **Chốt ca đang mở** yêu cầu lý do, khóa bản ghi hiện có và ngăn cấp mã/quét tiếp trong ca. Không mở lại phiên đã chốt. Bước này chưa tạo vắng hàng loạt và chưa gửi báo cáo Zalo.
+- RPC chốt phiên yêu cầu lý do, khóa bản ghi hiện có và ngăn cấp mã/quét tiếp trong ca. Nút chốt từng được thêm vào Admin đã được gỡ để giữ nguyên thiết kế đã chốt; phần nối thao tác chốt sẽ dùng luồng UI được người dùng chấp thuận. Không mở lại phiên đã chốt. Bước này chưa tạo vắng hàng loạt và chưa gửi báo cáo Zalo.
 - Các cửa sổ: `[07:00,11:00)`, `[13:00,17:00)`, `[18:00,22:00)`. Đi trễ bắt đầu đúng `08:31`, `13:31`, `18:31`. Giờ/UID/ca từ trình duyệt không được dùng để ghi dữ liệu.
 
 ## Thiết kế và giới hạn

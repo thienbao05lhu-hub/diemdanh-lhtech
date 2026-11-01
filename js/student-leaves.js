@@ -4,7 +4,27 @@
   const api = root.Attendance;
   if (!api) return;
   const el = id => document.getElementById(id);
-  const status = (text, error = false) => api.setStatus(el('my-leave-status'), text, error);
+  const status = (text, error = false) => { el('myLeaveRequestsNotice').textContent = text; if (error) root.showToast?.warning(text); };
+  const colors = { approved: 'text-emerald-300', rejected: 'text-rose-300', pending: 'text-amber-300', reviewing: 'text-blue-300' };
+  function node(tag, className, text) {
+    const element = document.createElement(tag);
+    if (className) element.className = className;
+    if (text !== undefined) element.textContent = String(text);
+    return element;
+  }
+
+  function cardFor(request, admin = false) {
+    const card = node('article', 'rounded-xl border border-slate-700/70 bg-slate-950/50 p-3 space-y-2');
+    const heading = node('div', 'flex items-start justify-between gap-3');
+    const title = node('div', 'min-w-0');
+    if (admin) title.append(node('p', 'font-semibold text-xs text-white break-words', `${request.userName} · ${request.userId}`));
+    title.append(node('p', 'text-xs text-slate-300', `${request.date.split('-').reverse().join('/')} · Ca ${request.shift}`));
+    heading.append(title, node('span', `text-[11px] font-semibold shrink-0 ${colors[request.status] || 'text-slate-300'}`, labels[request.status] || request.status));
+    card.append(heading, node('p', 'text-xs text-slate-300 whitespace-pre-wrap break-words', `Lý do: ${request.reason}`));
+    if (request.reviewReason) card.append(node('p', 'text-[11px] text-slate-400 whitespace-pre-wrap break-words', `Phản hồi: ${request.reviewReason}`));
+    if (request.reviewedAt) card.append(node('p', 'text-[10px] text-slate-500', `Xử lý bởi ${request.reviewedByName || request.reviewedBy} · ${new Date(request.reviewedAt).toLocaleString('vi-VN')}`));
+    return card;
+  }
   const labels = { pending: 'Chờ duyệt', reviewing: 'Cần đối chiếu', approved: 'Đã chấp thuận', rejected: 'Đã từ chối' };
   const messages = {
     APP_LEAVE_DATE_RANGE: 'Chỉ xin nghỉ từ hôm nay đến tối đa 30 ngày tới.',
@@ -18,8 +38,9 @@
     return api.message(error);
   }
   function controls() {
-    el('send-leave').disabled = sending || caps?.leaveEnabled !== true;
-    for (const id of ['my-leave-date','my-leave-shift','my-leave-reason']) el(id).disabled = sending || caps?.leaveEnabled !== true;
+    el('btnConfirmLeave').disabled = sending || caps?.leaveEnabled !== true;
+    el('btnOpenLeave').disabled = caps?.leaveEnabled !== true;
+    for (const id of ['leaveDate','leaveShift','leaveReason']) el(id).disabled = sending || caps?.leaveEnabled !== true;
   }
   async function rpc(name, args) { return api.checkResult(await api.client.rpc(name, args)).data; }
   async function capability(generation = requestGeneration) {
@@ -30,47 +51,42 @@
       if (result?.version !== 1 || result.profileId !== current.profile.id || !/^\d{4}-\d{2}-\d{2}$/.test(result.minDate)
         || !/^\d{4}-\d{2}-\d{2}$/.test(result.maxDate)) throw new Error('Invalid capability response');
       caps = result;
-      el('my-leave-date').min = result.minDate; el('my-leave-date').max = result.maxDate;
-      if (!el('my-leave-date').value) el('my-leave-date').value = result.minDate;
-      el('leave-availability').textContent = result.leaveEnabled ? 'Gửi đơn để quản trị viên xét duyệt. Chỉ đơn đã chấp thuận mới tính nghỉ có phép.'
+      el('leaveDate').min = result.minDate; el('leaveDate').max = result.maxDate;
+      if (!el('leaveDate').value) el('leaveDate').value = result.minDate;
+      el('myLeaveRequestsNotice').textContent = result.leaveEnabled ? 'Gửi đơn để quản trị viên xét duyệt. Chỉ đơn đã chấp thuận mới tính nghỉ có phép.'
         : 'Gửi đơn đang tạm dừng để cập nhật.';
     } catch (error) {
-      el('leave-availability').textContent = ['PGRST202','42501'].includes(error?.code)
+      el('myLeaveRequestsNotice').textContent = ['PGRST202','42501'].includes(error?.code)
         ? 'Gửi đơn đang chờ quản trị viên hoàn tất cập nhật.' : message(error);
     }
     controls();
   }
   async function history(generation = requestGeneration) {
-    el('my-leaves-list').replaceChildren();
+    el('myLeaveRequestsList').replaceChildren();
     const result = api.checkResult(await api.client.from('leave_requests')
-      .select('id,profile_id,date,shift,reason,status,review_reason,created_at,reviewed_at')
+      .select('id,profile_id,date,shift,reason,status,review_reason,created_at,reviewed_at,reviewed_by,reviewed_by_name')
       .eq('profile_id', current.profile.id).order('created_at', { ascending: false }).order('id', { ascending: false }).limit(50));
     if (generation !== requestGeneration) return;
     if (!Array.isArray(result.data)) throw new Error('Invalid leave list');
     for (const leave of result.data) {
       if (leave.profile_id !== current.profile.id) throw new Error('Invalid leave owner');
-      const item = document.createElement('article'); item.className = 'status';
-      for (const text of [`${leave.date} · Ca ${leave.shift} · ${labels[leave.status] || leave.status}`,
-        `Lý do: ${leave.reason}`, ...(leave.review_reason ? [`Phản hồi: ${leave.review_reason}`] : [])]) {
-        const p = document.createElement('p'); p.textContent = text; item.append(p);
-      }
-      el('my-leaves-list').append(item);
+      el('myLeaveRequestsList').append(cardFor({ ...leave, reviewReason: leave.review_reason, reviewedAt: leave.reviewed_at, reviewedBy: leave.reviewed_by, reviewedByName: leave.reviewed_by_name }));
     }
-    el('my-leaves-summary').textContent = result.data.length ? 'Tối đa 50 đơn gần nhất của bạn.' : 'Bạn chưa có đơn xin nghỉ.';
+    el('myLeaveRequestsNotice').textContent = (caps?.leaveEnabled ? '' : 'Gửi đơn đang chờ cập nhật. ') + (result.data.length ? 'Các đơn gần đây của bạn. Chỉ đơn được chấp thuận mới tính nghỉ có phép.' : 'Bạn chưa có đơn xin nghỉ.');
   }
   async function load() {
     if (loading || sending) return;
-    loading = true; const generation = ++requestGeneration; el('reload-leaves').disabled = true;
+    loading = true; const generation = ++requestGeneration; el('btnRefreshMyLeaves').disabled = true;
     try {
       current = await api.requireIdentity(); if (!current) return;
-      el('student-leaves-panel').hidden = false;
+
       await capability(generation);
       if (generation !== requestGeneration) return;
       await history(generation);
     } catch (error) { caps = null; status(message(error), true); }
-    finally { loading = false; el('reload-leaves').disabled = false; controls(); }
+    finally { loading = false; el('btnRefreshMyLeaves').disabled = false; controls(); }
   }
-  el('leave-form').addEventListener('submit', async event => {
+  root.handleSendLeaveRequest = async event => {
     event.preventDefault();
     if (sending || caps?.leaveEnabled !== true) return;
     sending = true; controls(); status('Đang gửi đơn…');
@@ -80,21 +96,32 @@
       if (!identity || identity.profile.id !== current.profile.id) throw { code: 'SESSION_CHANGED' };
       await capability(generation);
       if (generation !== requestGeneration || caps?.leaveEnabled !== true) throw { code: 'SESSION_CHANGED' };
-      const result = await rpc('student_create_leave_request', { p_date: el('my-leave-date').value,
-        p_shift: el('my-leave-shift').value, p_reason: el('my-leave-reason').value.trim() });
+      const result = await rpc('student_create_leave_request', { p_date: el('leaveDate').value,
+        p_shift: el('leaveShift').value, p_reason: el('leaveReason').value.trim() });
       if (generation !== requestGeneration) return;
       if (result?.success !== true || result.data?.profile_id !== current.profile.id || !result.data?.id
         || !Object.hasOwn(labels, result.data.status)) throw new Error('Invalid leave response');
       status(result.alreadySubmitted ? 'Bạn đã có đơn cho ca này. Đơn đã lưu được giữ nguyên.' : 'Đã gửi đơn. Đang chờ quản trị viên duyệt.');
-      el('my-leave-reason').value = '';
+      el('leaveReason').value = '';
+      el('leaveModal').classList.add('hidden');
+      root.showToast?.success(result.alreadySubmitted ? 'Bạn đã có đơn cho ca này.' : 'Đã gửi đơn xin nghỉ. Đang chờ duyệt.');
       await history(generation);
     } catch (error) { status(message(error), true); }
     finally { sending = false; controls(); }
-  });
-  el('reload-leaves').addEventListener('click', () => void load());
+  };
+  root.openLeaveModal = async () => {
+    if (!current) return;
+    await capability();
+    if (!caps?.leaveEnabled) { root.showToast?.warning('Xin nghỉ đang chờ quản trị viên hoàn tất cập nhật.'); return; }
+    el('leaveReason').value = '';
+    el('leaveModal').classList.remove('hidden');
+    el('leaveReason').focus();
+  };
+  root.closeLeaveModal = () => { if (!sending) el('leaveModal').classList.add('hidden'); };
+  el('btnRefreshMyLeaves').addEventListener('click', () => void load());
   api.client.auth.onAuthStateChange(event => {
     if (event === 'SIGNED_OUT' || event === 'SIGNED_IN') {
-      requestGeneration++; caps = null; controls(); el('my-leaves-list').replaceChildren();
+      requestGeneration++; caps = null; controls(); el('myLeaveRequestsList').replaceChildren();
     }
   });
   document.addEventListener('visibilitychange', () => {
@@ -102,7 +129,7 @@
     else void load();
   });
   setInterval(() => {
-    if (!document.hidden && !el('leave-form').contains(document.activeElement)) void load();
+    if (!document.hidden && !el('leaveForm').contains(document.activeElement)) void load();
   }, 30000);
   void load();
 })(globalThis);

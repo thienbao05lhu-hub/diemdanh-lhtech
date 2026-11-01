@@ -1,3 +1,11 @@
+## Giữ nguyên thiết kế đã chốt
+
+Đã khôi phục app/checkin về giao diện PWA gốc: kích hoạt thiết bị, khung camera, thẻ kết quả, nút báo nghỉ và modal xin nghỉ. Bố cục/CSS được đối chiếu với bản cũ. Logic mới dùng đúng các thành phần đó; không thêm panel hoặc thay hệ thống màu/font. Mã sinh viên trên màn hình kích hoạt lấy từ tài khoản Auth đang đăng nhập, không cấp quyền bằng MSSV tự nhập.
+
+Bấm nút xác nhận thiết bị cũ để xác minh; dùng nút **Tiếp Tục Quét Lại** cũ để mở camera hoặc xác nhận token từ liên kết QR. Các thông báo dùng thẻ kết quả/toast cũ. Xin nghỉ dùng modal cũ, chỉ mở khi SQL nghỉ đã được áp dụng. Thiết bị cũ đã đăng ký sẽ được xác minh bằng khóa lưu tại trình duyệt; khóa bí mật không hiển thị ra màn hình.
+
+Không thay SQL/RLS để khôi phục thiết kế. QR đã được chủ project xác nhận áp dụng SQL và kiểm tra quyền; SQL xin nghỉ vẫn chờ xác nhận riêng. Các ghi chú phía dưới thuộc giai đoạn trước.
+
 ## Cập nhật xin nghỉ/xét duyệt — chờ áp dụng SQL mới
 
 Chủ project đã xác nhận chạy SQL QR và gửi kết quả ACL/RLS đúng. Bản mới bổ sung đơn nghỉ theo Auth UID và xét duyệt bằng số phiên bản; chưa chạy SQL nghỉ trên Supabase thay người dùng. Đọc [hướng dẫn](maintenance/safe-leaves.md), chạy toàn bộ [restore-safe-leaves.sql](maintenance/restore-safe-leaves.sql) rồi [check-safe-leaves.sql](maintenance/check-safe-leaves.sql). Không cần chạy lại SQL QR hay các installer PWA cũ.

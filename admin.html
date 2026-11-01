@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Quản trị điểm danh · LHTech</title>
+  <title>Dashboard Giám Sát — Điểm Danh QR Động (ESP32) & Zalo Bot</title>
   <meta http-equiv="Content-Security-Policy" content="default-src 'self' https: data: blob: 'unsafe-inline' 'unsafe-eval'; connect-src https://oalnswbnjhkkovxjxtlz.supabase.co wss://oalnswbnjhkkovxjxtlz.supabase.co https:; font-src https: data:; style-src 'self' 'unsafe-inline' https:; img-src 'self' data: blob: https:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https:;">
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
@@ -326,12 +326,11 @@
         <!-- Khung vẽ QR động -->
         <div class="bg-white p-2.5 rounded-xl shadow-lg border border-slate-200 my-1">
           <div id="qrcodeCanvas"></div>
-          <button id="closeQrSession" type="button" onclick="handleCloseQrSession()" disabled class="mt-3 px-3 py-2 rounded-lg border border-rose-400 text-rose-300 text-xs disabled:opacity-50">Chốt ca đang mở</button>
         </div>
 
         <div class="mt-2">
           <p class="text-xs text-slate-400">Mã Token: <span id="currentQrTokenText" class="font-mono font-bold text-emerald-400 text-sm">---</span></p>
-          <p class="text-[10px] text-slate-500 mt-0.5">QR hiệu lực tối đa 30 giây trong giờ ca. ESP32 chờ bản tích hợp riêng.</p>
+          <p class="text-[10px] text-slate-500 mt-0.5">ESP32 gọi <code class="text-slate-400">/api/get-qr-token</code> mỗi 30s</p>
         </div>
       </div>
 
@@ -1460,7 +1459,7 @@
       document.getElementById('qrcodeCanvas').replaceChildren();
       document.getElementById('currentQrTokenText').textContent = message;
       document.getElementById('qrCountdown').textContent = '—';
-      document.getElementById('closeQrSession').disabled = true;
+      if (document.getElementById('closeQrSession')) document.getElementById('closeQrSession').disabled = true;
     }
     async function updateDynamicQR() {
       if (qrLoading) return false;
@@ -1480,7 +1479,7 @@
         remainingSeconds = Math.max(0, Math.ceil((qrDeadline - performance.now()) / 1000));
         document.getElementById('currentQrTokenText').textContent = data.token;
         document.getElementById('qrCountdown').textContent = `${remainingSeconds}s`;
-        document.getElementById('closeQrSession').disabled = false;
+        if (document.getElementById('closeQrSession')) document.getElementById('closeQrSession').disabled = false;
         const container = document.getElementById('qrcodeCanvas');
         container.replaceChildren();
         qrGenerator = new QRCode(container, { text: data.token, width: 140, height: 140,

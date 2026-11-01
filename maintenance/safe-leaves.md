@@ -25,7 +25,7 @@ SQL thêm revision cho đơn và bảng private ghi nguồn gốc thay đổi đ
 
 ## Nghiệm thu
 
-Dùng tài khoản thử riêng để không tạo dữ liệu điểm danh thử cho sinh viên thật. Trong App, gửi đơn cho ca tương lai, xác nhận chưa có vắng có phép. Trong Admin, duyệt rồi kiểm tra attendance/audit; thử một tab cũ để xác nhận không ghi đè quyết định mới. Thử hủy duyệt trước khi chốt, sau đó thử QR thay vắng có phép bằng có mặt. Không bấm chốt ca vận hành thật để thử nếu chưa muốn khóa ca đó.
+Dùng tài khoản thử riêng để không tạo dữ liệu điểm danh thử cho sinh viên thật. Trong App, dùng nút Xin Phép Nghỉ (Báo Nghỉ) và modal cũ để gửi đơn cho ca tương lai, xác nhận chưa có vắng có phép. Trong Admin, duyệt rồi kiểm tra attendance/audit; thử một tab cũ để xác nhận không ghi đè quyết định mới. Thử hủy duyệt trước khi chốt, sau đó thử QR thay vắng có phép bằng có mặt. Không bấm chốt ca vận hành thật để thử nếu chưa muốn khóa ca đó.
 
 Đơn cũ không khớp profile/MSSV, reviewing hoặc approved không có nguồn gốc thay đổi sẽ bị chặn khi xử lý. Không chạy lại `fix-audit-logs-and-leaves.sql` hay `create-leave-requests-table.sql` cũ vì các file đó mở lại quyền legacy.
 

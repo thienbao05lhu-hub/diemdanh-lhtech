@@ -1,80 +1,309 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="vi">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="referrer" content="no-referrer">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' https://oalnswbnjhkkovxjxtlz.supabase.co wss://oalnswbnjhkkovxjxtlz.supabase.co; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'">
-  <title>Điểm danh · LHTech</title>
-  <link rel="stylesheet" href="css/app.css?v=20261101-qr1">
-  <script defer src="vendor/supabase-2.118.0.js"></script>
-  <script defer src="js/config.js?v=20261101-safe-read"></script>
-  <script defer src="js/auth.js?v=20261101-qr1"></script>
-  <script defer src="vendor/html5-qrcode.min.js"></script>
-  <script defer src="js/checkin.js?v=20261101-leaves1"></script>
-  <script defer src="js/schedule-utils.js"></script>
-  <script defer src="js/student-schedule.js"></script>
-  <script defer src="js/student-leaves.js?v=20261101-leaves1"></script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Điểm Danh Sinh Viên (QR PWA)</title>
+
+  <!-- Cấu hình PWA -->
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#10b981" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Điểm Danh QR" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
+
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' https: data: blob: 'unsafe-inline' 'unsafe-eval'; connect-src https://oalnswbnjhkkovxjxtlz.supabase.co wss://oalnswbnjhkkovxjxtlz.supabase.co https:; font-src https: data:; style-src 'self' 'unsafe-inline' https:; img-src 'self' data: blob: https:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https:;">
+  <!-- Tailwind CSS & Icons -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+
+  <!-- Thư viện quét mã QR qua Camera -->
+  <script src="vendor/html5-qrcode.min.js"></script>
+  <script src="vendor/supabase-2.118.0.js"></script>
+  <script src="js/config.js?v=20261101-safe-read"></script>
+  <script defer src="js/auth.js?v=20261101-original-ui1"></script>
+  <script defer src="js/app-ui.js?v=20261101-original-ui1"></script>
+  <script defer src="js/checkin.js?v=20261101-original-ui1"></script>
+  <script defer src="js/student-leaves.js?v=20261101-original-ui1"></script>
+
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      -webkit-tap-highlight-color: transparent;
+    }
+    /* Hiệu ứng quét tia Laser */
+    @keyframes laser {
+      0% { top: 5%; opacity: 0.8; }
+      50% { top: 90%; opacity: 1; }
+      100% { top: 5%; opacity: 0.8; }
+    }
+    .scanner-laser {
+      animation: laser 2.2s infinite ease-in-out;
+    }
+    #reader video {
+      border-radius: 1rem;
+      object-fit: cover !important;
+    }
+    /* Toast Animations */
+    @keyframes toastSlideIn {
+      0% { opacity: 0; transform: translateY(-20px) scale(0.95); }
+      100% { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    @keyframes toastSlideOut {
+      0% { opacity: 1; transform: translateY(0) scale(1); }
+      100% { opacity: 0; transform: translateY(-20px) scale(0.95); }
+    }
+    .toast-enter { animation: toastSlideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+    .toast-exit { animation: toastSlideOut 0.25s cubic-bezier(0.7, 0, 0.84, 0) forwards; }
+  </style>
 </head>
-<body>
-  <header class="topbar">
-    <a class="brand" href="app.html"><span class="brand-mark">LH</span>Điểm danh LHTech</a>
-    <div class="user-controls"><span id="current-user"></span><button id="logout" class="outline-light">Đăng xuất</button></div>
-  </header>
-  <main class="workspace" style="max-width:800px">
-    <p id="page-status" class="status" role="status" aria-live="polite">Đang kiểm tra phiên đăng nhập…</p>
-    <button id="retry-page" class="secondary" hidden>Thử lại</button>
-    <div id="protected-content" hidden>
-      <div class="page-heading"><div><p class="subtitle">Xưởng thực hành</p><h1>Điểm danh bằng QR</h1></div><a id="admin-link" href="admin.html" hidden>Quản trị</a></div>
-      <section class="panel" style="padding:24px;margin-bottom:20px" aria-labelledby="shift-title">
-        <h2 id="shift-title">Trạng thái phiên</h2>
-        <p id="session-status" role="status" aria-live="polite">Đang kiểm tra…</p>
-        <p class="muted">Giờ Việt Nam: Sáng 07:00–11:00, Chiều 13:00–17:00, Tối 18:00–22:00. Kết thúc ca sẽ ngừng nhận điểm danh.</p>
-        <p id="device-status" class="status">Xác minh trình duyệt này trước khi điểm danh.</p>
-        <button id="verify-device" class="secondary" disabled>Đăng ký / xác minh thiết bị này</button>
-        <p class="help">Mỗi tài khoản gắn với một trình duyệt. Nếu đổi hoặc mất trình duyệt đã đăng ký, liên hệ quản trị viên để mở khóa thiết bị.</p>
-      </section>
-      <section class="panel" style="padding:24px;margin-bottom:20px" aria-labelledby="scan-title">
-        <h2 id="scan-title">Quét mã đang hiển thị tại xưởng</h2>
-        <button id="start-camera" class="primary" disabled>Mở camera quét QR</button>
-        <button id="stop-camera" class="secondary" hidden>Tắt camera</button>
-        <div id="qr-reader" style="margin-top:16px"></div>
-        <p id="camera-status" class="status" role="status"></p>
-        <form id="token-form" style="margin-top:20px">
-          <label for="qr-token">Mã QR hoặc liên kết vừa quét</label>
-          <input id="qr-token" autocomplete="off" spellcheck="false" maxlength="2048" required>
-          <button id="submit-token" class="primary" style="margin-top:12px" disabled>Xác nhận điểm danh</button>
-        </form>
-        <p id="scan-result" class="status" role="status" aria-live="polite"></p>
-      </section>
-      <section id="student-schedule-panel" class="panel" style="padding:24px;margin-bottom:20px" hidden>
-        <h2>Lịch xưởng của tôi</h2>
-        <label for="student-week">Tuần bắt đầu</label>
-        <input id="student-week" type="date">
-        <button id="load-student-week" class="secondary" style="margin-top:12px">Xem lịch tuần</button>
-        <p id="student-week-range"></p><p id="student-week-status" class="status" role="status"></p>
-        <div id="student-week-grid" class="table-scroll"></div>
-      </section>
-      <section id="student-leaves-panel" class="panel" style="padding:24px;margin-bottom:20px" hidden aria-labelledby="leave-title">
-        <div class="page-heading"><h2 id="leave-title">Xin nghỉ phép</h2><button id="reload-leaves" class="secondary">Tải lại đơn</button></div>
-        <p id="leave-availability" role="status">Đang kiểm tra quyền gửi đơn…</p>
-        <form id="leave-form">
-          <label for="my-leave-date">Ngày xin nghỉ</label><input id="my-leave-date" type="date" required disabled>
-          <label for="my-leave-shift" style="margin-top:12px">Ca xin nghỉ</label>
-          <select id="my-leave-shift" required disabled><option>Sáng</option><option>Chiều</option><option>Tối</option></select>
-          <label for="my-leave-reason" style="margin-top:12px">Lý do (tối đa 500 ký tự)</label>
-          <textarea id="my-leave-reason" rows="3" maxlength="500" required disabled></textarea>
-          <button id="send-leave" type="submit" class="primary" style="margin-top:12px" disabled>Gửi đơn xin nghỉ</button>
-        </form>
-        <p id="my-leave-status" class="status" role="status" aria-live="polite"></p>
-        <p id="my-leaves-summary" class="muted"></p><div id="my-leaves-list"></div>
-      </section>
-      <section class="panel" style="padding:24px" aria-labelledby="history-title">
-        <div class="page-heading"><h2 id="history-title">Lịch sử của tôi</h2><button id="reload-history" class="secondary">Tải lại</button></div>
-        <p id="history-status" class="status" role="status"></p>
-        <div class="table-scroll"><table><thead><tr><th>Ngày</th><th>Ca</th><th>Trạng thái</th><th>Giờ ghi nhận</th></tr></thead><tbody id="history-rows"></tbody></table></div>
-      </section>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col justify-between selection:bg-emerald-500 selection:text-white">
+
+  <!-- ============================================================== -->
+  <!-- MÀN HÌNH 1: FORM KÍCH HOẠT & KHÓA THIẾT BỊ LẦN ĐẦU (Chưa có deviceId) -->
+  <!-- ============================================================== -->
+  <div id="registerScreen" class="hidden flex-1 flex flex-col justify-center px-6 py-10 max-w-md mx-auto w-full">
+    <div class="text-center mb-8">
+      <div class="w-16 h-16 rounded-2xl bg-gradient-to-tr from-emerald-500 to-teal-400 mx-auto flex items-center justify-center text-white shadow-xl shadow-emerald-500/25 mb-4">
+        <i class="fa-solid fa-mobile-screen-button text-3xl"></i>
+      </div>
+      <h1 class="text-2xl font-extrabold text-white tracking-tight">Kích Hoạt Thiết Bị</h1>
+      <p class="text-xs text-slate-400 mt-1.5">Hệ thống điểm danh bằng mã QR động</p>
     </div>
-  </main>
+
+    <!-- Cảnh báo chống gian lận -->
+    <div class="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-4 mb-6 text-xs text-amber-300 flex items-start gap-3">
+      <i class="fa-solid fa-triangle-exclamation text-amber-400 text-base mt-0.5"></i>
+      <div>
+        <span class="font-bold">Lưu ý bảo mật quan trọng:</span>
+        <p class="mt-0.5 text-amber-200/80 leading-relaxed">
+          Tài khoản sinh viên sẽ được <strong>khóa cứng vào điện thoại này</strong> để chống điểm danh hộ. Không thể đăng xuất sau khi kích hoạt!
+        </p>
+      </div>
+    </div>
+
+    <!-- Form nhập Mã Sinh Viên -->
+    <form id="deviceForm" onsubmit="handleRegisterDevice(event)" class="space-y-4">
+      <div>
+        <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
+          Mã Sinh Viên (Student ID)
+        </label>
+        <div class="relative">
+          <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center text-slate-500">
+            <i class="fa-solid fa-id-card"></i>
+          </span>
+          <input
+            type="text"
+            id="inputUserId"
+            required
+            placeholder="Ví dụ: 123000896"
+            class="w-full bg-slate-900 border border-slate-700 rounded-xl pl-10 pr-4 py-3 text-sm text-white placeholder-slate-500 font-mono uppercase focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition"
+          />
+        </div>
+      </div>
+
+      <button
+        type="submit"
+        id="btnRegister"
+        class="w-full bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white font-bold py-3.5 rounded-xl text-sm transition shadow-lg shadow-emerald-500/25 flex items-center justify-center gap-2"
+      >
+        <span>Xác Nhận & Khóa Thiết Bị</span>
+        <i class="fa-solid fa-lock text-xs"></i>
+      </button>
+    </form>
+
+    <div id="registerAlert" class="mt-4 hidden p-3.5 rounded-xl text-xs font-medium border text-center"></div>
+  </div>
+
+
+  <!-- ============================================================== -->
+  <!-- MÀN HÌNH 2: GIAO DIỆN QUÉT CAMERA QR (Đã kích hoạt thiết bị) -->
+  <!-- ============================================================== -->
+  <div id="scannerScreen" class="hidden flex-1 flex flex-col max-w-md mx-auto w-full px-4 py-6">
+    <!-- Header thông tin sinh viên & Khóa máy -->
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl mb-4">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <div class="w-11 h-11 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold text-lg">
+            <i class="fa-solid fa-user-graduate"></i>
+          </div>
+          <div>
+            <h2 id="displayName" class="text-sm font-bold text-white leading-tight">Đang tải...</h2>
+            <p id="displayUserId" class="text-xs font-mono text-emerald-400">MSV: ---</p>
+          </div>
+        </div>
+        <!-- Huy hiệu Khóa Thiết Bị (Không có nút đăng xuất) -->
+        <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shadow-sm" title="Thiết bị đã khóa vào tài khoản này">
+          <i class="fa-solid fa-lock text-[10px]"></i> Đã khóa máy
+        </span>
+      </div>
+      <div class="mt-2.5 pt-2.5 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400">
+        <span id="displayDepartment">Lớp: ---</span>
+        <div class="flex items-center gap-2">
+          <span class="text-slate-500 font-mono text-[10px]" id="displayDeviceId">ID: ---</span>
+          <button type="button" onclick="handleSwitchAccount()" class="text-[10px] text-slate-400 hover:text-amber-400 transition flex items-center gap-1 cursor-pointer ml-1 px-1.5 py-0.5 rounded bg-slate-800/60 hover:bg-slate-800" title="Đăng xuất / Đổi tài khoản">
+            <i class="fa-solid fa-arrow-right-from-bracket text-[9px]"></i> Đổi
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Khung ngắm Camera quét QR -->
+    <div class="relative bg-slate-900 border border-slate-800 rounded-2xl p-3 shadow-2xl flex-1 flex flex-col justify-center items-center overflow-hidden min-h-[340px]">
+      <div id="reader" class="w-full rounded-xl overflow-hidden"></div>
+
+      <!-- Khung viền ngắm & Tia laser ảo chỉ hiển thị khi camera đang chạy -->
+      <div id="scanOverlay" class="pointer-events-none absolute inset-6 flex items-center justify-center">
+        <div class="relative w-64 h-64 border-2 border-dashed border-emerald-500/60 rounded-2xl">
+          <!-- 4 Góc ngắm -->
+          <span class="absolute -top-1 -left-1 w-6 h-6 border-t-4 border-l-4 border-emerald-400 rounded-tl-lg"></span>
+          <span class="absolute -top-1 -right-1 w-6 h-6 border-t-4 border-r-4 border-emerald-400 rounded-tr-lg"></span>
+          <span class="absolute -bottom-1 -left-1 w-6 h-6 border-b-4 border-l-4 border-emerald-400 rounded-bl-lg"></span>
+          <span class="absolute -bottom-1 -right-1 w-6 h-6 border-b-4 border-r-4 border-emerald-400 rounded-br-lg"></span>
+          <!-- Tia quét laser -->
+          <div class="scanner-laser absolute left-2 right-2 h-0.5 bg-gradient-to-r from-transparent via-emerald-400 to-transparent shadow-[0_0_12px_#10b981]"></div>
+        </div>
+      </div>
+
+      <div class="mt-3 text-center">
+        <p class="text-xs text-slate-400 flex items-center justify-center gap-1.5">
+          <i class="fa-solid fa-camera text-emerald-400 animate-pulse"></i>
+          Hướng camera vào màn hình OLED của ESP32
+        </p>
+      </div>
+    </div>
+
+        <!-- Thẻ Kết quả Quét Điểm Danh (Modern Result Card - Nằm ngay dưới camera) -->
+    <div id="scanAlert" class="mt-3.5 hidden p-4 sm:p-5 rounded-2xl border transition-all duration-300 shadow-2xl flex flex-col gap-3.5">
+      <!-- Hàng trên: Icon badge + Tiêu đề trạng thái & nội dung -->
+      <div class="flex items-start gap-3.5">
+        <div id="scanAlertIcon" class="w-10 h-10 rounded-xl flex items-center justify-center text-xl shrink-0"></div>
+        <div class="flex-1 min-w-0">
+          <h3 id="scanAlertTitle" class="text-sm sm:text-base font-bold text-white leading-snug"></h3>
+          <p id="scanAlertMessage" class="text-xs sm:text-sm text-slate-200 mt-1 leading-relaxed break-words"></p>
+        </div>
+      </div>
+
+      <!-- Nút Tiếp Tục Quét Lại (Nằm trọn vẹn ở hàng dưới, trải rộng toàn chiều ngang, dễ bấm) -->
+      <button
+        type="button"
+        id="btnResumeScan"
+        onclick="resumeScanner()"
+        class="mt-1 hidden w-full py-3 px-4 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 active:scale-[0.98] text-white font-bold rounded-xl text-xs sm:text-sm transition-all duration-200 flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 cursor-pointer"
+      >
+        <i class="fa-solid fa-camera-rotate text-sm"></i>
+        <span>Tiếp Tục Quét Lại</span>
+      </button>
+    </div>
+
+<!-- Nút Báo Nghỉ Chủ Động -->
+    <div class="mt-3">
+      <button
+        type="button"
+        id="btnOpenLeave"
+        onclick="openLeaveModal()"
+        class="w-full py-3 px-4 bg-gradient-to-r from-amber-500/15 to-orange-500/15 hover:from-amber-500/25 hover:to-orange-500/25 active:scale-[0.98] text-amber-300 border border-amber-500/40 rounded-2xl text-xs sm:text-sm font-bold transition flex items-center justify-center gap-2 shadow-lg shadow-amber-500/10"
+      >
+        <i class="fa-solid fa-calendar-xmark text-amber-400 text-sm"></i>
+        <span>Xin Phép Nghỉ (Báo Nghỉ)</span>
+      </button>
+    </div>
+
+    <section id="myLeaveRequestsSection" class="mt-4 bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3">
+      <div class="flex justify-between items-center gap-2"><h2 class="text-sm font-bold text-white">Đơn xin nghỉ của tôi</h2><button id="btnRefreshMyLeaves" type="button" class="text-xs text-amber-300 px-2 py-1.5 rounded-lg bg-amber-500/10">Làm mới</button></div>
+      <p id="myLeaveRequestsNotice" role="status" class="text-xs text-slate-400"></p>
+      <div id="myLeaveRequestsList" class="space-y-2"></div>
+    </section>
+
+
+  </div>
+
+  <!-- ============================================================== -->
+  <!-- MODAL: XIN PHÉP NGHỈ HỌC CHỦ ĐỘNG -->
+  <!-- ============================================================== -->
+  <div id="leaveModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm transition-all duration-200">
+    <div class="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-sm p-5 shadow-2xl relative space-y-4">
+      <!-- Modal Header -->
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <div class="flex items-center gap-2.5">
+          <div class="w-10 h-10 rounded-xl bg-amber-500/15 text-amber-400 border border-amber-500/30 flex items-center justify-center text-lg shrink-0">
+            <i class="fa-solid fa-envelope-open-text"></i>
+          </div>
+          <div>
+            <h3 class="text-sm font-bold text-white">Báo Nghỉ Phép</h3>
+            <p class="text-[11px] text-slate-400">Gửi đơn xin nghỉ ca lên hệ thống</p>
+          </div>
+        </div>
+        <button type="button" onclick="closeLeaveModal()" class="text-slate-400 hover:text-white p-1 rounded-lg">
+          <i class="fa-solid fa-xmark text-base"></i>
+        </button>
+      </div>
+
+      <!-- Form Báo Nghỉ -->
+      <form id="leaveForm" onsubmit="handleSendLeaveRequest(event)" class="space-y-3.5">
+        <div><label for="leaveDate" class="block text-[11px] font-semibold text-slate-300 mb-1.5">Ngày xin nghỉ</label><input type="date" id="leaveDate" required class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 text-xs text-white [color-scheme:dark]" /></div>
+        <div>
+          <label class="block text-[11px] font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
+            Chọn Ca Nghỉ
+          </label>
+          <select
+            id="leaveShift"
+            required
+            class="w-full bg-slate-950 border border-slate-700 focus:border-amber-500 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none transition cursor-pointer"
+          >
+            <option value="Sáng">Ca Sáng (07:00 - 11:00)</option>
+            <option value="Chiều">Ca Chiều (13:00 - 17:00)</option>
+            <option value="Tối">Ca Tối (18:00 - 22:00)</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="block text-[11px] font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
+            Lý Do Xin Nghỉ <span class="text-slate-500 font-normal lowercase">(bắt buộc)</span>
+          </label>
+          <input
+            type="text"
+            id="leaveReason"
+            placeholder="Ví dụ: Bị ốm, việc gia đình..."
+            class="w-full bg-slate-950 border border-slate-700 focus:border-amber-500 rounded-xl px-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none transition"
+            maxlength="500"
+            required
+          />
+        </div>
+
+        <div class="pt-2 flex items-center gap-2">
+          <button
+            type="button"
+            onclick="closeLeaveModal()"
+            class="flex-1 py-2.5 px-3 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-semibold transition"
+          >
+            Hủy
+          </button>
+          <button
+            type="submit"
+            id="btnConfirmLeave"
+            class="flex-1 py-2.5 px-3 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white rounded-xl text-xs font-bold transition shadow-lg shadow-amber-500/20 flex items-center justify-center gap-1.5"
+          >
+            <i class="fa-solid fa-paper-plane text-xs"></i>
+            <span>Xác nhận báo nghỉ</span>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <footer class="py-3 text-center text-[10px] text-slate-500 border-t border-slate-900">
+    Hệ thống Điểm danh QR Động & Zalo Bot • IoT ESP32
+  </footer>
+
+  <!-- ============================================================== -->
+  <!-- JAVASCRIPT LOGIC CLIENT PWA -->
+  <!-- ============================================================== -->
+  <div id="toastContainer" class="fixed top-4 left-4 right-4 z-[9999] flex flex-col gap-2 pointer-events-none max-w-sm mx-auto"></div>
 </body>
 </html>

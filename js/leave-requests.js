@@ -7,39 +7,74 @@
   const labels = { pending: 'Chờ duyệt', reviewing: 'Cần đối chiếu', approved: 'Đã chấp thuận', rejected: 'Đã từ chối' };
   let page = 1, total = 0, generation = 0, loading = false, deciding = false;
   const authenticated = () => Boolean(root.AdminAuth?.isAuthenticated());
-  function node(tag, text, className = '') {
-    const item = document.createElement(tag); item.textContent = text; item.className = className; return item;
+  function node(tag, className, text) {
+    const element = document.createElement(tag);
+    if (className) element.className = className;
+    if (text !== undefined) element.textContent = String(text);
+    return element;
   }
+
   function notice(text) { el('leaveRequestsNotice').textContent = text; }
   function toast(type, text) { root.showToast?.[type]?.(text); notice(text); }
+  const colors = { approved: 'text-emerald-300', rejected: 'text-rose-300', pending: 'text-amber-300', reviewing: 'text-blue-300' };
   function card(request, canReview, actor) {
-    const item = node('article', '', 'rounded-xl border border-slate-700 bg-slate-950/50 p-4 space-y-2 text-xs text-slate-300');
-    item.append(node('p', `${request.userName || 'Chưa có tên'} · ${request.userId}`, 'font-semibold text-white'));
-    item.append(node('p', `${request.date} · Ca ${request.shift} · ${labels[request.status] || request.status}`));
-    item.append(node('p', `Lý do: ${request.reason || '—'}`, 'whitespace-pre-wrap break-words'));
-    if (request.reviewReason) item.append(node('p', `Phản hồi: ${request.reviewReason}`, 'whitespace-pre-wrap break-words'));
-    if (request.reviewedAt) item.append(node('p', `Xử lý bởi ${request.reviewedByName || request.reviewedBy || '—'} · ${new Date(request.reviewedAt).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}`));
-    if (request.status === 'reviewing' || !request.profileId || !Number.isSafeInteger(request.revision)) {
-      item.append(node('p', 'Đơn cũ cần đối chiếu trước khi xử lý. Không tự đổi trạng thái.')); return item;
+    const admin = true;
+    const allowActions = canReview && request.profileId && Number.isSafeInteger(request.revision) && request.profileId !== actor;
+    const card = node('article', 'rounded-xl border border-slate-700/70 bg-slate-950/50 p-3 space-y-2');
+    const heading = node('div', 'flex items-start justify-between gap-3');
+    const title = node('div', 'min-w-0');
+    if (admin) title.append(node('p', 'font-semibold text-xs text-white break-words', `${request.userName} · ${request.userId}`));
+    title.append(node('p', 'text-xs text-slate-300', `${request.date.split('-').reverse().join('/')} · Ca ${request.shift}`));
+    heading.append(title, node('span', `text-[11px] font-semibold shrink-0 ${colors[request.status] || 'text-slate-300'}`, labels[request.status] || request.status));
+    card.append(heading, node('p', 'text-xs text-slate-300 whitespace-pre-wrap break-words', `Lý do: ${request.reason}`));
+    if (request.reviewReason) card.append(node('p', 'text-[11px] text-slate-400 whitespace-pre-wrap break-words', `Phản hồi: ${request.reviewReason}`));
+    if (request.reviewedAt) card.append(node('p', 'text-[10px] text-slate-500', `Xử lý bởi ${request.reviewedByName || request.reviewedBy} · ${new Date(request.reviewedAt).toLocaleString('vi-VN')}`));
+    if (allowActions && request.status === 'pending') {
+      const label = node('label', 'block text-[11px] text-slate-400', 'Ghi chú xét duyệt (bắt buộc khi từ chối)');
+      const input = node('textarea', 'mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-teal-400');
+      input.rows = 2;
+      input.maxLength = 500;
+      input.id = `leaveReviewReason_${request.id}`;
+      label.htmlFor = input.id;
+      const actions = node('div', 'flex gap-2 flex-wrap');
+      const approve = node('button', 'rounded-lg bg-emerald-600 hover:bg-emerald-500 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50', 'Chấp thuận');
+      const reject = node('button', 'rounded-lg bg-rose-600/20 hover:bg-rose-600/30 border border-rose-500/30 px-3 py-2 text-xs font-semibold text-rose-300 disabled:opacity-50', 'Từ chối');
+      approve.type = reject.type = 'button';
+      approve.addEventListener('click', () => review(request, 'approved', input, actions));
+      reject.addEventListener('click', () => review(request, 'rejected', input, actions));
+      actions.append(approve, reject);
+      card.append(label, input, actions);
+    } else if (allowActions && request.status === 'approved') {
+      const actions = node('div', 'flex gap-2 flex-wrap pt-1');
+      const revoke = node('button', 'rounded-lg bg-slate-800 hover:bg-rose-950/40 border border-slate-700 hover:border-rose-500/40 text-slate-300 hover:text-rose-300 px-3 py-1.5 text-xs font-semibold transition disabled:opacity-50 cursor-pointer', 'Hủy duyệt (Đưa về Chờ duyệt)');
+      revoke.type = 'button';
+      revoke.addEventListener('click', async () => {
+        if (!confirm('Bạn có chắc muốn hủy duyệt đơn này? Trạng thái điểm danh Vắng có phép sẽ bị hủy bỏ.')) return;
+        await review(request, 'pending', { value: 'Hủy chấp thuận bởi Admin' }, actions);
+      });
+      actions.append(revoke);
+      card.append(actions);
+    } else if (allowActions && request.status === 'rejected') {
+      const actions = node('div', 'flex gap-2 flex-wrap pt-1');
+      const reApprove = node('button', 'rounded-lg bg-slate-800 hover:bg-emerald-950/40 border border-slate-700 hover:border-emerald-500/40 text-slate-300 hover:text-emerald-300 px-3 py-1.5 text-xs font-semibold transition disabled:opacity-50 cursor-pointer', 'Xét duyệt lại (Chấp thuận)');
+      reApprove.type = 'button';
+      reApprove.addEventListener('click', async () => {
+        await review(request, 'approved', { value: 'Xét duyệt lại: Chấp thuận' }, actions);
+      });
+      actions.append(reApprove);
+      card.append(actions);
+    } else if (allowActions && request.status === 'reviewing') {
+      card.append(node('p', 'text-[11px] text-slate-400', request.needsRecovery
+        ? 'Có gián đoạn khi ghi dữ liệu. Bấm đối chiếu để kiểm tra trạng thái đã lưu.'
+        : 'Đơn đang được xử lý. Có thể đối chiếu nếu lượt xử lý gián đoạn quá 5 phút.'));
+      const reconcile = node('button', 'rounded-lg border border-blue-400/30 bg-blue-500/10 px-3 py-2 text-xs font-semibold text-blue-300 disabled:opacity-50', 'Đối chiếu trạng thái');
+      reconcile.type = 'button';
+      reconcile.addEventListener('click', () => toast('warning', 'Đơn cũ cần đối chiếu dữ liệu trước khi xử lý.'));
+      card.append(reconcile);
     }
-    if (!canReview || actor === request.profileId) {
-      if (actor === request.profileId) item.append(node('p', 'Bạn không được tự duyệt đơn của mình.'));
-      return item;
-    }
-    const label = node('label', 'Ghi chú (bắt buộc khi từ chối hoặc hủy duyệt)');
-    const input = node('textarea', '', 'w-full rounded-lg border border-slate-700 bg-slate-900 p-2 text-white');
-    input.id = `leave-reason-${request.id}`; input.maxLength = 500; input.rows = 2; label.htmlFor = input.id;
-    const actions = node('div', '', 'flex flex-wrap gap-2');
-    const choices = request.status === 'pending' ? [['approved','Chấp thuận'],['rejected','Từ chối']]
-      : request.status === 'approved' ? [['pending','Hủy duyệt']]
-      : request.status === 'rejected' ? [['approved','Xét lại: chấp thuận']] : [];
-    for (const [decision, text] of choices) {
-      const button = node('button', text, 'rounded-lg border border-teal-600 px-3 py-2 disabled:opacity-50'); button.type = 'button';
-      button.addEventListener('click', () => void review(request, decision, input, actions)); actions.append(button);
-    }
-    if (choices.length) item.append(label, input, actions);
-    return item;
+    return card;
   }
+
   async function load(reset = false) {
     if (!authenticated() || loading || deciding) return;
     if (reset) page = 1;
