@@ -227,16 +227,30 @@
 
       // 1. /api/admin/verify hoặc /api/admin/check
       if (urlStr.includes('/api/admin/verify') || urlStr.includes('/api/admin/check')) {
-        const { data: { session } } = await client.auth.getSession();
-        if (!session) {
+        let { data: { session } } = await client.auth.getSession();
+        let profile = null;
+
+        if (session?.user) {
+          profile = cachedProfiles.find(p => p.id === session.user.id);
+          if (!profile) {
+            const { data } = await client.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
+            profile = data;
+          }
+        }
+
+        // Fallback: nếu session auth chưa có, kiểm tra thông tin admin đã đăng nhập trong localStorage
+        if (!profile) {
+          const cachedUser = localStorage.getItem('adminUser');
+          if (cachedUser) {
+            profile = getProfileByStudentId(cachedUser);
+          }
+        }
+
+        if (!profile) {
           return jsonResponse({ success: false, message: 'Chưa đăng nhập' }, 401);
         }
-        let profile = cachedProfiles.find(p => p.id === session.user.id);
-        if (!profile) {
-          const { data } = await client.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
-          profile = data;
-        }
-        if (!profile || !['admin', 'super_admin'].includes(profile.role)) {
+
+        if (!['admin', 'super_admin'].includes(profile.role)) {
           return jsonResponse({ success: false, message: 'Tài khoản không có quyền quản trị' }, 403);
         }
         const adminDisplayName = (profile.student_id === '123000896' || profile.role === 'super_admin') ? 'Võ Huỳnh Thiên Bảo' : profile.display_name;
@@ -252,7 +266,7 @@
         }
         return jsonResponse({
           success: true,
-          csrfToken: 'sb-jwt-' + session.access_token.slice(-10),
+          csrfToken: session?.access_token ? ('sb-jwt-' + session.access_token.slice(-10)) : ('sb-rpc-' + Date.now()),
           data: {
             userId: profile.student_id,
             name: adminDisplayName,
@@ -304,7 +318,34 @@
           }
         }
 
+        // 3. Fallback: Xác thực mật khẩu trực tiếp qua RPC admin_verify_password (Postgres bcrypt)
         if (error || !data?.user) {
+          try {
+            const { data: vData, error: vErr } = await client.rpc('admin_verify_password', {
+              p_student_id: userId,
+              p_password: password
+            });
+            if (!vErr && vData && vData.success && vData.profile) {
+              const prof = vData.profile;
+              if (!['admin', 'super_admin'].includes(prof.role)) {
+                return jsonResponse({ success: false, message: 'Tài khoản không có quyền quản trị' }, 403);
+              }
+              const adminDisplayName = (prof.student_id === '123000896' || prof.role === 'super_admin') ? 'Võ Huỳnh Thiên Bảo' : prof.display_name;
+              localStorage.setItem('adminUser', prof.student_id);
+              localStorage.setItem('adminName', adminDisplayName);
+              localStorage.setItem('adminRole', prof.role === 'super_admin' ? 'superadmin' : prof.role);
+              return jsonResponse({
+                success: true,
+                csrfToken: 'sb-rpc-' + Date.now(),
+                data: {
+                  userId: prof.student_id,
+                  name: adminDisplayName,
+                  role: prof.role === 'super_admin' ? 'superadmin' : prof.role
+                }
+              });
+            }
+          } catch (rpcErr) {}
+
           return jsonResponse({ success: false, message: 'Sai MSSV hoặc mật khẩu quản trị!' }, 401);
         }
 
@@ -322,6 +363,11 @@
         if ((profile.student_id === '123000896' || profile.role === 'super_admin') && profile.display_name !== 'Võ Huỳnh Thiên Bảo') {
           profile.display_name = 'Võ Huỳnh Thiên Bảo';
         }
+
+        // Lưu thông tin admin session vào localStorage
+        localStorage.setItem('adminUser', profile.student_id);
+        localStorage.setItem('adminName', adminDisplayName);
+        localStorage.setItem('adminRole', profile.role === 'super_admin' ? 'superadmin' : profile.role);
 
         return jsonResponse({
           success: true,
