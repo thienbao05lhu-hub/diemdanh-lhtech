@@ -9,8 +9,8 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
   <script src="vendor/qrcode.min.js"></script>
   <script src="vendor/supabase-2.118.0.js"></script>
-  <script src="js/config.js?v=20261031_10"></script>
-  <script src="js/supabase-api-bridge.js?v=20261031_10"></script>
+  <script src="js/config.js?v=20261101_01"></script>
+  <script src="js/supabase-api-bridge.js?v=20261101_01"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
     body { font-family: 'Plus Jakarta Sans', sans-serif; }
@@ -3477,41 +3477,66 @@
     // 2. Polling cập nhật thống kê chuyên cần cá nhân mỗi 6 giây
     setInterval(fetchPersonalStats, 6000);
 
-    // 3. Tự động gửi báo cáo Zalo khi đến giờ chốt ca (11:00 Ca Sáng, 17:00 Ca Chiều, 22:00 Ca Tối)
+    // 3. Tự động gửi báo cáo Zalo theo các mốc thời gian:
+    // - Báo cáo tổng hợp đầu ca lúc 08:31 (Sáng), 13:31 (Chiều), 18:31 (Tối)
+    // - Báo cáo chốt ca lúc 11:00 (Sáng), 17:00 (Chiều), 22:00 (Tối)
     setInterval(() => {
       try {
         const now = new Date();
         const vnStr = now.toLocaleTimeString('en-US', { timeZone: 'Asia/Ho_Chi_Minh', hour12: false, hour: '2-digit', minute: '2-digit' });
         const [h, m] = vnStr.split(':').map(Number);
         const vnDate = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' });
-        
+
+        // 3.1. Báo cáo tổng hợp đầu ca (08:31, 13:31, 18:31)
+        let earlyShift = null;
+        if (h === 8 && m === 31) earlyShift = 'Sáng';
+        else if (h === 13 && m === 31) earlyShift = 'Chiều';
+        else if (h === 18 && m === 31) earlyShift = 'Tối';
+
+        if (earlyShift) {
+          const sentKeyEarly = `auto_zalo_early_${vnDate}_${earlyShift}`;
+          if (!localStorage.getItem(sentKeyEarly)) {
+            localStorage.setItem(sentKeyEarly, 'true');
+            fetch('/api/attendance/force-zalo-report', {
+              method: 'POST',
+              headers: getAdminHeaders(),
+              body: JSON.stringify({ shift: earlyShift, type: 'early' })
+            }).then(r => r.json()).then(res => {
+              if (res.success && typeof showToast !== 'undefined') {
+                showToast.info(`Tự động gửi Báo cáo Đầu Ca ${earlyShift} qua Zalo!`);
+              }
+            }).catch(() => {});
+          }
+        }
+
+        // 3.2. Báo cáo chốt ca (11:00, 17:00, 22:00)
         let closeShift = null;
         if (h === 11 && m === 0) closeShift = 'Sáng';
         else if (h === 17 && m === 0) closeShift = 'Chiều';
         else if (h === 22 && m === 0) closeShift = 'Tối';
 
         if (closeShift) {
-          const sentKey = `auto_zalo_sent_${vnDate}_${closeShift}`;
-          if (!localStorage.getItem(sentKey)) {
-            localStorage.setItem(sentKey, 'true');
+          const sentKeyClose = `auto_zalo_close_${vnDate}_${closeShift}`;
+          if (!localStorage.getItem(sentKeyClose)) {
+            localStorage.setItem(sentKeyClose, 'true');
             fetch('/api/attendance/force-zalo-report', {
               method: 'POST',
               headers: getAdminHeaders(),
-              body: JSON.stringify({ shift: closeShift })
+              body: JSON.stringify({ shift: closeShift, type: 'closing' })
             }).then(r => r.json()).then(res => {
               if (res.success && typeof showToast !== 'undefined') {
-                showToast.info(`Tự động gửi báo cáo Ca ${closeShift} qua Zalo!`);
+                showToast.info(`Tự động gửi Báo cáo Chốt Ca ${closeShift} qua Zalo!`);
               }
             }).catch(() => {});
           }
         }
       } catch (e) {}
-    }, 20000);
+    }, 15000);
   </script>
-  <script src="js/admin-auth.js?v=20261031_10"></script>
-  <script src="js/weekly-schedule.js?v=20261031_10"></script>
-  <script src="js/schedule-sync.js?v=20261031_10"></script>
-  <script src="js/admin-tools.js?v=20261031_10"></script>
-  <script src="js/leave-requests.js?v=20261031_10"></script>
+  <script src="js/admin-auth.js?v=20261101_01"></script>
+  <script src="js/weekly-schedule.js?v=20261101_01"></script>
+  <script src="js/schedule-sync.js?v=20261101_01"></script>
+  <script src="js/admin-tools.js?v=20261101_01"></script>
+  <script src="js/leave-requests.js?v=20261101_01"></script>
 </body>
 </html>

@@ -1388,8 +1388,21 @@
           }
         });
 
+        // Phân biệt Báo cáo tổng hợp đầu ca vs Báo cáo chốt ca
+        let reportType = body.type;
+        if (!reportType) {
+          const [curH] = (vnInfo.timeVnStr || '').split(':').map(Number);
+          if (curH === 11 || curH === 17 || curH === 22) {
+            reportType = 'closing';
+          } else {
+            reportType = 'early';
+          }
+        }
+        const isClosing = reportType === 'closing';
+        const reportTitle = isClosing ? 'BÁO CÁO CHỐT CA' : 'BÁO CÁO TỔNG HỢP ĐẦU CA';
+
         // 3. Soạn tin nhắn báo cáo Zalo chuẩn theo format xưởng
-        let reportMsg = `🔔 BÁO CÁO CA ${targetShift.toUpperCase()} (${vnInfo.dateVnStr})\n`;
+        let reportMsg = `🔔 ${reportTitle} ${targetShift.toUpperCase()} (${vnInfo.dateVnStr})\n`;
         reportMsg += `- ✅ Có mặt đúng giờ: ${presentOnTime.length}\n`;
 
         if (lateList.length === 0) {
@@ -1427,9 +1440,10 @@
 
         return jsonResponse({
           success: true,
-          message: `Đã gửi báo cáo Ca ${targetShift} thành công lên nhóm Zalo!`,
+          message: `Đã gửi ${reportTitle} ${targetShift} thành công lên nhóm Zalo!`,
           data: {
             shift: targetShift,
+            type: reportType,
             present: presentOnTime.length,
             late: lateList.length,
             absent: absentList.length
