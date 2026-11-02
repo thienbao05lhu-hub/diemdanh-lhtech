@@ -1604,7 +1604,12 @@
       try {
         const res = await fetch('/api/get-qr-token');
         const data = await res.json();
-        if (!res.ok || data.success !== true) { clearDynamicQR(data.message || 'Chưa lấy được mã QR.'); return false; }
+        const receivedAt = performance.now();
+        if (!res.ok || data.success !== true) {
+          if (receivedAt >= qrDeadline) clearDynamicQR(data.message || 'Chưa lấy được mã QR.');
+          else qrNextPoll = Math.min(qrDeadline, receivedAt + 1500);
+          return false;
+        }
         if (data.isPaused) {
           activeQrSession = { date: data.date, shift: data.shift };
           setQrPausedUI(true, data.message);
@@ -1613,36 +1618,47 @@
         }
         setQrPausedUI(false);
         const lifetime = Date.parse(data.expiresAt) - Date.parse(data.serverTime);
-        if (!/^[a-f0-9]{32}$/.test(data.token) || !Number.isFinite(lifetime) || lifetime <= performance.now() - started) {
-          qrNextPoll = performance.now() + 1000;
-          clearDynamicQR('Đang cấp mã QR tiếp theo...'); return false;
+        if (!/^[a-f0-9]{32}$/.test(data.token) || !Number.isFinite(lifetime) || lifetime <= 500) {
+          qrNextPoll = receivedAt + 1000;
+          if (receivedAt >= qrDeadline) clearDynamicQR('Đang cấp mã QR tiếp theo...');
+          return false;
         }
-        qrDeadline = started + lifetime;
-        qrNextPoll = qrDeadline;
+        qrDeadline = receivedAt + Math.max(500, lifetime - 200);
+        qrNextPoll = Math.max(receivedAt + 700, qrDeadline - 2200);
         activeQrSession = { date: data.date, shift: data.shift };
-        remainingSeconds = Math.max(0, Math.ceil((qrDeadline - performance.now()) / 1000));
-        document.getElementById('currentQrTokenText').textContent = data.testMode ? 'THỬ NGHIỆM · ' + data.token : data.token;
+        remainingSeconds = Math.max(0, Math.ceil((qrDeadline - receivedAt) / 1000));
+        const nextTokenText = data.testMode ? 'THỬ NGHIỆM · ' + data.token : data.token;
+        const tokenEl = document.getElementById('currentQrTokenText');
+        const isSameToken = tokenEl && tokenEl.textContent === nextTokenText && document.querySelector('#qrcodeCanvas canvas, #qrcodeCanvas img');
+        if (tokenEl) tokenEl.textContent = nextTokenText;
         document.getElementById('qrCountdown').textContent = `${remainingSeconds}s`;
         if (document.getElementById('closeQrSession')) document.getElementById('closeQrSession').disabled = false;
-        const container = document.getElementById('qrcodeCanvas');
-        container.replaceChildren();
-        qrGenerator = new QRCode(container, { text: data.token, width: 140, height: 140,
-          colorDark: '#0f172a', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.M });
+        if (!isSameToken) {
+          const container = document.getElementById('qrcodeCanvas');
+          container.replaceChildren();
+          qrGenerator = new QRCode(container, { text: data.token, width: 140, height: 140,
+            colorDark: '#0f172a', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.M });
+        }
         return true;
-      } catch (_) { clearDynamicQR('Không kết nối được hệ thống. Mã cũ đã ngừng hiển thị.'); return false; }
+      } catch (_) {
+        if (performance.now() >= qrDeadline) clearDynamicQR('Không kết nối được hệ thống. Mã cũ đã ngừng hiển thị.');
+        else qrNextPoll = Math.min(qrDeadline, performance.now() + 1500);
+        return false;
+      }
       finally { qrLoading = false; }
     }
 
     function startCountdown() {
       clearInterval(countdownInterval);
       countdownInterval = setInterval(() => {
-        if (document.hidden) { clearDynamicQR('Mở lại trang để tải mã đang hiệu lực.'); return; }
+        if (document.hidden) { qrNextPoll = 0; clearDynamicQR('Mở lại trang để tải mã đang hiệu lực.'); return; }
         const now = performance.now();
         if (qrDeadline > now) {
           remainingSeconds = Math.ceil((qrDeadline - now) / 1000);
           document.getElementById('qrCountdown').textContent = `${remainingSeconds}s`;
+          if (!qrLoading && now >= qrNextPoll) void updateDynamicQR();
         } else {
-          if (qrDeadline) {
+          if (qrDeadline && (!qrLoading || now - qrDeadline > 3000)) {
             qrNextPoll = now;
             clearDynamicQR('Đang tải mã QR mới...');
           }
