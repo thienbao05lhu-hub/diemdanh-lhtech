@@ -12,7 +12,7 @@
   <script src="vendor/supabase-2.118.0.js"></script>
   <script src="js/config.js?v=20261101-safe-read"></script>
   <script src="js/attendance-trial.js?v=20261102-trial1"></script>
-  <script src="js/supabase-read-api.js?v=20261102-pause1"></script>
+  <script src="js/supabase-read-api.js?v=20261102-pause2"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
     body { font-family: 'Plus Jakarta Sans', sans-serif; }
@@ -1462,18 +1462,21 @@
 
       const bar = document.createElement('div');
       bar.id = 'qrPauseControlBar';
-      bar.className = 'w-full mt-2.5 pt-2 border-t border-slate-800 flex items-center gap-2';
+      bar.className = 'w-full mt-3 pt-2.5 border-t border-slate-800 flex flex-col items-center gap-1.5';
       bar.innerHTML = `
         <button
           id="btnToggleQrPause"
           type="button"
           onclick="handleToggleQrPause(this)"
-          class="flex-1 py-1.5 px-2.5 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 bg-amber-500/15 text-amber-300 border border-amber-500/30 hover:bg-amber-500/25 cursor-pointer shadow-sm active:scale-[0.98]"
-          title="Tạm dừng hoặc tiếp tục phát mã QR"
+          class="w-full py-2 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 bg-amber-500/15 text-amber-300 border border-amber-500/30 hover:bg-amber-500/25 cursor-pointer shadow-sm active:scale-[0.98]"
+          title="Chủ động Tạm dừng hoặc Bật lại mã QR"
         >
           <i id="btnToggleQrIcon" class="fa-solid fa-pause text-xs"></i>
-          <span id="btnToggleQrText">Tạm dừng QR</span>
+          <span id="btnToggleQrText">Tạm dừng phát QR</span>
         </button>
+        <span class="text-[10px] text-slate-500 flex items-center gap-1">
+          <i class="fa-solid fa-shield-halved text-[9px]"></i> Quản trị viên chủ động Bật/Tắt quét QR
+        </span>
       `;
       oledCard.appendChild(bar);
     }
@@ -1513,6 +1516,9 @@
     }
 
     async function handleToggleQrPause(btn) {
+      if (!activeQrSession && !isQrCurrentlyPaused) {
+        showToast.info('Hiện ngoài giờ xưởng hoặc chưa mở ca. Mã QR sẽ tự động phát vào giờ ca (Ca Tối 18:00 - 22:00) và bạn có thể bấm Tạm dừng / Mở lại bất kỳ lúc nào.');
+      }
       const targetState = !isQrCurrentlyPaused;
       const actionName = targetState ? 'Tạm dừng' : 'Mở lại';
 
