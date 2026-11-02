@@ -12,7 +12,7 @@
   <script src="vendor/supabase-2.118.0.js"></script>
   <script src="js/config.js?v=20261101-safe-read"></script>
   <script src="js/attendance-trial.js?v=20261102-trial1"></script>
-  <script src="js/supabase-read-api.js?v=20261102-trial1"></script>
+  <script src="js/supabase-read-api.js?v=20261102-zalo1"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
     body { font-family: 'Plus Jakarta Sans', sans-serif; }
@@ -3410,13 +3410,7 @@
     // Gửi Báo Cáo Zalo Thủ Công Ngay Bây Giờ (Admin)
     async function handleForceZaloReport() {
       // Lấy thông tin ca hiện tại đang hiển thị trên giao diện (Sáng / Chiều / Tối)
-      let shift = typeof currentViewingShift !== 'undefined' ? currentViewingShift : 'Sáng';
-      const badgeEl = document.getElementById('currentShiftBadge');
-      if (badgeEl && badgeEl.innerText) {
-        if (badgeEl.innerText.includes('Tối')) shift = 'Tối';
-        else if (badgeEl.innerText.includes('Chiều')) shift = 'Chiều';
-        else if (badgeEl.innerText.includes('Sáng')) shift = 'Sáng';
-      }
+      const shift = typeof currentViewingShift !== 'undefined' ? currentViewingShift : 'Sáng';
 
       const confirmed = await showConfirmDialog({
         title: 'Báo Cáo Zalo Sớm',
@@ -3435,34 +3429,20 @@
         if (btn) btn.disabled = true;
         if (textSpan) textSpan.innerText = 'Đang gửi...';
 
-        const res = await fetch('/api/attendance/force-zalo-report', {
-          method: 'POST',
-          headers: getAdminHeaders(),
-          body: JSON.stringify({ shift }),
+        const job = await ZaloDelivery.send(shift, status => {
+          if (textSpan) textSpan.innerText = status === 'pending' ? 'Đang chờ gửi...' : 'Đang kiểm tra...';
         });
-
-        const result = await res.json();
-
-        if (res.status === 401) {
-          showToast.warning('Bạn không có quyền Admin hoặc phiên làm việc đã hết hạn. Vui lòng đăng nhập lại!');
-          showAdminOverlay();
-          return;
-        }
-
-        if (res.ok && result.success) {
-          showToast.success('Đã gửi báo cáo Zalo thành công!');
-          if (typeof fetchTodayAttendance === 'function') {
-            await fetchTodayAttendance();
-          }
-          if (typeof fetchPersonalStats === 'function') {
-            await fetchPersonalStats();
-          }
+        if (job.status === 'sent') {
+          showToast.success('Zalo đã xác nhận gửi báo cáo thành công!');
+        } else if (job.status === 'unknown') {
+          showToast.warning('Chưa xác định kết quả gửi. Kiểm tra Zalo trước khi xử lý lại; hệ thống không tự gửi trùng.');
+        } else if (job.status === 'failed' || job.status === 'cancelled') {
+          showToast.error('Báo cáo chưa gửi thành công hoặc đã bị hủy. Cần kiểm tra cấu hình và trạng thái ca.');
         } else {
-          showToast.error(`Gửi báo cáo Zalo thất bại: ${result.message || 'Lỗi không xác định'}`);
+          showToast.warning('Yêu cầu vẫn đang chờ xử lý. Bấm lại để kiểm tra cùng báo cáo, không tạo thêm tin.');
         }
       } catch (err) {
-        console.error('Lỗi khi gửi báo cáo Zalo thủ công:', err);
-        showToast.error('Có lỗi kết nối khi gửi báo cáo Zalo!');
+        showToast.error(err.message || 'Chưa xác nhận được kết quả Zalo; kiểm tra trạng thái trước khi thử lại.');
       } finally {
         if (btn) btn.disabled = false;
         if (textSpan) textSpan.innerText = originalText;
@@ -3483,6 +3463,7 @@
 
     // Lịch gửi đã tạm dừng trong giai đoạn giới hạn ghi.
   </script>
+  <script src="js/zalo-delivery.js?v=20261102-zalo1"></script>
   <script src="js/admin-auth.js?v=20261102-owner1"></script>
   <script src="js/weekly-schedule.js?v=20261101-live1"></script>
   <script src="js/schedule-sync.js?v=20261101-live1"></script>

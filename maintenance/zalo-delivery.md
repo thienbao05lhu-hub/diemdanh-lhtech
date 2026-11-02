@@ -1,5 +1,15 @@
 # Hàng đợi Zalo — đã chuẩn bị, gửi thật đang tắt
 
+## Cập nhật mới nhất — nút cũ và Cron đã nối
+
+Bot cũ và nơi nhận cũ đã được chủ dự án xác nhận; token mới/khóa worker lưu trong Vault. Đã triển khai SQL 186 và Cron `lhtech-zalo-delivery-worker` mỗi phút. Cron chỉ xử lý báo cáo Admin đã yêu cầu, chưa tự tạo báo cáo theo giờ. `enabled=false` và trial vẫn bật, nên dispatcher không gọi HTTP và chưa gửi tin thật.
+
+Nút “Báo Cáo Zalo Ngay” giữ nguyên thiết kế, dùng ca đang chọn, ngày server và trạng thái chốt ca. Sau khi xác nhận, nút theo dõi cùng job tối đa hai phút; chỉ `sent` báo thành công. Pending/sending báo đang chờ; unknown yêu cầu đối chiếu, không tự gửi lại. Trong trial, thao tác bị chặn với thông báo rõ ràng.
+
+Nguồn mới: [prepare-zalo-dispatch.sql](prepare-zalo-dispatch.sql), [prepare-zalo-cron.sql](prepare-zalo-cron.sql). Hai file không bật gửi và không thay người nhận. Kiểm tra Cron succeeded chỉ chứng minh dispatcher chạy; cần `sent` trong queue mới là xác nhận gửi.
+
+Các mục bên dưới ghi lại bước xây dựng queue trước đó. Phần còn lại để vận hành thật: kết thúc trial, kiểm thử ca thật, bật cấu hình gửi theo quyết định chủ dự án; nếu muốn báo cáo tự tạo theo giờ cần bổ sung lịch tạo báo cáo riêng.
+
 SQL 185 và Edge `zalo-report-worker` đã triển khai trên Supabase ngày 02/11/2026. Chưa cấu hình Bot/người nhận, chưa bật Cron gửi và chưa nối nút gửi cũ. Không có tin nhắn thật nào được gửi trong bước này; UI, trial QR, lịch và điểm danh giữ nguyên.
 
 Nguồn: [prepare-zalo-delivery.sql](prepare-zalo-delivery.sql), [zalo-report-worker.ts](zalo-report-worker.ts). Kiểm tra bằng [check-zalo-delivery.sql](check-zalo-delivery.sql). Không chạy lại các bước đã hoàn tất.

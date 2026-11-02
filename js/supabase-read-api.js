@@ -248,6 +248,21 @@
         isLocked: Boolean(att?.is_locked), reason: att?.note || '', note: att?.note || '' }];
     });
   }
+  async function zaloRpc(name,args) {
+    const result=await client.rpc(name,args);
+    if(result.error){
+      const messages={APP_ZALO_DISABLED:'Zalo chưa bật gửi thật hoặc hệ thống đang thử QR.',
+        APP_ZALO_REPORT_NOT_READY:'Ca chưa đủ điều kiện tạo báo cáo. Kiểm tra giờ và trạng thái chốt ca.',
+        APP_ZALO_REPORT_TOO_LONG:'Báo cáo vượt giới hạn 2.000 ký tự; chưa tạo yêu cầu gửi.',
+        APP_FORBIDDEN:'Tài khoản không có quyền gửi báo cáo Zalo.'};
+      const code=Object.keys(messages).find(k=>String(result.error.message||'').includes(k));
+      fail(code==='APP_FORBIDDEN'?403:409,code?messages[code]:'Chưa xác nhận được yêu cầu Zalo. Kiểm tra trạng thái trước khi thử lại.');
+    }
+    const data=result.data;
+    if(!data || !uuid(data.id) || !['pending','sending','sent','failed','unknown','cancelled'].includes(data.status)
+      || data.sent!==(data.status==='sent'))fail(503,'Chưa xác nhận được trạng thái gửi Zalo.');
+    return response({success:true,data,sent:data.sent});
+  }
   async function handle(url, options) {
     const path = url.pathname, method = (options.method || 'GET').toUpperCase();
     if (path === '/api/admin/login' && method === 'POST') {
@@ -270,6 +285,23 @@
     // Quyền được xác minh từ Auth + profile cho mỗi request; không tin storage hiển thị.
     const current = await identity(path !== '/api/leaves/mine');
     if (path === '/api/admin/verify' || path === '/api/admin/check') return response(sessionReply(current));
+    if(path==='/api/attendance/force-zalo-report' && method==='POST'){
+      const body=JSON.parse(options.body||'{}');
+      if(!['Sáng','Chiều','Tối'].includes(body.shift))fail(400,'Ca không hợp lệ.');
+      const mode=checked(await client.rpc('get_qr_test_mode'));
+      if(mode?.version!==1 || mode.profileId!==current.id || typeof mode.testMode!=='boolean'
+        || !Number.isFinite(Date.parse(mode.serverTime)))fail(503,'Chưa xác minh được giờ và chế độ điểm danh.');
+      if(mode.testMode)fail(409,'Đang thử QR; chưa gửi báo cáo Zalo thật.');
+      const stamp=today(new Date(mode.serverTime)).date;
+      const preview=checked(await client.rpc('admin_preview_zalo_report',{p_date:stamp,p_shift:body.shift,p_type:'closing'}));
+      if(preview?.version!==1 || typeof preview.ready!=='boolean')fail(503,'Chưa xác minh được báo cáo.');
+      if(['TEST_MODE','MAINTENANCE'].includes(preview.reason))fail(409,'Đang thử QR hoặc bảo trì; chưa gửi báo cáo Zalo thật.');
+      return zaloRpc('admin_enqueue_zalo_report',{p_date:stamp,p_shift:body.shift,p_type:preview.ready?'closing':'early'});
+    }
+    if(path==='/api/attendance/zalo-delivery' && method==='GET'){
+      const id=url.searchParams.get('id');if(!uuid(id))fail(400,'Mã yêu cầu Zalo không hợp lệ.');
+      return zaloRpc('admin_get_zalo_delivery',{p_id:id});
+    }
     if ((path === '/api/attendance/update-status' && method === 'POST') || (path === '/api/attendance/cancel' && method === 'DELETE')) {
       return adjustAttendance(path,JSON.parse(options.body || '{}'),current);
     }

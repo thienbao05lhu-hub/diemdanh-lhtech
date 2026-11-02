@@ -1,4 +1,8 @@
 -- Chỉ đọc metadata/trạng thái; không xuất Bot token, recipient hoặc nội dung tin.
+select jobname,schedule,active,command='SELECT private.dispatch_zalo_worker();' as correct_command
+from cron.job where jobname='lhtech-zalo-delivery-worker';
+select r.status,r.start_time,r.end_time from cron.job_run_details r join cron.job j on j.jobid=r.jobid
+where j.jobname='lhtech-zalo-delivery-worker' order by r.runid desc limit 5;
 select enabled,recipient_id is not null and recipient_confirmed_at is not null as recipient_configured
 from private.zalo_delivery_settings where id;
 select status,count(*) as jobs from private.zalo_outbox group by status;
