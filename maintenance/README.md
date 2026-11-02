@@ -73,3 +73,6 @@ Chủ project đã chạy bản khóa quyền trên Supabase thật và gửi �
 Đã xác minh 23 lịch nguồn LHU được áp dụng trên Supabase. Bảng hôm nay vẫn dùng dữ liệu thử QR; không thay đổi chế độ thử hoặc snapshot ca thật. Xem [giải thích và các bước tiếp theo](zalo-report-preview.md), đối chiếu bằng [check-lhu-attendance-link.sql](check-lhu-attendance-link.sql).
 
 Đã triển khai SQL 180 tạo bản xem trước báo cáo cho Admin; không gửi tin, chưa có Cron Zalo. Báo cáo thật bị chặn khi còn bật thử QR và báo cáo chốt yêu cầu ca được chốt ở database. Giao diện giữ nguyên. Các ghi chú về những bước trước là lịch sử triển khai, không cần chạy lại các bước đã hoàn tất.
+## 02/11/2026 — Hàng đợi và worker Zalo
+
+Đã triển khai SQL 185 và Edge worker; gửi mặc định tắt, hàng đợi rỗng, chưa cấu hình Bot/người nhận/Cron. Worker thật trả 401 khi thiếu/sai secret, 403 với Origin trình duyệt. 196 kiểm thử đạt; không đổi UI/trial hoặc gửi tin. Xem [trạng thái, giới hạn và bước kích hoạt còn lại](zalo-delivery.md).

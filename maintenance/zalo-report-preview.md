@@ -1,6 +1,6 @@
 # Báo cáo Zalo: bước chuẩn bị dữ liệu
 
-SQL 180 bổ sung `admin_preview_zalo_report(date, shift, type)` cho Admin đang hoạt động. Đây là bản xem trước, `deliveryEnabled=false`; chưa có worker gửi tin, token, người nhận hoặc Cron Zalo mới. Nút Zalo và giao diện giữ nguyên, chức năng gửi vẫn tạm dừng.
+SQL 180 bổ sung `admin_preview_zalo_report(date, shift, type)` cho Admin đang hoạt động. Đây là bản xem trước, `deliveryEnabled=false`. Bước tiếp theo đã có [hàng đợi và worker Zalo](zalo-delivery.md), nhưng chưa cấu hình token/người nhận hoặc bật Cron. Nút Zalo và giao diện giữ nguyên, chức năng gửi vẫn tạm dừng.
 
 Nguồn SQL: [prepare-zalo-report-preview.sql](prepare-zalo-report-preview.sql). Kiểm tra quyền bằng [check-zalo-report-preview.sql](check-zalo-report-preview.sql). Chủ dự án không cần chạy lại nếu bản này đã được triển khai.
 
