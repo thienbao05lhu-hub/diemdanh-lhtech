@@ -3,6 +3,12 @@
   'use strict';
     function playBeep(success = true) {
       try {
+        if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+          if (success) navigator.vibrate([60, 40, 60]);
+          else navigator.vibrate([120]);
+        }
+      } catch (_) {}
+      try {
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         const osc = audioCtx.createOscillator();
         const gain = audioCtx.createGain();
