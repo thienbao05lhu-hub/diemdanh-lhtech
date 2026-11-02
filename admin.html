@@ -12,7 +12,7 @@
   <script src="vendor/supabase-2.118.0.js"></script>
   <script src="js/config.js?v=20261101-safe-read"></script>
   <script src="js/attendance-trial.js?v=20261102-trial1"></script>
-  <script src="js/supabase-read-api.js?v=20261102-zalo1"></script>
+  <script src="js/supabase-read-api.js?v=20261102-pause1"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
     body { font-family: 'Plus Jakarta Sans', sans-serif; }
@@ -1452,6 +1452,105 @@
 
     // QR chỉ hiển thị trong thời gian server cho phép; không giữ mã cũ khi lỗi.
     let qrDeadline = 0, qrLoading = false, qrNextPoll = 0, activeQrSession = null;
+    let isQrCurrentlyPaused = false;
+
+    function initQrPauseControl() {
+      const tokenEl = document.getElementById('currentQrTokenText');
+      if (!tokenEl) return;
+      const oledCard = tokenEl.closest('.bg-slate-900');
+      if (!oledCard || document.getElementById('btnToggleQrPause')) return;
+
+      const bar = document.createElement('div');
+      bar.id = 'qrPauseControlBar';
+      bar.className = 'w-full mt-2.5 pt-2 border-t border-slate-800 flex items-center gap-2';
+      bar.innerHTML = `
+        <button
+          id="btnToggleQrPause"
+          type="button"
+          onclick="handleToggleQrPause(this)"
+          class="flex-1 py-1.5 px-2.5 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 bg-amber-500/15 text-amber-300 border border-amber-500/30 hover:bg-amber-500/25 cursor-pointer shadow-sm active:scale-[0.98]"
+          title="Tạm dừng hoặc tiếp tục phát mã QR"
+        >
+          <i id="btnToggleQrIcon" class="fa-solid fa-pause text-xs"></i>
+          <span id="btnToggleQrText">Tạm dừng QR</span>
+        </button>
+      `;
+      oledCard.appendChild(bar);
+    }
+
+    function setQrPausedUI(paused, message) {
+      isQrCurrentlyPaused = paused;
+      initQrPauseControl();
+      const btn = document.getElementById('btnToggleQrPause');
+      const btnText = document.getElementById('btnToggleQrText');
+      const btnIcon = document.getElementById('btnToggleQrIcon');
+      const countdown = document.getElementById('qrCountdown');
+      const tokenText = document.getElementById('currentQrTokenText');
+      const container = document.getElementById('qrcodeCanvas');
+
+      if (paused) {
+        if (btn) {
+          btn.className = 'flex-1 py-1.5 px-2.5 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/25 cursor-pointer shadow-sm active:scale-[0.98]';
+        }
+        if (btnText) btnText.textContent = 'Mở lại QR';
+        if (btnIcon) btnIcon.className = 'fa-solid fa-play text-xs';
+        if (countdown) countdown.textContent = 'TẠM DỪNG';
+        if (tokenText) tokenText.textContent = message || 'Mã QR đang tạm dừng phát.';
+        if (container) {
+          container.replaceChildren();
+          const pausedBox = document.createElement('div');
+          pausedBox.className = 'w-[140px] h-[140px] flex flex-col items-center justify-center bg-slate-900 rounded-lg p-2 text-center border border-amber-500/30';
+          pausedBox.innerHTML = '<i class="fa-solid fa-circle-pause text-3xl text-amber-400 mb-1.5"></i><span class="text-xs font-bold text-amber-300">ĐANG TẠM DỪNG</span><span class="text-[9px] text-slate-400 mt-1 leading-tight">Sinh viên tạm thời<br>không thể quét</span>';
+          container.appendChild(pausedBox);
+        }
+      } else {
+        if (btn) {
+          btn.className = 'flex-1 py-1.5 px-2.5 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 bg-amber-500/15 text-amber-300 border border-amber-500/30 hover:bg-amber-500/25 cursor-pointer shadow-sm active:scale-[0.98]';
+        }
+        if (btnText) btnText.textContent = 'Tạm dừng QR';
+        if (btnIcon) btnIcon.className = 'fa-solid fa-pause text-xs';
+      }
+    }
+
+    async function handleToggleQrPause(btn) {
+      const targetState = !isQrCurrentlyPaused;
+      const actionName = targetState ? 'Tạm dừng' : 'Mở lại';
+
+      const confirmed = await showConfirmDialog({
+        title: `${actionName} Phát Mã QR`,
+        message: targetState
+          ? 'Bạn có chắc chắn muốn <strong>tạm dừng phát mã QR</strong>? Sinh viên sẽ không thể quét điểm danh cho đến khi bạn mở lại.'
+          : 'Bạn có muốn <strong>tiếp tục phát mã QR</strong> cho sinh viên quét điểm danh?',
+        confirmText: actionName,
+        cancelText: 'Hủy',
+        isDanger: targetState,
+      });
+      if (!confirmed) return;
+
+      if (btn) btn.disabled = true;
+      try {
+        const res = await fetch('/api/attendance/toggle-qr', {
+          method: 'POST',
+          headers: getAdminHeaders(),
+          body: JSON.stringify({ paused: targetState, reason: targetState ? 'Admin tạm dừng trên web' : 'Admin mở lại trên web' })
+        });
+        const data = await res.json();
+        if (!res.ok || data.success !== true) throw new Error(data.message || 'Không thể thay đổi trạng thái QR.');
+
+        showToast.success(data.message);
+        if (targetState) {
+          setQrPausedUI(true, data.message);
+        } else {
+          setQrPausedUI(false);
+          await updateDynamicQR();
+          startCountdown();
+        }
+      } catch (err) {
+        showToast.error(err.message || 'Lỗi khi cập nhật trạng thái QR.');
+      } finally {
+        if (btn) btn.disabled = false;
+      }
+    }
     function clearDynamicQR(message = 'Chưa có mã QR đang hiệu lực.') {
       qrDeadline = 0; activeQrSession = null;
       document.getElementById('qrcodeCanvas').replaceChildren();

@@ -327,8 +327,22 @@
       const caps = await qrCapabilities();
       if (!caps?.qrEnabled) return response({ success: false, message: maintenance }, 503);
       const data = await qrRpc('admin_get_active_qr');
+      if (data?.isPaused) {
+        return response({ success: true, isPaused: true, shift: data.shift, date: data.date, message: data.message || 'Mã QR đang tạm dừng phát.' });
+      }
       if (!data || !/^[a-f0-9]{32}$/.test(data.token) || !data.expiresAt || !data.serverTime) fail(503,'Chưa nhận được mã QR hợp lệ.');
       return response({ success: true, ...data });
+    }
+    if (path === '/api/attendance/toggle-qr' && method === 'POST') {
+      const caps = await qrCapabilities();
+      if (!caps?.qrEnabled) return response({ success: false, message: maintenance }, 503);
+      const body = JSON.parse(options.body || '{}');
+      const data = await qrRpc('admin_toggle_qr_pause', {
+        p_paused: Boolean(body.paused),
+        p_reason: body.reason || ''
+      });
+      if (data?.success !== true) fail(503, 'Chưa thay đổi được trạng thái phát QR.');
+      return response({ success: true, isPaused: data.isPaused, message: data.message, data });
     }
     if (method === 'POST' && ['/api/users/reset-device','/api/attendance/close-session'].includes(path)) {
       const caps = await qrCapabilities();

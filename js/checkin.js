@@ -16,6 +16,7 @@
   let stickyResult = false;
   const messages = {
     APP_OUTSIDE_WINDOW: 'Hiện ngoài giờ nhận điểm danh.', APP_SESSION_CLOSED: 'Ca điểm danh đã chốt.',
+    APP_QR_PAUSED: 'Mã QR đang tạm dừng phát. Vui lòng đợi quản trị viên mở lại để quét.',
     APP_TEST_MODE_EXPIRED: 'Phiên thử đã hết hạn hoặc bị tắt. Tải lại trang để kiểm tra.',
     APP_DEVICE_IN_USE: 'Trình duyệt này đã gắn với tài khoản khác. Liên hệ quản trị viên để mở khóa.',
     APP_DEVICE_MISMATCH: 'Thiết bị không khớp. Dùng trình duyệt đã đăng ký hoặc liên hệ quản trị viên để mở khóa.',
