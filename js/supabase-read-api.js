@@ -349,7 +349,7 @@
       if (!caps?.qrEnabled) return response({ success: false, message: maintenance }, 503);
       const body = JSON.parse(options.body || '{}');
       if (path === '/api/users/reset-device') {
-        await refreshProfiles();
+        if (path !== '/api/attendance/stats/all') await refreshProfiles();
         const target = profiles.find(p => p.student_id === body.userId);
         if (!target) fail(404,'Không tìm thấy hồ sơ.');
         const data = await qrRpc('admin_reset_device', { p_profile_id: target.id, p_reason: body.reason || 'Quản trị viên xác nhận mở khóa thiết bị trên dashboard.' });
@@ -388,7 +388,7 @@
     const allowed = ['/api/users','/api/schedule','/api/schedule/history','/api/attendance/today',
       '/api/attendance/daily-summary','/api/attendance/stats/all','/api/admin/audit-logs','/api/leaves','/api/attendance'];
     if (!allowed.includes(path)) return response({ success: false, message: 'API này chưa được triển khai.' }, 404);
-    await refreshProfiles();
+    if (path !== '/api/attendance/stats/all') await refreshProfiles();
     if (path === '/api/users' || path === '/api/schedule') {
       const selected = week(url.searchParams.get('week') || today().date);
       const schedules = await readAll('weekly_schedules','profile_id,week_start,schedule,revision,source', { week_start: selected.start });
@@ -468,6 +468,18 @@
         if (!Array.isArray(data)) fail(503,'Chưa tải được thống kê thử.');
         return response({success:true,testMode:true,count:data.length,data});
       }
+      if (typeof client.rpc === 'function') {
+        try {
+          const rpcRes = await client.rpc('admin_get_attendance_stats');
+          if (!rpcRes?.error && Array.isArray(rpcRes?.data)) {
+            return response({ success: true, count: rpcRes.data.length, data: rpcRes.data });
+          }
+          if (rpcRes?.error && rpcRes.error.code !== 'PGRST202') checked(rpcRes);
+        } catch (err) {
+          if (err?.status) throw err;
+        }
+      }
+      await refreshProfiles();
       const records = await readAll('attendance','profile_id,status');
       const data = profiles.filter(p => p.active && p.role === 'student').map(p => {
         const rows = records.filter(row => row.profile_id === p.id);

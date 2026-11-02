@@ -1,0 +1,26 @@
+name: Supabase Free Tier Keep-Alive
+
+on:
+  schedule:
+    # Chạy định kỳ mỗi 3 ngày lúc 09:00 sáng giờ VN (02:00 UTC) để chống tự động Pause sau 7 ngày nghỉ lễ/Tết
+    - cron: '0 2 */3 * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  keepalive:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Supabase REST API Gateway
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            -H "apikey: sb_publishable_Sz6k8E5HKwtxXbmu1T0HLw_4sXzTjo7" \
+            "https://oalnswbnjhkkovxjxtlz.supabase.co/rest/v1/")
+          echo "Supabase REST gateway status: $STATUS"
+          if [ "$STATUS" -ge 500 ] || [ "$STATUS" -eq 000 ]; then
+            echo "Supabase gateway unreachable ($STATUS)"
+            exit 1
+          fi
+

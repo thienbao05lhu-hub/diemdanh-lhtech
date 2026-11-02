@@ -12,7 +12,7 @@
   <script src="vendor/supabase-2.118.0.js"></script>
   <script src="js/config.js?v=20261101-safe-read"></script>
   <script src="js/attendance-trial.js?v=20261102-trial1"></script>
-  <script src="js/supabase-read-api.js?v=20261102-pause3"></script>
+  <script src="js/supabase-read-api.js?v=20261102-opt1"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
     body { font-family: 'Plus Jakarta Sans', sans-serif; }
@@ -1862,7 +1862,7 @@
         await fetchTodayAttendance();
 
         // Lấy thống kê chuyên cần cá nhân
-        await fetchPersonalStats();
+        const statsSection = document.getElementById('tab-stats'); if (!rawPersonalStats.length || (statsSection && !statsSection.classList.contains('hidden'))) await fetchPersonalStats();
 
         // Lấy dữ liệu lịch học mặc định
         await fetchScheduleList();
@@ -2200,7 +2200,7 @@
         if (res.ok && result.success) {
           showToast.success(`Đã cập nhật trạng thái của ${userId} thành "${newStatus}"`);
           await fetchTodayAttendance();
-          await fetchPersonalStats();
+          const statsSection = document.getElementById('tab-stats'); if (!rawPersonalStats.length || (statsSection && !statsSection.classList.contains('hidden'))) await fetchPersonalStats();
         } else {
           showToast.error(result.message || 'Không thể cập nhật trạng thái.');
         }
@@ -2242,7 +2242,7 @@
         if (res.ok && result.success) {
           showToast.success('Đã hủy lượt điểm danh thành công!');
           await fetchTodayAttendance();
-          await fetchPersonalStats();
+          const statsSection = document.getElementById('tab-stats'); if (!rawPersonalStats.length || (statsSection && !statsSection.classList.contains('hidden'))) await fetchPersonalStats();
         } else {
           showToast.error(result.message || 'Không thể hủy lượt điểm danh.');
         }
@@ -2367,7 +2367,7 @@
         }
 
         // Tự động gọi lại fetchPersonalStats() và API load bảng điểm danh hôm nay để làm trắng giao diện
-        await fetchPersonalStats();
+        const statsSection = document.getElementById('tab-stats'); if (!rawPersonalStats.length || (statsSection && !statsSection.classList.contains('hidden'))) await fetchPersonalStats();
         await fetchTodayAttendance();
       } catch (err) {
         console.error('Lỗi khi reset toàn bộ dữ liệu test:', err);
@@ -3585,7 +3585,7 @@
     // 1. Dự phòng khi module cập nhật tự động chưa tải: điểm danh 15 giây
     setInterval(() => { if (!window.AdminLiveRefresh && !document.hidden && window.AdminAuth?.isAuthenticated()) void fetchTodayAttendance(); }, 15000);
     // 2. Dự phòng thống kê 30 giây; module mới quản lý lịch đọc khi hoạt động
-    setInterval(() => { if (!window.AdminLiveRefresh && !document.hidden && window.AdminAuth?.isAuthenticated()) void fetchPersonalStats(); }, 30000);
+    setInterval(() => { const statsSection = document.getElementById('tab-stats'); if (!window.AdminLiveRefresh && !document.hidden && window.AdminAuth?.isAuthenticated() && statsSection && !statsSection.classList.contains('hidden')) void fetchPersonalStats(); }, 30000);
 
     // Lịch gửi đã tạm dừng trong giai đoạn giới hạn ghi.
   </script>
