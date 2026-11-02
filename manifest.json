@@ -1,24 +1,30 @@
 {
-  "name": "Hệ Thống Điểm Danh Sinh Viên",
-  "short_name": "Điểm Danh QR",
-  "description": "Ứng dụng PWA điểm danh sinh viên bằng mã QR động chống gian lận",
-  "start_url": "./app.html",
+  "name": "LH-TECH • Điểm Danh Sinh Viên",
+  "short_name": "LH-TECH QR",
+  "description": "Hệ thống điểm danh QR động LH-TECH Robocon - Đại học Lạc Hồng",
+  "start_url": "./checkin.html",
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#0f172a",
   "theme_color": "#10b981",
   "icons": [
     {
-      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'><rect width='192' height='192' rx='36' fill='%2310b981'/><path d='M48 48h36v36H48zm12 12v12h12V60zm48-12h36v36h-36zm12 12v12h12V60zM48 108h36v36H48zm12 12v12h12v-12zm48 0h12v12h-12zm24 0h12v24h-12zm-24 24h36v12h-36zm12-36h24v12h-24z' fill='white'/></svg>",
+      "src": "icons/icon-192.png",
       "sizes": "192x192",
-      "type": "image/svg+xml",
-      "purpose": "any maskable"
+      "type": "image/png",
+      "purpose": "any"
     },
     {
-      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect width='512' height='512' rx='96' fill='%2310b981'/><path d='M128 128h96v96h-96zm32 32v32h32v-32zm128-32h96v96h-96zm32 32v32h32v-32zM128 288h96v96h-96zm32 32v32h32v-32zm128 0h32v32h-32zm64 0h32v64h-32zm-64 64h96v32h-96zm32-96h64v32h-64z' fill='white'/></svg>",
+      "src": "icons/icon-512.png",
       "sizes": "512x512",
-      "type": "image/svg+xml",
-      "purpose": "any maskable"
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ],
   "scope": "./"
