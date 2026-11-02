@@ -1455,6 +1455,8 @@
     let isQrCurrentlyPaused = false;
 
     function initQrPauseControl() {
+      const totalUsersEl = document.getElementById('totalUsers');
+      if (totalUsersEl && totalUsersEl.nextElementSibling) totalUsersEl.nextElementSibling.textContent = 'Đồng bộ trên Supabase Cloud';
       const tokenEl = document.getElementById('currentQrTokenText');
       if (!tokenEl) return;
       const oledCard = tokenEl.closest('.bg-slate-900');

@@ -71,7 +71,7 @@
       if (verified) {
         if (!ready()) {
           await stopCamera();
-          scanMessage('warning','Chưa nhận điểm danh',!data.qrEnabled ? 'Điểm danh đang tạm dừng để cập nhật.' : !data.window ? 'Hiện ngoài giờ nhận điểm danh.' : data.sessionClosed ? 'Ca điểm danh đã chốt.' : 'Đang chờ quản trị viên mở mã QR.');
+          scanMessage('warning','Chưa nhận điểm danh',!data.qrEnabled ? 'Điểm danh đang tạm dừng để cập nhật.' : !data.window ? 'Hiện ngoài giờ nhận điểm danh.' : data.sessionClosed ? 'Ca điểm danh đã chốt.' : data.isPaused ? 'Quản trị viên đang tạm dừng phát mã QR cho ca này.' : 'Đang chờ quản trị viên mở mã QR.');
         } else if (!wasReady && !stickyResult) scanMessage('warning','Sẵn sàng quét','Bấm Tiếp Tục Quét Lại để mở camera.');
       }
     } catch(error) {

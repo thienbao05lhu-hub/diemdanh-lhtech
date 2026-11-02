@@ -47,6 +47,7 @@
     if (result.error) {
       const errors = {
         APP_OUTSIDE_WINDOW: 'Hiện ngoài giờ nhận điểm danh.',
+        APP_QR_PAUSED: 'Mã QR đang được quản trị viên tạm dừng phát.',
         APP_TEST_MODE_EXPIRED: 'Phiên thử đã hết hạn hoặc bị tắt. Tải lại trang để kiểm tra.',
         APP_TEST_QR_ONLY: 'Chế độ hiện tại chỉ thử QR; gửi/duyệt nghỉ và sửa điểm danh thật đang tạm dừng.',
         APP_SESSION_CLOSED: 'Ca này đã chốt, không thể mở lại mã QR.',
