@@ -1,3 +1,7 @@
+## Bước hiện tại — mở/chốt ca, 02/11/2026
+
+SQL 130 đã có ảnh kiểm tra đúng đầy đủ; Realtime qua thiết bị thật chưa được xác nhận. Chạy `restore-safe-session-finalization.sql` (140), sau đó bật pg_cron tại Integrations > Cron và chạy `enable-attendance-cron.sql` (141). Kiểm tra `check-session-finalization.sql` và `check-attendance-cron.sql`. Đọc `session-finalization.md`; dừng riêng job bằng `disable-attendance-cron.sql` khi cần. Hai SQL mới chưa được công cụ áp dụng lên Supabase. Giữ nguyên giao diện tối; không chạy lại các bước đã xong.
+
 ## Bước hiện tại: cập nhật tự động Admin
 
 Chủ project đã xác nhận SQL 120 chạy thành công; điều kiện 110 được kiểm tra trong 120. Không cần chạy lại các bước đó. Chạy toàn bộ `enable-live-refresh.sql`, rồi từng SELECT của `check-live-refresh.sql`. Đọc `live-refresh.md` để thử quét, kết nối lại và giữ bản nháp trên giao diện tối hiện có. Bước 130 này đang chuẩn bị, chưa được áp dụng vào Supabase từ công cụ. Các ghi chú trạng thái bên dưới thuộc những bước trước.

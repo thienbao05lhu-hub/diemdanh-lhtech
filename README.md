@@ -1,3 +1,9 @@
+## 02/11/2026 — Chuẩn bị mở/chốt ca tự động
+
+Người dùng đã gửi kết quả SQL 130: RLS, quyền, publication và sáu trigger đúng. Chưa xác nhận thử Realtime qua hai thiết bị. Bước mới hoàn thiện snapshot và chốt ca: chỉ tạo Vắng không phép cho người dự kiến chưa có bản ghi, giữ nguyên lượt quét/nghỉ đã duyệt, không tự suy diễn phiên lịch sử bỏ lỡ. Nút Chốt ca hiện có dùng cùng transaction, giao diện không thay đổi.
+
+Chạy [restore-safe-session-finalization.sql](maintenance/restore-safe-session-finalization.sql), bật pg_cron tại Integrations > Cron rồi chạy [enable-attendance-cron.sql](maintenance/enable-attendance-cron.sql). Xem [hướng dẫn và giới hạn](maintenance/session-finalization.md). Cả hai SQL mới đang chờ chủ project áp dụng; chưa có xác nhận Cron chạy thật. Không chạy lại SQL trước đó. Các ghi chú bên dưới thuộc giai đoạn trước.
+
 ## Cập nhật tự động Admin — SQL 120 đã được xác nhận, chuẩn bị SQL 130
 
 Chủ project xác nhận chạy thành công SQL chỉnh/hủy điểm danh 120 ngày 01/11/2026; preflight của 120 yêu cầu 110. Bước mới thêm tín hiệu Realtime và tải lại dữ liệu theo Auth/RLS, giữ nguyên giao diện tối đã chốt. Chạy [enable-live-refresh.sql](maintenance/enable-live-refresh.sql), kiểm tra [check-live-refresh.sql](maintenance/check-live-refresh.sql), rồi nghiệm thu theo [live-refresh.md](maintenance/live-refresh.md). SQL 130 chưa được công cụ áp dụng lên Supabase. Trước khi bật Realtime, web vẫn tải lại định kỳ khi có quyền.
