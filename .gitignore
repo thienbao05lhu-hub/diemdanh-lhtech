@@ -1,2 +1,5 @@
 # Bản vận hành chứa mật khẩu chỉ được giữ ở workspace riêng.
 initialize-23-student-passwords.sql
+01-release-admin-email.sql
+02-prepare-new-super-admin.sql
+03-complete-super-admin-transfer.sql

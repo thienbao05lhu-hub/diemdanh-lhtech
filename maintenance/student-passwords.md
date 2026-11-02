@@ -2,10 +2,14 @@
 
 Người dùng chốt phạm vi: **23 sinh viên, không gồm Admin**. Mật khẩu khởi tạo được người dùng chỉ định riêng, không đưa vào mã JavaScript, Pages hoặc kho GitHub công khai. Các bước dưới đây chưa được công cụ chạy trên Supabase thật.
 
+## Khi database báo chỉ có 22 sinh viên
+
+Người dùng yêu cầu chuyển quyền khỏi 123000896 sang tài khoản quản trị riêng. Làm theo `super-admin-transfer.md` trước: chỉ sau hoàn tất bàn giao, 123000896 mới trở thành sinh viên thứ 23. Bản mới operation mật khẩu tính cả tài khoản này theo role; giữ nguyên bảo vệ các tài khoản còn là Admin. Không đổi guard từ 23 thành 22 và không chạy lại bản SQL cũ đã loại trừ cố định MSSV chủ.
+
 ## Chủ project thực hiện một lần
 
 1. Mở file riêng trong workspace `artifacts/initialize-23-student-passwords.sql`, chép toàn bộ vào SQL Editor project `oalnswbnjhkkovxjxtlz`, chạy bằng tài khoản chủ. Không upload file này lên GitHub hoặc gói frontend.
-2. Script chỉ xử lý role student, active, loại trừ MSSV quản trị 123000896. Phải tìm thấy đúng 23 hồ sơ; nếu có 22/24 hoặc thiếu tài khoản Auth/email thì toàn bộ transaction dừng, không tự thêm/xóa người hay đổi vai trò. Danh sách import cũ trong workspace chỉ có 22 alias sinh viên, nên số thực tế trên Supabase phải được kiểm tra bằng guard này.
+2. Script chỉ xử lý role student, active; không dùng MSSV cố định để loại trừ người đã trở lại sinh viên. Phải tìm thấy đúng 23 hồ sơ; nếu có 22/24 hoặc thiếu tài khoản Auth/email thì toàn bộ transaction dừng, không tự thêm/xóa người hay đổi vai trò. Danh sách import cũ trong workspace chỉ có 22 alias sinh viên, nên số thực tế trên Supabase phải được kiểm tra bằng guard này.
 3. Kết quả sau chạy có MSSV, tên, email đăng nhập, cờ login_with_student_id, initialized và email_confirmed; không trả mật khẩu hoặc hash. Nếu login_with_student_id=true, dùng MSSV trên trang đăng nhập; nếu false, dùng đúng email của dòng đó. Không sửa email/UID để chữa lệch tài khoản.
 
 Mỗi mật khẩu có bcrypt salt riêng (cost 10). Thao tác xác nhận email đăng nhập Auth và ghi audit theo UUID, không đổi role/active/email/UID, không đụng tài khoản Admin hoặc thiết bị. Ledger private ghi người đã được khởi tạo nhưng không lưu mật khẩu/hash. Chạy lại cùng file giữ nguyên người đã được cấp, kể cả họ đã tự đổi mật khẩu; không dùng file này làm chức năng reset mật khẩu định kỳ.

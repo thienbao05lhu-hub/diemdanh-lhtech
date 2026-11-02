@@ -17,7 +17,7 @@
     user = result.data;
     csrfToken = result.csrfToken;
     localStorage.setItem('adminUser', user.userId);
-    localStorage.setItem('adminName', (user.userId === '123000896' || user.role === 'superadmin') ? 'Võ Huỳnh Thiên Bảo' : (user.name || user.userId));
+    localStorage.setItem('adminName', (user.name || user.userId));
     localStorage.setItem('adminRole', user.role);
     updateAdminUI(user);
     hideAdminOverlay();

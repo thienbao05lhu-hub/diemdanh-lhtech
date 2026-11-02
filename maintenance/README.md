@@ -1,3 +1,7 @@
+## Bàn giao Super Admin riêng, rồi cấp mật khẩu đủ 23 sinh viên
+
+Lỗi số lượng hiện có 22 là đúng; chưa thay mật khẩu. Xem `super-admin-transfer.md` để dùng ba file owner-only trong artifacts riêng và tạo Auth user mới qua Dashboard. Chỉ sau đăng nhập tài khoản mới được xác nhận mới hoàn tất chuyển quyền. Sau đó chạy lại bản mới file khởi tạo 23 sinh viên; tài khoản 123000896 lúc này có role student nên được tính. Không chạy bootstrap chủ đầu tiên hoặc installer cũ.
+
 ## Cấp mật khẩu ban đầu — 23 sinh viên, giữ nguyên Admin
 
 Xem `student-passwords.md`. Operation có mật khẩu nằm riêng trong workspace, không đăng lên Pages. Chủ project chạy bản riêng trong SQL Editor; script dừng nếu số hồ sơ sinh viên active không đúng 23. Sau đăng nhập, dùng nút Đổi cũ → chọn 1 để tự đổi mật khẩu.

@@ -1,3 +1,9 @@
+## 02/11/2026 — Tách Super Admin khỏi tài khoản sinh viên
+
+Người dùng xác nhận database báo 22 sinh viên và yêu cầu tài khoản Super Admin riêng. Đã chuẩn bị ba operation owner-only: dành email cho Auth user mới, tạo hồ sơ Admin để kiểm tra đăng nhập, rồi nâng Super Admin/hạ quyền cũ cùng transaction sau lần đăng nhập mới. Tài khoản 123000896 trở lại sinh viên thứ 23, giữ UID và lịch sử. [Hướng dẫn](maintenance/super-admin-transfer.md), [chẩn đoán](maintenance/check-super-admin-transfer.sql). Các operation riêng chưa được công cụ chạy trên Supabase.
+
+Đã bỏ điều kiện Super Admin gắn cứng với MSSV và tên ép trong dashboard; quyền/nhãn theo hồ sơ đã xác minh. Bản SQL khởi tạo 23 sinh viên mới dùng role, tính cả tài khoản cũ sau khi bàn giao; không chạy trước bước chuyển hoàn tất và không giảm số 23 để vượt guard. Giao diện/CSS/bố cục giữ nguyên.
+
 ## 02/11/2026 — Mật khẩu ban đầu và tự đổi mật khẩu
 
 Theo xác nhận người dùng, phạm vi là **23 sinh viên, không gồm Admin**. Đã chuẩn bị một operation SQL riêng trong workspace để chủ project cấp mật khẩu ban đầu, kiểm tra đủ 23 hồ sơ active và ghi dấu chống chạy lại đè mật khẩu tự đổi. File có mật khẩu thật không được publish hoặc đưa vào gói frontend. Chưa chạy thao tác này trên Supabase từ công cụ. [Hướng dẫn](maintenance/student-passwords.md).

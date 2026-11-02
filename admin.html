@@ -1417,9 +1417,6 @@
       });
     }
 
-    if (localStorage.getItem('adminUser') === '123000896' || localStorage.getItem('adminRole') === 'superadmin') {
-      localStorage.setItem('adminName', 'Võ Huỳnh Thiên Bảo');
-    }
     const cachedAdminName = localStorage.getItem('adminName');
     if (cachedAdminName && document.getElementById('adminUserName')) {
       document.getElementById('adminUserName').innerText = cachedAdminName;
@@ -2937,7 +2934,7 @@
 
       if (user) {
         if (badge) badge.classList.remove('hidden');
-        if (nameEl) nameEl.innerText = (user.userId === '123000896' || user.role === 'superadmin') ? 'Võ Huỳnh Thiên Bảo' : (user.name || user.userId);
+        if (nameEl) nameEl.innerText = (user.name || user.userId);
 
         if (roleTag) {
           if (user.role === 'superadmin') {
@@ -2970,7 +2967,7 @@
       const container = document.getElementById('rbacUsersList');
       if (!container) return;
 
-      const currentRole = localStorage.getItem('adminRole');
+      const currentRole = window.AdminAuth?.getUser()?.role;
       if (currentRole !== 'superadmin') return;
 
       const keyword = (document.getElementById('rbacSearchInput')?.value || '').trim().toLowerCase();
@@ -2991,7 +2988,7 @@
       }
 
       container.innerHTML = list.map(u => {
-        const isSuper = u.userId === '123000896' || u.role === 'superadmin';
+        const isSuper = u.role === 'superadmin';
         const isAdmin = u.role === 'admin';
 
         let roleBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-medium bg-slate-800/80 text-slate-400 border border-slate-700/60">Sinh viên</span>`;
@@ -3485,7 +3482,7 @@
 
     // Lịch gửi đã tạm dừng trong giai đoạn giới hạn ghi.
   </script>
-  <script src="js/admin-auth.js?v=20261101_04"></script>
+  <script src="js/admin-auth.js?v=20261102-owner1"></script>
   <script src="js/weekly-schedule.js?v=20261101-live1"></script>
   <script src="js/schedule-sync.js?v=20261101-live1"></script>
   <script src="js/admin-tools.js?v=20261101_08"></script>
