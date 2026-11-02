@@ -26,6 +26,7 @@
       }),
     },
   });
+  root.AttendanceTrialRouter?.install(client);
   const adminRoles = ['admin', 'super_admin'];
   const roleLabels = { student: 'Sinh viên', admin: 'Quản trị viên', super_admin: 'Quản trị cao nhất' };
 
@@ -33,6 +34,7 @@
     const code = error?.code;
     const appMessages = {
       APP_FORBIDDEN: 'Tài khoản không có quyền thực hiện thao tác này.',
+      APP_TEST_QR_ONLY: 'Chế độ hiện tại chỉ thử QR; gửi/duyệt nghỉ và sửa điểm danh thật đang tạm dừng.',
       APP_INVALID_INPUT: 'Thông tin chưa hợp lệ. Kiểm tra lại các trường bắt buộc.',
       APP_AUTH_NOT_FOUND: 'Chưa tìm thấy tài khoản đăng nhập duy nhất cho email này. Hãy cấp tài khoản trước.',
       APP_PROFILE_EXISTS: 'Email này đã gắn với một mã sinh viên khác.',

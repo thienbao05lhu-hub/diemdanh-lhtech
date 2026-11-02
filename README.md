@@ -1,3 +1,9 @@
+## 02/11/2026 — Thử QR ngoài giờ khi chưa có lịch/lớp
+
+Người dùng yêu cầu mở giới hạn giờ để thử trong quá trình hoàn thiện. Đã chuẩn bị [enable-qr-test-mode.sql](maintenance/enable-qr-test-mode.sql): chế độ thử 24h, lượt quét private tách riêng, vẫn giữ Auth/device/QR TTL 30s, không đổi thiết kế tối. File cũng tạm dừng automation đánh vắng thật. Ctrl + F5 các thiết bị sau khi chủ project chạy SQL; token và kết quả ghi chữ THỬ. [Hướng dẫn](maintenance/qr-test-mode.md), [kiểm tra](maintenance/check-qr-test-mode.sql), [tắt thử](maintenance/disable-qr-test-mode.sql). SQL mới chưa được áp dụng từ công cụ.
+
+Lớp sinh viên và LHU vẫn cần hoàn thiện: adapter hiện trả department rỗng và chưa có worker đồng bộ LHU ở cloud. Có trong G1/G5; không tự đoán lớp hoặc báo đã đồng bộ. Cron thật trước đó đã có ảnh active/correct_command và hai lượt succeeded; khi bật thử sẽ chủ động dừng config, chỉ bật lại file enable-attendance-cron khi sẵn sàng.
+
 ## 02/11/2026 — Chuẩn bị mở/chốt ca tự động
 
 Người dùng đã gửi kết quả SQL 130: RLS, quyền, publication và sáu trigger đúng. Chưa xác nhận thử Realtime qua hai thiết bị. Bước mới hoàn thiện snapshot và chốt ca: chỉ tạo Vắng không phép cho người dự kiến chưa có bản ghi, giữ nguyên lượt quét/nghỉ đã duyệt, không tự suy diễn phiên lịch sử bỏ lỡ. Nút Chốt ca hiện có dùng cùng transaction, giao diện không thay đổi.

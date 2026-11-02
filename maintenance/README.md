@@ -1,3 +1,7 @@
+## Bước hiện tại — thử QR ngoài giờ
+
+Chạy `enable-qr-test-mode.sql` để mở thử 24h và tạm dừng đánh vắng thật. Ctrl + F5 Admin/app, quét thử trên giao diện tối cũ; không cần lớp hoặc lịch để thử. Đọc `qr-test-mode.md`, kiểm tra `check-qr-test-mode.sql`. Tắt bằng `disable-qr-test-mode.sql`; automation thật không tự bật lại. Lớp/LHU chưa hoàn tất, đang nằm trong các bước chuyển đổi kế tiếp.
+
 ## Bước hiện tại — mở/chốt ca, 02/11/2026
 
 SQL 130 đã có ảnh kiểm tra đúng đầy đủ; Realtime qua thiết bị thật chưa được xác nhận. Chạy `restore-safe-session-finalization.sql` (140), sau đó bật pg_cron tại Integrations > Cron và chạy `enable-attendance-cron.sql` (141). Kiểm tra `check-session-finalization.sql` và `check-attendance-cron.sql`. Đọc `session-finalization.md`; dừng riêng job bằng `disable-attendance-cron.sql` khi cần. Hai SQL mới chưa được công cụ áp dụng lên Supabase. Giữ nguyên giao diện tối; không chạy lại các bước đã xong.

@@ -8,6 +8,7 @@
       autoRefreshToken: true, detectSessionInUrl: false },
   });
   root.supabaseClient = client;
+  root.AttendanceTrialRouter?.install(client);
   const networkFetch = root.fetch.bind(root);
   const roles = ['admin', 'super_admin'];
   const maintenance = 'Hệ thống đang giới hạn ghi để cập nhật bảo mật. Chức năng này tạm dừng; chưa có dữ liệu được ghi.';
@@ -45,6 +46,8 @@
     if (result.error) {
       const errors = {
         APP_OUTSIDE_WINDOW: 'Hiện ngoài giờ nhận điểm danh.',
+        APP_TEST_MODE_EXPIRED: 'Phiên thử đã hết hạn hoặc bị tắt. Tải lại trang để kiểm tra.',
+        APP_TEST_QR_ONLY: 'Chế độ hiện tại chỉ thử QR; gửi/duyệt nghỉ và sửa điểm danh thật đang tạm dừng.',
         APP_SESSION_CLOSED: 'Ca này đã chốt, không thể mở lại mã QR.',
         APP_SESSION_NOT_FOUND: 'Ca này chưa mở phiên QR.',
         APP_FORBIDDEN: 'Tài khoản không có quyền thực hiện thao tác này.',
@@ -305,7 +308,7 @@
       date(body.date);
       const data = await qrRpc('admin_close_attendance_session', { p_date: body.date, p_shift: body.shift, p_reason: body.reason });
       if (data?.closed !== true) fail(503,'Chưa xác nhận được kết quả chốt ca.');
-      return response({ success: true, message: 'Đã chốt và khóa các bản ghi trong ca.', data });
+      return response({ success: true, message: data.testMode ? 'Đã chốt phiên thử; dữ liệu điểm danh thật không thay đổi.' : 'Đã chốt và khóa các bản ghi trong ca.', data });
     }
     if (method !== 'GET') return response({ success: false, code: 'WRITE_MAINTENANCE', message: maintenance }, 503);
     if (['/api/admin/sync-schedule','/api/schedule/sync'].includes(path)) {
@@ -393,6 +396,12 @@
         totalUnexcused: details.filter(r => r.status === 'Vắng không phép').length, details });
     }
     if (path === '/api/attendance/stats/all') {
+      const mode = root.AttendanceTrialRouter ? checked(await root.AttendanceTrialRouter.mode(client)) : null;
+      if (mode?.testMode) {
+        const data = checked(await client.rpc('qr_test_admin_get_stats'));
+        if (!Array.isArray(data)) fail(503,'Chưa tải được thống kê thử.');
+        return response({success:true,testMode:true,count:data.length,data});
+      }
       const records = await readAll('attendance','profile_id,status');
       const data = profiles.map(p => {
         const rows = records.filter(row => row.profile_id === p.id);

@@ -90,6 +90,9 @@ begin
   if pg_catalog.to_regclass('private.attendance_automation') is not null then
     update private.attendance_automation set enabled=false where id=true;
   end if;
+  if pg_catalog.to_regclass('private.qr_test_settings') is not null then
+    update private.qr_test_settings set enabled=false where id=true;
+  end if;
   if pg_catalog.to_regclass('public.app_change_events') is not null then
     revoke all on table public.app_change_events from public,anon,authenticated;
     revoke all on sequence public.app_change_events_id_seq from public,anon,authenticated;

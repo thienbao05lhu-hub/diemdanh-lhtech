@@ -11,7 +11,8 @@
   <script src="js/attendance-csv.js?v=20261101-logic1"></script>
   <script src="vendor/supabase-2.118.0.js"></script>
   <script src="js/config.js?v=20261101-safe-read"></script>
-  <script src="js/supabase-read-api.js?v=20261101-edit1"></script>
+  <script src="js/attendance-trial.js?v=20261102-trial1"></script>
+  <script src="js/supabase-read-api.js?v=20261102-trial1"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
     body { font-family: 'Plus Jakarta Sans', sans-serif; }
@@ -1477,7 +1478,7 @@
         qrDeadline = started + lifetime;
         activeQrSession = { date: data.date, shift: data.shift };
         remainingSeconds = Math.max(0, Math.ceil((qrDeadline - performance.now()) / 1000));
-        document.getElementById('currentQrTokenText').textContent = data.token;
+        document.getElementById('currentQrTokenText').textContent = data.testMode ? 'THỬ NGHIỆM · ' + data.token : data.token;
         document.getElementById('qrCountdown').textContent = `${remainingSeconds}s`;
         if (document.getElementById('closeQrSession')) document.getElementById('closeQrSession').disabled = false;
         const container = document.getElementById('qrcodeCanvas');
