@@ -415,37 +415,42 @@
     }
     if (path === '/api/attendance/today' || path === '/api/attendance/daily-summary') {
       const caps = await qrCapabilities();
-      const clock = caps ? today(new Date(caps.serverTime)) : today(), selected = week(clock.date);
+      const clock = caps ? today(new Date(caps.serverTime)) : today();
+      const rawDate = url.searchParams.get('date');
+      const targetDate = rawDate ? (date(rawDate), rawDate) : clock.date;
+      const selected = week(targetDate);
       if (caps?.qrEnabled) {
         const shift = url.searchParams.get('shift') || (clock.minutes < 720 ? 'Sáng' : clock.minutes < 1080 ? 'Chiều' : 'Tối');
         if (!['Sáng','Chiều','Tối'].includes(shift)) fail(400,'Ca không hợp lệ.');
         if (path.endsWith('/today')) {
-          const data = await qrRpc('admin_get_shift_attendance',{p_date:clock.date,p_shift:shift});
+          const data = await qrRpc('admin_get_shift_attendance',{p_date:targetDate,p_shift:shift});
           if (!Array.isArray(data?.records)) fail(503,'Chưa tải được danh sách phiên điểm danh.');
           rememberAttendance(current.id,data);
           return response({success:true,...data,data:data.records.map(row=>({...row,department:profiles.find(p=>p.id===row.profileId)?.department || row.department || '',businessDate:data.date}))});
         }
         const details = [];
         for (const label of ['Sáng','Chiều','Tối']) {
-          const data = await qrRpc('admin_get_shift_attendance',{p_date:clock.date,p_shift:label});
+          const data = await qrRpc('admin_get_shift_attendance',{p_date:targetDate,p_shift:label});
           if (!Array.isArray(data?.records)) fail(503,'Chưa tải đủ dữ liệu tổng kết.');
           details.push(...data.records);
         }
-        return response({ success:true,dateStr:clock.date.split('-').reverse().join('/'),
-          dayName:new Intl.DateTimeFormat('vi-VN',{weekday:'long',timeZone:'Asia/Ho_Chi_Minh'}).format(new Date(caps.serverTime)),
+        return response({ success:true,dateStr:targetDate.split('-').reverse().join('/'),
+          dayName:new Intl.DateTimeFormat('vi-VN',{weekday:'long',timeZone:'Asia/Ho_Chi_Minh'}).format(new Date(targetDate === clock.date ? caps.serverTime : `${targetDate}T12:00:00+07:00`)),
           totalExpected:details.filter(r=>r.inSchedule).length,totalPresent:details.filter(r=>r.status==='Có mặt').length,
           totalLate:details.filter(r=>r.status==='Đi trễ').length,totalExcused:details.filter(r=>r.status==='Vắng có phép').length,
           totalUnexcused:details.filter(r=>r.status==='Vắng không phép').length,details });
       }
       const schedules = await readAll('weekly_schedules','profile_id,schedule', { week_start: selected.start });
-      const records = await readAll('attendance','profile_id,student_id,business_date,shift,status,scanned_at,is_locked,note', { business_date: clock.date });
+      const records = await readAll('attendance','profile_id,student_id,business_date,shift,status,scanned_at,is_locked,note', { business_date: targetDate });
       if (path.endsWith('/today')) {
         const shift = url.searchParams.get('shift') || (clock.minutes < 720 ? 'Sáng' : clock.minutes < 1080 ? 'Chiều' : 'Tối');
         if (!['Sáng','Chiều','Tối'].includes(shift)) fail(400, 'Ca không hợp lệ.');
-        const data = shiftRows(shift, clock.date, schedules, records);
+        const data = shiftRows(shift, targetDate, schedules, records);
         const [cutoff, closing] = shift === 'Sáng' ? [510,660] : shift === 'Chiều' ? [810,1020] : [1110,1320];
-        return response({ success: true, data, shift, isClosed: clock.minutes >= closing,
-          isPastCutoff: clock.minutes > cutoff, cutoffTimeStr: shift === 'Sáng' ? '08:30' : shift === 'Chiều' ? '13:30' : '18:30',
+        const isClosed = targetDate < clock.date ? true : targetDate > clock.date ? false : clock.minutes >= closing;
+        const isPastCutoff = targetDate < clock.date ? true : targetDate > clock.date ? false : clock.minutes > cutoff;
+        return response({ success: true, date: targetDate, data, shift, isClosed,
+          isPastCutoff, cutoffTimeStr: shift === 'Sáng' ? '08:30' : shift === 'Chiều' ? '13:30' : '18:30',
           closingTimeStr: shift === 'Sáng' ? '11:00' : shift === 'Chiều' ? '17:00' : '22:00',
           stats: { total: data.length, present: data.filter(r => r.status === 'Có mặt').length,
             late: data.filter(r => r.status === 'Đi trễ').length,

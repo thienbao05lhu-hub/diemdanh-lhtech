@@ -12,7 +12,7 @@
   <script src="vendor/supabase-2.118.0.js"></script>
   <script src="js/config.js?v=20261101-safe-read"></script>
   <script src="js/attendance-trial.js?v=20261102-trial1"></script>
-  <script src="js/supabase-read-api.js?v=20261102-opt1"></script>
+  <script src="js/supabase-read-api.js?v=20261102-p3"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
     body { font-family: 'Plus Jakarta Sans', sans-serif; }
@@ -1428,6 +1428,7 @@
 
     // Biến quản lý trạng thái ca điểm danh & lịch học
     let currentViewingShift = 'Sáng';
+    let currentViewingDate = '';
     let currentAttendanceTodayData = [];
     let rawScheduleList = [];
     let unsavedScheduleUserIds = new Set();
@@ -1457,6 +1458,13 @@
     function initQrPauseControl() {
       const totalUsersEl = document.getElementById('totalUsers');
       if (totalUsersEl && totalUsersEl.nextElementSibling) totalUsersEl.nextElementSibling.textContent = 'Đồng bộ trên Supabase Cloud';
+      const cutoffBadge = document.getElementById('cutoffStatusBadge');
+      if (cutoffBadge && cutoffBadge.parentElement && !document.getElementById('attendanceDateFilter')) {
+        const dateWrap = document.createElement('div');
+        dateWrap.className = 'flex items-center gap-1 shrink-0';
+        dateWrap.innerHTML = `<input type="date" id="attendanceDateFilter" onchange="handleChangeAttendanceDate(this.value)" title="Xem lịch sử điểm danh theo ngày" class="bg-slate-950 border border-slate-800 hover:border-slate-700 focus:border-emerald-500 rounded-lg px-2 py-1 text-[11px] font-mono text-slate-200 focus:outline-none transition [color-scheme:dark]" /><button type="button" id="btnResetAttendanceDate" onclick="handleChangeAttendanceDate('')" title="Quay về Hôm nay" class="hidden px-2 py-1 rounded-lg text-[10px] font-bold bg-blue-500/15 text-blue-300 border border-blue-500/30 hover:bg-blue-500/25 transition">Hôm nay</button>`;
+        cutoffBadge.parentElement.insertBefore(dateWrap, cutoffBadge);
+      }
       const tokenEl = document.getElementById('currentQrTokenText');
       if (!tokenEl) return;
       const oledCard = tokenEl.closest('.bg-slate-900');
@@ -1796,19 +1804,31 @@
       fetchTodayAttendance();
     }
 
+    function handleChangeAttendanceDate(val) {
+      currentViewingDate = (val || '').trim();
+      const input = document.getElementById('attendanceDateFilter');
+      if (input && input.value !== currentViewingDate) input.value = currentViewingDate;
+      const resetBtn = document.getElementById('btnResetAttendanceDate');
+      if (resetBtn) resetBtn.classList.toggle('hidden', !currentViewingDate);
+      fetchTodayAttendance();
+    }
+
     let adminReadGeneration = 0, todayReadVersion = 0, statsReadVersion = 0;
     document.addEventListener('admin-auth-changed', () => { adminReadGeneration++; todayReadVersion++; statsReadVersion++; });
     // Lấy dữ liệu điểm danh ca hôm nay từ /api/attendance/today
     async function fetchTodayAttendance() {
       const readGeneration = adminReadGeneration;
       const requestedShift = currentViewingShift;
+      const requestedDate = typeof currentViewingDate === 'string' && currentViewingDate ? currentViewingDate : '';
       const readVersion = ++todayReadVersion;
       try {
-        const res = await fetch(`/api/attendance/today?shift=${encodeURIComponent(requestedShift)}`);
+        const res = await fetch(`/api/attendance/today?shift=${encodeURIComponent(requestedShift)}${requestedDate ? `&date=${encodeURIComponent(requestedDate)}` : ''}`);
         const result = await res.json();
-        if (readGeneration !== adminReadGeneration || !window.AdminAuth?.isAuthenticated() || readVersion !== todayReadVersion || requestedShift !== currentViewingShift) return;
+        if (readGeneration !== adminReadGeneration || !window.AdminAuth?.isAuthenticated() || readVersion !== todayReadVersion || requestedShift !== currentViewingShift || (typeof currentViewingDate === 'string' && currentViewingDate !== requestedDate)) return;
         if (result.success) {
           currentAttendanceTodayData = result.data || [];
+          const dateInput = document.getElementById('attendanceDateFilter');
+          if (dateInput && !requestedDate && result.date) dateInput.value = result.date;
 
           // Cập nhật nhãn ca & mốc chốt
           const shiftBadge = document.getElementById('currentShiftBadge');
@@ -2292,10 +2312,14 @@
       let list = sortVietnameseAlphabet(data);
 
       tbody.innerHTML = list.map(u => {
+        const unexcusedCount = u.unexcused ?? u.totalAbsentWithoutLeave ?? 0;
+        const warningBadge = unexcusedCount >= 3
+          ? `<span class="ml-1.5 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/40" title="Sinh viên vắng không phép từ 3 buổi trở lên"><i class="fa-solid fa-triangle-exclamation text-[8px]"></i> Cảnh báo (${unexcusedCount})</span>`
+          : '';
         return `
-          <tr class="hover:bg-slate-800/40 transition">
+          <tr class="${unexcusedCount >= 3 ? 'bg-rose-950/15 hover:bg-rose-950/25' : 'hover:bg-slate-800/40'} transition">
             <td class="px-4 py-2.5">
-              <p class="font-bold text-white whitespace-normal break-words leading-tight">${escapeHtml(u.name)}</p>
+              <p class="font-bold text-white whitespace-normal break-words leading-tight">${escapeHtml(u.name)}${warningBadge}</p>
               <p class="text-[10px] text-slate-500 mt-0.5">${escapeHtml(u.department || 'Chưa có lớp')}</p>
             </td>
             <td class="px-4 py-2.5 font-mono text-slate-300 font-semibold">${u.userId}</td>
@@ -3370,7 +3394,7 @@
 
         // Đặt tên file theo ngày hiện tại: Diem_Danh_Ca_[Sáng/Chiều]_YYYY-MM-DD.csv
         const now = new Date();
-        const dateString = now.toISOString().split('T')[0];
+        const dateString = (typeof currentViewingDate === 'string' && currentViewingDate) || now.toISOString().split('T')[0];
         const fileName = `Diem_Danh_Ca_${currentViewingShift}_${dateString}.csv`;
 
         // Tạo thẻ <a> ẩn để tải xuống file
@@ -3403,7 +3427,7 @@
     // Mở Modal Báo cáo Tổng kết Ngày
     async function handleDailyClose() {
       try {
-        const res = await fetch('/api/attendance/daily-summary', {
+        const res = await fetch(`/api/attendance/daily-summary${typeof currentViewingDate === 'string' && currentViewingDate ? `?date=${encodeURIComponent(currentViewingDate)}` : ''}`, {
           headers: getAdminHeaders(),
         });
         const result = await res.json();
@@ -3480,7 +3504,7 @@
         const url = URL.createObjectURL(blob);
 
         const now = new Date();
-        const dateString = now.toISOString().split('T')[0];
+        const dateString = (typeof currentViewingDate === 'string' && currentViewingDate) || now.toISOString().split('T')[0];
         const fileName = `Tong_Ket_Diem_Danh_${dateString}.csv`;
 
         const link = document.createElement('a');

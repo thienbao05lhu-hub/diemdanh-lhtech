@@ -54,6 +54,70 @@
     // Không hiển thị khóa bí mật thiết bị trên giao diện.
     el('displayDeviceId').textContent = 'ID: Đã xác minh';
   }
+  function node(tag, className, text) {
+    const element = document.createElement(tag);
+    if (className) element.className = className;
+    if (text !== undefined) element.textContent = String(text);
+    return element;
+  }
+  let historySection = null, historyNotice = null, historyList = null, historyRefreshBtn = null;
+  function ensureHistorySection() {
+    if (historySection) return;
+    const screen = el('scannerScreen');
+    if (!screen) return;
+    historySection = node('section', 'mt-4 bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3');
+    const header = node('div', 'flex justify-between items-center gap-2');
+    const title = node('h2', 'text-sm font-bold text-white', 'Lịch sử điểm danh gần đây');
+    historyRefreshBtn = node('button', 'text-xs text-emerald-300 px-2 py-1.5 rounded-lg bg-emerald-500/10', 'Làm mới');
+    historyRefreshBtn.type = 'button';
+    historyRefreshBtn.addEventListener('click', () => { void loadMyAttendance(); });
+    header.append(title);
+    header.append(historyRefreshBtn);
+    historyNotice = node('p', 'text-xs text-slate-400', 'Đang tải lịch sử điểm danh…');
+    historyList = node('div', 'space-y-2');
+    historySection.append(header);
+    historySection.append(historyNotice);
+    historySection.append(historyList);
+    screen.append(historySection);
+  }
+  async function loadMyAttendance() {
+    if (!current || !verified) return;
+    ensureHistorySection();
+    if (!historyList || !historyNotice) return;
+    const version = generation;
+    if (historyRefreshBtn) historyRefreshBtn.disabled = true;
+    try {
+      const rows = await rpc('get_my_attendance', { p_limit: 10 });
+      if (version !== generation) return;
+      historyList.replaceChildren();
+      const list = Array.isArray(rows) ? rows : [];
+      if (!list.length) {
+        historyNotice.textContent = 'Chưa có lượt điểm danh nào được ghi nhận.';
+        return;
+      }
+      historyNotice.textContent = `Hiển thị ${list.length} ca gần nhất của bạn.`;
+      for (const item of list) {
+        const card = node('article', 'rounded-xl border border-slate-800 bg-slate-950/60 p-3 flex items-center justify-between gap-3');
+        const left = node('div', 'min-w-0 space-y-0.5');
+        const dateText = String(item.date || '').split('-').reverse().join('/');
+        left.append(node('p', 'text-xs font-semibold text-white', `${dateText} · Ca ${item.shift || ''}`));
+        const timeText = item.scannedAt ? new Date(item.scannedAt).toLocaleTimeString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit', second: '2-digit' }) : 'Chốt tự động';
+        left.append(node('p', 'text-[11px] text-slate-400 font-mono', `Giờ ghi nhận: ${timeText}`));
+        const statusColor = item.status === 'Có mặt' ? 'text-emerald-300 bg-emerald-500/10 border-emerald-500/30'
+          : item.status === 'Đi trễ' ? 'text-orange-300 bg-orange-500/10 border-orange-500/30'
+          : item.status === 'Vắng có phép' ? 'text-amber-300 bg-amber-500/10 border-amber-500/30'
+          : 'text-rose-300 bg-rose-500/10 border-rose-500/30';
+        const badge = node('span', `text-[11px] font-bold px-2.5 py-1 rounded-full border shrink-0 ${statusColor}`, item.status || '---');
+        card.append(left);
+        card.append(badge);
+        historyList.append(card);
+      }
+    } catch (_) {
+      if (version === generation && historyNotice) historyNotice.textContent = 'Không tải được lịch sử điểm danh.';
+    } finally {
+      if (historyRefreshBtn) historyRefreshBtn.disabled = false;
+    }
+  }
   async function stopCamera() {
     if (cameraOn && scanner) { cameraOn = false; try { await scanner.stop(); scanner.clear(); } catch (_) {} }
     el('scanOverlay').classList.add('hidden');
@@ -89,7 +153,7 @@
     const result=await rpc('register_my_device',{p_device_token:token()});
     if (version!==generation) throw {code:'SESSION_CHANGED'};
     if (result?.deviceVerified!==true || result.profileId!==current.profile.id) throw Error('Invalid device response');
-    verified=true; displayIdentity();
+    verified=true; displayIdentity(); void loadMyAttendance();
     scanMessage('warning','Thiết bị đã xác minh',pendingToken ? 'Đã nhận liên kết QR. Bấm Tiếp Tục Quét Lại để xác nhận điểm danh.' : 'Bấm Tiếp Tục Quét Lại để mở camera.');
   }
   root.handleRegisterDevice=async event=>{
@@ -119,7 +183,7 @@
       if(result?.success!==true || data?.profileId!==current.profile.id || !data.id || !data.scannedAt || !['Có mặt','Đi trễ'].includes(data.status)) throw Error('Invalid attendance response');
       stickyResult=true;
       scanMessage(true,result.testMode ? (result.alreadyScanned?'THỬ: Đã ghi nhận trước đó':'THỬ: Quét QR thành công') : (result.alreadyScanned?'Đã ghi nhận trước đó':'Điểm danh thành công'),`Ca ${data.shift} · ${data.status} · ${current.profile.displayName}`);
-      root.playBeep?.(true);
+      root.playBeep?.(true); void loadMyAttendance();
     }catch(error) {
       if (version!==generation) return;
       stickyResult=true; scanMessage(false,'Chưa điểm danh được',errorText(error)); root.playBeep?.(false);
