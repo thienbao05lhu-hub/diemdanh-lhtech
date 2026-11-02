@@ -34,6 +34,7 @@
     const code = error?.code;
     const appMessages = {
       APP_FORBIDDEN: 'Tài khoản không có quyền thực hiện thao tác này.',
+      APP_PASSWORD_UPDATE_UNCONFIRMED: 'Chưa xác nhận được mật khẩu đã lưu. Thử đăng nhập bằng mật khẩu mới trước khi đổi lại.',
       APP_TEST_QR_ONLY: 'Chế độ hiện tại chỉ thử QR; gửi/duyệt nghỉ và sửa điểm danh thật đang tạm dừng.',
       APP_INVALID_INPUT: 'Thông tin chưa hợp lệ. Kiểm tra lại các trường bắt buộc.',
       APP_AUTH_NOT_FOUND: 'Chưa tìm thấy tài khoản đăng nhập duy nhất cho email này. Hãy cấp tài khoản trước.',

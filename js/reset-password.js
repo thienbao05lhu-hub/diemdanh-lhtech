@@ -50,6 +50,7 @@
       if (verified.data.user?.id !== userId) throw Object.assign(new Error('Session changed'), { code: 'SESSION_CHANGED' });
       const result = await api.client.auth.updateUser({ password: password.value });
       if (result.error) throw result.error;
+      if (result.data?.user?.id !== userId) throw Object.assign(new Error('APP_PASSWORD_UPDATE_UNCONFIRMED'), { code: 'APP_PASSWORD_UPDATE_UNCONFIRMED' });
       passwordForm.hidden = true; requestSection.hidden = true;
       const signOut = await api.client.auth.signOut({ scope: 'local' });
       api.setStatus(status, signOut.error

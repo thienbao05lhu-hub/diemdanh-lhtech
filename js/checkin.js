@@ -141,6 +141,13 @@
     finally {cameraStarting=false;controls();}
   };
   root.handleSwitchAccount=async()=>{
+    const choice=root.prompt('Chọn thao tác:\n1 - Đổi mật khẩu\n2 - Đăng xuất / Đổi tài khoản\nBấm Hủy để giữ nguyên.','1');
+    if(choice===null || !String(choice).trim())return;
+    if(String(choice).trim()==='1'){
+      generation++;caps=null;deadline=0;controls();await stopCamera();
+      root.location.assign('reset-password.html');return;
+    }
+    if(String(choice).trim()!=='2')return;
     generation++; verified=false; caps=null; deadline=0; controls();await stopCamera();
     try { const result=await api.client.auth.signOut({scope:'local'});if(result.error)throw result.error;root.location.replace('index.html'); }
     catch(error){registration(errorText(error),true);}

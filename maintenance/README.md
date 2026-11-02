@@ -1,3 +1,7 @@
+## Cấp mật khẩu ban đầu — 23 sinh viên, giữ nguyên Admin
+
+Xem `student-passwords.md`. Operation có mật khẩu nằm riêng trong workspace, không đăng lên Pages. Chủ project chạy bản riêng trong SQL Editor; script dừng nếu số hồ sơ sinh viên active không đúng 23. Sau đăng nhập, dùng nút Đổi cũ → chọn 1 để tự đổi mật khẩu.
+
 ## Bước hiện tại — thử QR ngoài giờ
 
 Chạy `enable-qr-test-mode.sql` để mở thử 24h và tạm dừng đánh vắng thật. Ctrl + F5 Admin/app, quét thử trên giao diện tối cũ; không cần lớp hoặc lịch để thử. Đọc `qr-test-mode.md`, kiểm tra `check-qr-test-mode.sql`. Tắt bằng `disable-qr-test-mode.sql`; automation thật không tự bật lại. Lớp/LHU chưa hoàn tất, đang nằm trong các bước chuyển đổi kế tiếp.

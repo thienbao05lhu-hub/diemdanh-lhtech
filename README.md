@@ -1,3 +1,9 @@
+## 02/11/2026 — Mật khẩu ban đầu và tự đổi mật khẩu
+
+Theo xác nhận người dùng, phạm vi là **23 sinh viên, không gồm Admin**. Đã chuẩn bị một operation SQL riêng trong workspace để chủ project cấp mật khẩu ban đầu, kiểm tra đủ 23 hồ sơ active và ghi dấu chống chạy lại đè mật khẩu tự đổi. File có mật khẩu thật không được publish hoặc đưa vào gói frontend. Chưa chạy thao tác này trên Supabase từ công cụ. [Hướng dẫn](maintenance/student-passwords.md).
+
+Trong app, nút **Đổi** cũ cho chọn 1 để mở trang đổi mật khẩu bằng phiên Auth hiện tại, hoặc 2 để đăng xuất/đổi tài khoản. Không thay markup/CSS/thiết kế tối. Trang mật khẩu chỉ báo đã lưu sau khi SDK trả đúng UID; người chưa đăng nhập vẫn cần luồng xác nhận cũ.
+
 ## 02/11/2026 — Thử QR ngoài giờ khi chưa có lịch/lớp
 
 Người dùng yêu cầu mở giới hạn giờ để thử trong quá trình hoàn thiện. Đã chuẩn bị [enable-qr-test-mode.sql](maintenance/enable-qr-test-mode.sql): chế độ thử 24h, lượt quét private tách riêng, vẫn giữ Auth/device/QR TTL 30s, không đổi thiết kế tối. File cũng tạm dừng automation đánh vắng thật. Ctrl + F5 các thiết bị sau khi chủ project chạy SQL; token và kết quả ghi chữ THỬ. [Hướng dẫn](maintenance/qr-test-mode.md), [kiểm tra](maintenance/check-qr-test-mode.sql), [tắt thử](maintenance/disable-qr-test-mode.sql). SQL mới chưa được áp dụng từ công cụ.
