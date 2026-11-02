@@ -68,3 +68,8 @@ Chủ project đã chạy bản khóa quyền trên Supabase thật và gửi �
 ### Triển khai LHU thật — 02/11/2026
 
 Đã áp dụng backend LHU, extension pg_net, xác thực worker qua Vault và Cron mỗi phút trên project oalnswbnjhkkovxjxtlz. Không còn bước nhập LHU_WORKER_SECRET thủ công. Edge tự kiểm tra JWT cho yêu cầu Admin; chỉ service_role gọi RPC xác thực/nhận việc. Worker đã phản hồi HTTP 200 và heartbeat thật. Giữ nguyên chế độ QR thử, automation đánh vắng thật vẫn tắt. Chỉ tạo bản xem trước lịch; việc áp dụng dùng nút xác nhận hiện có.
+## 02/11/2026 — Lịch LHU và bước chuẩn bị báo cáo Zalo
+
+Đã xác minh 23 lịch nguồn LHU được áp dụng trên Supabase. Bảng hôm nay vẫn dùng dữ liệu thử QR; không thay đổi chế độ thử hoặc snapshot ca thật. Xem [giải thích và các bước tiếp theo](zalo-report-preview.md), đối chiếu bằng [check-lhu-attendance-link.sql](check-lhu-attendance-link.sql).
+
+Đã triển khai SQL 180 tạo bản xem trước báo cáo cho Admin; không gửi tin, chưa có Cron Zalo. Báo cáo thật bị chặn khi còn bật thử QR và báo cáo chốt yêu cầu ca được chốt ở database. Giao diện giữ nguyên. Các ghi chú về những bước trước là lịch sử triển khai, không cần chạy lại các bước đã hoàn tất.
