@@ -106,15 +106,6 @@ export async function runWorker(client, options={}) {
   return {status:finish.data ? (error ? 'retry_or_failed' : 'preview_saved') : 'lease_expired'};
 }
 
-export async function secretMatches(provided, expected) {
-  if (typeof expected!=='string' || expected.length<32 || typeof provided!=='string' || provided.length>256) return false;
-  const bytes=value=>new TextEncoder().encode(value);
-  const [a,b]=await Promise.all([provided,expected].map(value=>crypto.subtle.digest('SHA-256',bytes(value))));
-  const first=new Uint8Array(a),second=new Uint8Array(b);
-  let mismatch=0; for(let i=0;i<first.length;i++) mismatch|=first[i]^second[i];
-  return mismatch===0;
-}
-
 export function createHandler({createClient, env, fetchOptions={}}) {
   return async request => {
     const origin=request.headers.get('origin');
@@ -131,8 +122,13 @@ export function createHandler({createClient, env, fetchOptions={}}) {
       if (!url || !service) return reply({success:false,message:'Worker chưa được cấu hình.'},503);
       const workerHeader=request.headers.get('x-lhu-worker-secret');
       if (workerHeader!==null) {
-        if (!await secretMatches(workerHeader,env('LHU_WORKER_SECRET'))) return reply({success:false},401);
+        if (!/^[0-9a-f]{64}$/.test(workerHeader)) return reply({success:false},401);
         const db=createClient(url,service,{auth:{persistSession:false,autoRefreshToken:false}});
+        // Vault is the sole source of truth. Only the service-role RPC can check this secret.
+        // No copy of the Cron secret needs to be entered into Edge environment variables.
+        const authorized=await db.rpc('lhu_authorize_worker',{p_secret:workerHeader});
+        if (authorized.error) return reply({success:false,message:'Chưa xác minh được worker.'},503);
+        if (authorized.data!==true) return reply({success:false},401);
         const started=Date.now();let last={status:'idle'},processed=0;
         // Up to three fast students per minute; a slow request leaves room before the HTTP deadline.
         while(processed<3 && Date.now()-started<5000) {
@@ -160,7 +156,7 @@ export function createHandler({createClient, env, fetchOptions={}}) {
         const message=String(result.error.message || '');
         if(message.includes('APP_FORBIDDEN')) return reply({success:false,message:'Tài khoản không có quyền Admin.'},403);
         const messages={APP_LHU_NOT_CONFIGURED:'Đồng bộ LHU chưa được bật. Cần cấu hình Edge worker và Cron.',
-          APP_LHU_WORKER_OFFLINE:'Worker LHU chưa kết nối gần đây. Kiểm tra Cron, Edge và LHU_WORKER_SECRET trước khi lấy lịch.',
+          APP_LHU_WORKER_OFFLINE:'Worker LHU chưa kết nối gần đây. Kiểm tra Cron, Edge và cấu hình Vault trước khi lấy lịch.',
           APP_LHU_NOT_READY:'Lượt xem trước chưa hoàn tất.',APP_LHU_PREVIEW_EXPIRED:'Bản xem trước đã hết hạn. Hãy lấy lịch mới.',
           APP_INVALID_INPUT:'Tuần đồng bộ phải là thứ hai và nằm trong khoảng 60 ngày.'};
         const code=Object.keys(messages).find(code=>message.includes(code));

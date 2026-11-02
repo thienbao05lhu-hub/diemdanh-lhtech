@@ -1,20 +1,24 @@
--- Chạy sau 170 và sau khi deploy lhu-sync-worker, đặt cùng LHU_WORKER_SECRET ở Edge Secrets.
--- Thay placeholder trong bản riêng; không commit/publish bản có secret.
+-- Chạy sau 170/172 và sau khi deploy lhu-sync-worker.
+-- Secret được tạo tại database và lưu trong Vault; không cần nhập Edge Secret.
 begin;
 set local lock_timeout='5s';
 set local statement_timeout='30s';
 do $enable$
-declare worker_secret text:='__LHU_WORKER_SECRET__'; secret_id uuid; job_id bigint; owner_name text;
+declare worker_secret text; crypto_schema text; secret_id uuid; job_id bigint; owner_name text;
 begin
  if not exists(select 1 from pg_catalog.pg_roles where rolname=current_user and (rolsuper or rolbypassrls)) then raise exception 'Chạy bằng SQL Editor của chủ project.'; end if;
- if worker_secret='__LHU_WORKER_SECRET__' or length(worker_secret)<32 then raise exception 'Đặt cùng secret ngẫu nhiên với Edge Function trong bản SQL riêng.'; end if;
+ if pg_catalog.to_regprocedure('private.lhu_authorize_worker(text)') is null then raise exception 'Cần chạy SQL 172 trước.';end if;
  if not exists(select 1 from pg_catalog.pg_extension where extname='pg_cron') or not exists(select 1 from pg_catalog.pg_extension where extname='pg_net') or pg_catalog.to_regclass('vault.secrets') is null then raise exception 'Cần bật pg_cron, pg_net và Vault trước.'; end if;
  if not pg_catalog.has_function_privilege('authenticated','public.admin_apply_lhu_sync(uuid)','EXECUTE') then raise exception 'Cần SQL 170; không bật khi containment.'; end if;
  select username,jobid into owner_name,job_id from cron.job where jobname='lhtech-lhu-preview-worker';
  if found and owner_name<>current_user then raise exception 'Job cùng tên thuộc người khác; dừng đối chiếu.'; end if;
  select id into secret_id from vault.secrets where name='lhtech_lhu_worker_secret';
- if secret_id is null then perform vault.create_secret(worker_secret,'lhtech_lhu_worker_secret','Secret riêng của Edge worker LHU');
- else perform vault.update_secret(secret_id,worker_secret,'lhtech_lhu_worker_secret','Secret riêng của Edge worker LHU');end if;
+ if secret_id is null then
+  select n.nspname into crypto_schema from pg_catalog.pg_extension e join pg_catalog.pg_namespace n on n.oid=e.extnamespace where e.extname='pgcrypto';
+  if crypto_schema is null then raise exception 'Cần bật pgcrypto trước.';end if;
+  execute format('select encode(%I.gen_random_bytes(32),''hex'')',crypto_schema) into worker_secret;
+  perform vault.create_secret(worker_secret,'lhtech_lhu_worker_secret','Secret riêng của Edge worker LHU');
+ end if;
  update private.lhu_sync_settings set enabled=true where id;
  perform cron.schedule('lhtech-lhu-preview-worker','* * * * *','SELECT private.dispatch_lhu_worker();');
  select jobid into job_id from cron.job where jobname='lhtech-lhu-preview-worker' and username=current_user;

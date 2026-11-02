@@ -63,3 +63,8 @@ Chủ project đã chạy bản khóa quyền trên Supabase thật và gửi �
 ## 2026-11-02 — Lớp sinh viên và đồng bộ LHU có xem trước
 
 Đã nhận xác nhận bàn giao Super Admin riêng và thử QR thành công từ chủ dự án. Bước kế tiếp: 160 bổ sung lớp, loại Admin khỏi bộ đếm sinh viên; 170 lấy lịch bằng Edge worker, xem trước rồi áp dụng có CAS. Giữ nguyên giao diện đã chốt. SQL và Edge mới chưa chạy trên Supabase thật. Làm theo `cloud/web/maintenance/lhu-sync.md` (trên Pages: `maintenance/lhu-sync.md`). Không chạy lại installer cũ; chưa bật lại automation điểm danh thật hoặc Zalo.
+
+
+### Triển khai LHU thật — 02/11/2026
+
+Đã áp dụng backend LHU, extension pg_net, xác thực worker qua Vault và Cron mỗi phút trên project oalnswbnjhkkovxjxtlz. Không còn bước nhập LHU_WORKER_SECRET thủ công. Edge tự kiểm tra JWT cho yêu cầu Admin; chỉ service_role gọi RPC xác thực/nhận việc. Worker đã phản hồi HTTP 200 và heartbeat thật. Giữ nguyên chế độ QR thử, automation đánh vắng thật vẫn tắt. Chỉ tạo bản xem trước lịch; việc áp dụng dùng nút xác nhận hiện có.
