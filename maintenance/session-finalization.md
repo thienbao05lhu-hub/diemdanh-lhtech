@@ -2,6 +2,12 @@
 
 Giữ nguyên thiết kế tối và các nút cũ. SQL 120 đã được chủ project xác nhận chạy thành công. SQL 130 cũng đã được xác nhận bằng ảnh: RLS/quyền/publication đúng và đủ sáu trigger đang hoạt động. Chưa có xác nhận quét thử Realtime qua hai thiết bị.
 
+## Sửa lỗi quyền cron.job — 02/11/2026
+
+Bản 141 đầu tiên có câu UPDATE trực tiếp cron.job; Supabase đã trả 42501 trước COMMIT. Bản mới dùng job_id trả về từ cron.schedule và gọi cron.alter_job(job_id, active := true); file dừng cũng gọi alter_job(..., active := false). Không cấp thêm quyền ghi catalog. Mở lại artifacts/enable-attendance-cron.sql và chạy toàn bộ bản mới; không cần chạy lại 140 hoặc cài lại extension. Transaction bị lỗi chưa lưu phần kích hoạt của lần đó. Đã tái hiện lỗi cũ và kiểm chứng sửa bằng role BYPASSRLS không có INSERT/UPDATE/DELETE trên cron.job, với API scheduler mô phỏng; vẫn cần xác nhận trên Supabase thật.
+
+Tham chiếu API: [pg_cron alter_job](https://github.com/citusdata/pg_cron#altering-a-cron-job).
+
 ## Cài và bật
 
 1. Chủ project mở SQL Editor project `oalnswbnjhkkovxjxtlz`, chạy toàn bộ `artifacts/restore-safe-session-finalization.sql` (nguồn `supabase/schemas/140_session_finalization.sql`). Bước này sửa logic nút Chốt ca cũ; tác vụ tự động vẫn tắt.
