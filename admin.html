@@ -12,7 +12,7 @@
   <script src="vendor/supabase-2.118.0.js"></script>
   <script src="js/config.js?v=20261101-safe-read"></script>
   <script src="js/attendance-trial.js?v=20261102-trial1"></script>
-  <script src="js/supabase-read-api.js?v=20261102-pause2"></script>
+  <script src="js/supabase-read-api.js?v=20261102-pause3"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
     body { font-family: 'Plus Jakarta Sans', sans-serif; }
@@ -1462,24 +1462,35 @@
 
       const bar = document.createElement('div');
       bar.id = 'qrPauseControlBar';
-      bar.className = 'w-full mt-3 pt-2.5 border-t border-slate-800 flex flex-col items-center gap-1.5';
+      bar.className = 'w-full mt-3 pt-2.5 border-t border-slate-800 flex items-center gap-2';
       bar.innerHTML = `
         <button
           id="btnToggleQrPause"
           type="button"
           onclick="handleToggleQrPause(this)"
-          class="w-full py-2 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 bg-amber-500/15 text-amber-300 border border-amber-500/30 hover:bg-amber-500/25 cursor-pointer shadow-sm active:scale-[0.98]"
-          title="Chủ động Tạm dừng hoặc Bật lại mã QR"
+          class="flex-1 py-2 px-2.5 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 bg-amber-500/15 text-amber-300 border border-amber-500/30 hover:bg-amber-500/25 cursor-pointer shadow-sm active:scale-[0.98]"
+          title="Tạm dừng hoặc tiếp tục phát mã QR"
         >
           <i id="btnToggleQrIcon" class="fa-solid fa-pause text-xs"></i>
-          <span id="btnToggleQrText">Tạm dừng phát QR</span>
+          <span id="btnToggleQrText">Tạm dừng QR</span>
         </button>
-        <span class="text-[10px] text-slate-500 flex items-center gap-1">
-          <i class="fa-solid fa-shield-halved text-[9px]"></i> Quản trị viên chủ động Bật/Tắt quét QR
-        </span>
+        <button
+          id="closeQrSession"
+          type="button"
+          onclick="handleCloseQrSession()"
+          class="py-2 px-2.5 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 bg-rose-500/15 text-rose-300 border border-rose-500/30 hover:bg-rose-500/25 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer shadow-sm active:scale-[0.98]"
+          title="Chốt ca sớm (Khóa phiên và chốt vắng)"
+        >
+          <i class="fa-solid fa-lock text-xs"></i>
+          <span>Chốt ca</span>
+        </button>
       `;
       oledCard.appendChild(bar);
     }
+    // Chạy khởi tạo ngay lập tức khi script thực thi
+    initQrPauseControl();
+    window.addEventListener('DOMContentLoaded', initQrPauseControl);
+    window.addEventListener('load', initQrPauseControl);
 
     function setQrPausedUI(paused, message) {
       isQrCurrentlyPaused = paused;
@@ -1493,7 +1504,7 @@
 
       if (paused) {
         if (btn) {
-          btn.className = 'flex-1 py-1.5 px-2.5 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/25 cursor-pointer shadow-sm active:scale-[0.98]';
+          btn.className = 'flex-1 py-2 px-2.5 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/25 cursor-pointer shadow-sm active:scale-[0.98]';
         }
         if (btnText) btnText.textContent = 'Mở lại QR';
         if (btnIcon) btnIcon.className = 'fa-solid fa-play text-xs';
@@ -1508,7 +1519,7 @@
         }
       } else {
         if (btn) {
-          btn.className = 'flex-1 py-1.5 px-2.5 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 bg-amber-500/15 text-amber-300 border border-amber-500/30 hover:bg-amber-500/25 cursor-pointer shadow-sm active:scale-[0.98]';
+          btn.className = 'flex-1 py-2 px-2.5 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 bg-amber-500/15 text-amber-300 border border-amber-500/30 hover:bg-amber-500/25 cursor-pointer shadow-sm active:scale-[0.98]';
         }
         if (btnText) btnText.textContent = 'Tạm dừng QR';
         if (btnIcon) btnIcon.className = 'fa-solid fa-pause text-xs';
@@ -1516,9 +1527,6 @@
     }
 
     async function handleToggleQrPause(btn) {
-      if (!activeQrSession && !isQrCurrentlyPaused) {
-        showToast.info('Hiện ngoài giờ xưởng hoặc chưa mở ca. Mã QR sẽ tự động phát vào giờ ca (Ca Tối 18:00 - 22:00) và bạn có thể bấm Tạm dừng / Mở lại bất kỳ lúc nào.');
-      }
       const targetState = !isQrCurrentlyPaused;
       const actionName = targetState ? 'Tạm dừng' : 'Mở lại';
 
@@ -1557,14 +1565,18 @@
         if (btn) btn.disabled = false;
       }
     }
+
     function clearDynamicQR(message = 'Chưa có mã QR đang hiệu lực.') {
       qrDeadline = 0; activeQrSession = null;
       document.getElementById('qrcodeCanvas').replaceChildren();
       document.getElementById('currentQrTokenText').textContent = message;
       document.getElementById('qrCountdown').textContent = '—';
       if (document.getElementById('closeQrSession')) document.getElementById('closeQrSession').disabled = true;
+      initQrPauseControl();
     }
+
     async function updateDynamicQR() {
+      initQrPauseControl();
       if (qrLoading) return false;
       qrLoading = true;
       const started = performance.now();
@@ -1573,6 +1585,13 @@
         const res = await fetch('/api/get-qr-token');
         const data = await res.json();
         if (!res.ok || data.success !== true) { clearDynamicQR(data.message || 'Chưa lấy được mã QR.'); return false; }
+        if (data.isPaused) {
+          activeQrSession = { date: data.date, shift: data.shift };
+          setQrPausedUI(true, data.message);
+          if (document.getElementById('closeQrSession')) document.getElementById('closeQrSession').disabled = false;
+          return true;
+        }
+        setQrPausedUI(false);
         const lifetime = Date.parse(data.expiresAt) - Date.parse(data.serverTime);
         if (!/^[a-f0-9]{32}$/.test(data.token) || !Number.isFinite(lifetime) || lifetime <= performance.now() - started) {
           clearDynamicQR('Mã đã hết hạn. Đang chờ mã tiếp theo.'); return false;
@@ -1591,6 +1610,7 @@
       } catch (_) { clearDynamicQR('Không kết nối được hệ thống. Mã cũ đã ngừng hiển thị.'); return false; }
       finally { qrLoading = false; }
     }
+
     function startCountdown() {
       clearInterval(countdownInterval);
       countdownInterval = setInterval(() => {
@@ -1605,6 +1625,7 @@
         }
       }, 250);
     }
+
     async function handleCloseQrSession() {
       if (!activeQrSession) return;
       const session = { ...activeQrSession };
