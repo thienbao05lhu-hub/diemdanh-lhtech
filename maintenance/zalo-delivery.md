@@ -1,6 +1,10 @@
 # Hàng đợi Zalo — đã chuẩn bị, gửi thật đang tắt
 
-## Cập nhật mới nhất — nút cũ và Cron đã nối
+## Cập nhật mới nhất — đã chuẩn bị tạo báo cáo tự động
+
+SQL 187 và Cron đã triển khai, công tắc tạo/gửi vẫn tắt. Xem [báo cáo tự động](zalo-automation.md) để biết thời điểm, kiểm tra và bật/tắt khi kết thúc thử QR.
+
+## Lịch sử SQL 186 — nút cũ và Cron đã nối
 
 Bot cũ và nơi nhận cũ đã được chủ dự án xác nhận; token mới/khóa worker lưu trong Vault. Đã triển khai SQL 186 và Cron `lhtech-zalo-delivery-worker` mỗi phút. Cron chỉ xử lý báo cáo Admin đã yêu cầu, chưa tự tạo báo cáo theo giờ. `enabled=false` và trial vẫn bật, nên dispatcher không gọi HTTP và chưa gửi tin thật.
 
@@ -8,7 +12,7 @@ Nút “Báo Cáo Zalo Ngay” giữ nguyên thiết kế, dùng ca đang chọn
 
 Nguồn mới: [prepare-zalo-dispatch.sql](prepare-zalo-dispatch.sql), [prepare-zalo-cron.sql](prepare-zalo-cron.sql). Hai file không bật gửi và không thay người nhận. Kiểm tra Cron succeeded chỉ chứng minh dispatcher chạy; cần `sent` trong queue mới là xác nhận gửi.
 
-Các mục bên dưới ghi lại bước xây dựng queue trước đó. Phần còn lại để vận hành thật: kết thúc trial, kiểm thử ca thật, bật cấu hình gửi theo quyết định chủ dự án; nếu muốn báo cáo tự tạo theo giờ cần bổ sung lịch tạo báo cáo riêng.
+Các mục bên dưới ghi lại bước xây dựng queue trước đó. Phần còn lại để vận hành thật: kết thúc trial, kiểm thử ca thật, bật cấu hình gửi theo quyết định chủ dự án; phần tạo báo cáo tự động đã được bổ sung ở SQL 187, hiện chưa bật.
 
 SQL 185 và Edge `zalo-report-worker` đã triển khai trên Supabase ngày 02/11/2026. Chưa cấu hình Bot/người nhận, chưa bật Cron gửi và chưa nối nút gửi cũ. Không có tin nhắn thật nào được gửi trong bước này; UI, trial QR, lịch và điểm danh giữ nguyên.
 
