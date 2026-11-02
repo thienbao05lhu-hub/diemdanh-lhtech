@@ -49,7 +49,7 @@
     el('registerScreen').classList.add('hidden'); el('scannerScreen').classList.remove('hidden');
     el('displayName').textContent = current.profile.displayName;
     el('displayUserId').textContent = `MSV: ${current.profile.studentId}`;
-    el('displayDepartment').textContent = 'Lớp: ---';
+    el('displayDepartment').textContent = `Lớp: ${current.profile.department || '---'}`;
     // Không hiển thị khóa bí mật thiết bị trên giao diện.
     el('displayDeviceId').textContent = 'ID: Đã xác minh';
   }

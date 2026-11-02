@@ -90,6 +90,9 @@ begin
   if pg_catalog.to_regclass('private.attendance_automation') is not null then
     update private.attendance_automation set enabled=false where id=true;
   end if;
+  if pg_catalog.to_regclass('private.lhu_sync_settings') is not null then
+    update private.lhu_sync_settings set enabled=false where id=true;
+  end if;
   if pg_catalog.to_regclass('private.qr_test_settings') is not null then
     update private.qr_test_settings set enabled=false where id=true;
   end if;
@@ -112,6 +115,7 @@ begin
     where n.nspname in ('public','private') and p.prokind = 'f'
       and p.proname = any(array[
         'current_app_role','get_my_profile','normalize_week_schedule','persist_week_schedule',
+        'admin_get_lhu_sync','admin_start_lhu_sync','admin_apply_lhu_sync',
         'admin_provision_profile','admin_update_profile','admin_save_week_schedule',
         'admin_rollback_week_schedule','get_or_create_qr_token','submit_attendance',
         'admin_get_active_qr','admin_get_shift_attendance','admin_update_attendance',

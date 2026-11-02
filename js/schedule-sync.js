@@ -20,6 +20,12 @@
   let revision = 0;
   let observedJob = null;
   let handledJob = null;
+  let previewJob = null;
+  let retries = 0;
+
+  function applicablePreview() {
+    return previewJob?.canApply && previewJob.week.start === window.WeeklyScheduleUI?.selectedWeek();
+  }
 
   function isBusy() {
     return running || starting || finishing;
@@ -36,7 +42,7 @@
     if (weekInput) weekInput.disabled = busy || manualSaves > 0;
     document.getElementById('scheduleSyncUnsaved').classList.toggle('hidden', !unsaved);
     document.getElementById('scheduleSyncButtonText').textContent = starting
-      ? 'Đang bắt đầu...' : busy ? 'Đang đồng bộ...' : 'Đồng bộ lịch tự động';
+      ? 'Đang bắt đầu...' : busy ? 'Đang đồng bộ...' : applicablePreview() ? 'Áp dụng lịch đã xem' : 'Đồng bộ lịch tự động';
     document.getElementById('scheduleSyncIcon').className = busy
       ? 'fa-solid fa-spinner fa-spin' : 'fa-solid fa-arrows-rotate';
   }
@@ -57,47 +63,58 @@
     connection.classList.add('hidden');
     panel.classList.toggle('hidden', !job);
     running = job?.status === 'running';
+    previewJob = job?.mode === 'preview' && job.canApply ? job : null;
     if (!job) {
       updateControls();
       return;
     }
 
     const week = `${formatDate(job.week.start)} – ${formatDate(job.week.end)}`;
-    const counts = `${job.processed}/${job.total} sinh viên · ${job.success} thành công · ${job.failed} lỗi`;
+    const counts = `${job.processed}/${job.total} sinh viên · ${job.success} ${job.mode === 'preview' ? 'đã xem trước' : 'đã áp dụng'} · ${job.failed} lỗi · ${job.skipped || 0} giữ nguyên`;
     if (running) {
       observedJob = job.id;
       status.textContent = `Đang đồng bộ tuần ${week}: ${job.total ? counts : 'đang lấy danh sách sinh viên...'}`;
     } else if (job.status === 'failed') {
-      status.textContent = `${job.message} ${counts}`;
+      status.textContent = `${job.message || 'Lượt đồng bộ đã dừng.'} ${counts}`;
     } else {
-      status.textContent = `Đã hoàn tất tuần ${week}: ${counts}.`;
+      status.textContent = `${job.mode === 'preview' ? 'Chưa thay lịch. Xem chi tiết rồi bấm Áp dụng lịch đã xem.' : 'Đã hoàn tất.'} Tuần ${week}: ${counts}.`;
     }
     progress.max = Math.max(job.total, 1);
     if (running && !job.total) progress.removeAttribute('value');
     else progress.value = job.total ? job.processed : 1;
 
     errorList.replaceChildren();
-    for (const error of job.errors) {
+    for (const error of job.errors || []) {
       const item = document.createElement('li');
       item.textContent = `${error.userId || '(thiếu MSSV)'}: ${error.message}`;
       errorList.appendChild(item);
     }
-    errorDetails.classList.toggle('hidden', job.errors.length === 0);
+    for (const change of job.changes || []) {
+      const item = document.createElement('li');
+      const describe = value => ['t2','t3','t4','t5','t6','t7','cn'].map(day => `${day}: ${(value?.[day] || []).join(', ') || '—'}`).join('; ');
+      item.textContent = `${change.userId} (${change.lessons} buổi học): Trước [${describe(change.before)}] → Lịch rảnh [${describe(change.after)}]`;
+      errorList.appendChild(item);
+    }
+    const summary = errorDetails.querySelector?.('summary');
+    if (summary) summary.textContent = job.mode === 'preview' ? 'Chi tiết lịch xem trước và các trường hợp giữ nguyên' : 'Chi tiết lỗi và các trường hợp giữ nguyên';
+    errorDetails.classList.toggle('hidden', !(job.errors?.length || job.changes?.length));
 
-    if (!running && observedJob === job.id && handledJob !== job.id) {
-      handledJob = job.id;
+    const resultKey = `${job.id}|${job.mode || 'apply'}`;
+    if (!running && observedJob === job.id && handledJob !== resultKey) {
+      handledJob = resultKey;
       finishing = true;
       updateControls();
       try {
         // Không làm mất bản chỉnh sửa tại tab khác đã có trước khi nhận tiến độ.
-        if (unsavedScheduleUserIds.size === 0) {
+        if (job.mode !== 'preview' && unsavedScheduleUserIds.size === 0) {
           const loaded = await fetchScheduleList();
           if (!loaded) showToast.warning('Đồng bộ đã kết thúc nhưng chưa tải lại được bảng lịch. Vui lòng tải lại trang.');
-        } else {
+        } else if (unsavedScheduleUserIds.size > 0) {
           showToast.warning('Có lịch chỉnh sửa chưa lưu trên trang này. Bảng lịch được giữ lại để bạn kiểm tra.');
         }
         await fetchTodayAttendance();
-        if (job.status === 'failed') showToast.error(job.message);
+        if (job.status === 'failed') showToast.error(job.message || 'Lượt đồng bộ đã dừng. Có thể lấy bản xem trước mới.');
+        else if (job.mode === 'preview') showToast.info?.('Đã lấy bản xem trước. Kiểm tra chi tiết trước khi áp dụng lịch.');
         else if (job.failed > 0) showToast.warning(`Đồng bộ xong: ${job.success} thành công, ${job.failed} lỗi. Xem chi tiết bên dưới nút đồng bộ.`);
         else showToast.success(`Đã đồng bộ lịch cho ${job.success} sinh viên.`);
       } finally {
@@ -128,12 +145,22 @@
       if (requestRevision !== revision || !authenticated || !checkAuth(response)) return;
       const result = await response.json();
       if (requestRevision !== revision || !authenticated) return;
-      if (!response.ok || !result.success) throw new Error('Không thể lấy trạng thái đồng bộ.');
+      if (!response.ok || !result.success) {
+        running = false;
+        starting = false;
+        previewJob = null;
+        panel.classList.remove('hidden');
+        status.textContent = result.message || 'Chưa kết nối được worker đồng bộ LHU.';
+        updateControls();
+        return;
+      }
+      retries = 0;
       await showJob(result.data);
       if (authenticated && running) timer = setTimeout(refresh, 1500);
     } catch (error) {
       if (requestRevision !== revision || !authenticated) return;
-      retry('Chưa lấy được trạng thái đồng bộ. Đang tự kết nối lại...');
+      if (++retries <= 3) retry('Chưa lấy được trạng thái đồng bộ. Đang tự kết nối lại...');
+      else { running = false; connection.textContent = 'Mất kết nối. Tải lại trang để kiểm tra lượt đồng bộ trước khi thử lại.'; updateControls(); }
     }
   }
 
@@ -144,19 +171,30 @@
       return;
     }
     starting = true;
+    const applying = applicablePreview() ? previewJob : null;
     clearTimeout(timer);
     const requestRevision = ++revision;
     updateControls();
     try {
+      if (applying && !await showConfirmDialog({title:'Áp dụng lịch LHU đã xem trước',
+        message:`Áp dụng lịch tuần ${formatDate(applying.week.start)} – ${formatDate(applying.week.end)} cho tối đa ${Number(applying.success)} sinh viên? Lịch đã sửa sau khi xem trước sẽ được giữ nguyên.`,
+        confirmText:'Áp dụng lịch',cancelText:'Hủy'})) return;
+      if (requestRevision !== revision || !authenticated) return;
       const response = await fetch(endpoint, {
         method: 'POST', headers: getAdminHeaders(), signal: AbortSignal.timeout(15000),
-        body: JSON.stringify({ week: window.WeeklyScheduleUI?.selectedWeek() }),
+        body: JSON.stringify({ action: applying ? 'apply' : 'preview', jobId: applying?.id, week: window.WeeklyScheduleUI?.selectedWeek() }),
       });
       if (requestRevision !== revision || !authenticated || !checkAuth(response)) return;
       const result = await response.json();
       if (requestRevision !== revision || !authenticated) return;
-      if (!response.ok && response.status !== 409) throw new Error(result.message || 'Không thể bắt đầu đồng bộ.');
+      if (!response.ok || !result.success) {
+        running = false;
+        showToast.warning(result.message || 'Không thể bắt đầu đồng bộ.');
+        await refresh();
+        return;
+      }
       if (!result.data) throw new Error('Chưa nhận được trạng thái đồng bộ.');
+      observedJob = result.data.id;
       await showJob(result.data);
       if (running) timer = setTimeout(refresh, 1000);
     } catch (error) {
@@ -179,6 +217,9 @@
     authenticated = event.detail.authenticated;
     revision += 1;
     clearTimeout(timer);
+    previewJob = null;
+    running = false;
+    retries = 0;
     updateControls();
     if (authenticated) refresh();
   });

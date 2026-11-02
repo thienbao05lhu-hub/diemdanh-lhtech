@@ -58,3 +58,8 @@ Sau khi áp dụng, quét điểm danh, duyệt nghỉ, sửa/hủy điểm danh
 Đối chiếu hồ sơ/vai trò/UID thật; thu hồi và thay Zalo token đã có trong frontend, thay GitHub token đã hiển thị. Hoàn thiện frontend xác thực thật, RPC điểm danh/đơn nghỉ có kiểm tra Auth UID/giờ/khóa và audit nguyên tử; chuyển Zalo/LHU ra server. Chỉ mở lại từng RPC sau kiểm thử quyền và nghiệp vụ.
 
 Chủ project đã chạy bản khóa quyền trên Supabase thật và gửi ảnh thông báo hoàn tất cùng 7 policy contained_read/SELECT/authenticated ngày 01/11/2026. Công cụ chưa có connector quản trị và chưa kiểm thử phiên Auth/UI thật sau thay đổi. Giao diện đang được đồng bộ với trạng thái giới hạn ghi; chỉ mở lại nghiệp vụ sau bản RPC an toàn và kiểm thử phù hợp.
+
+
+## 2026-11-02 — Lớp sinh viên và đồng bộ LHU có xem trước
+
+Đã nhận xác nhận bàn giao Super Admin riêng và thử QR thành công từ chủ dự án. Bước kế tiếp: 160 bổ sung lớp, loại Admin khỏi bộ đếm sinh viên; 170 lấy lịch bằng Edge worker, xem trước rồi áp dụng có CAS. Giữ nguyên giao diện đã chốt. SQL và Edge mới chưa chạy trên Supabase thật. Làm theo `cloud/web/maintenance/lhu-sync.md` (trên Pages: `maintenance/lhu-sync.md`). Không chạy lại installer cũ; chưa bật lại automation điểm danh thật hoặc Zalo.

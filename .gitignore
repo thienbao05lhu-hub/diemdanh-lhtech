@@ -3,3 +3,8 @@ initialize-23-student-passwords.sql
 01-release-admin-email.sql
 02-prepare-new-super-admin.sql
 03-complete-super-admin-transfer.sql
+
+student-departments.private.json
+restore-student-departments.sql
+enable-lhu-sync-cron.private.sql
+lhu-worker-secret.private.txt

@@ -12,7 +12,8 @@
   const networkFetch = root.fetch.bind(root);
   const roles = ['admin', 'super_admin'];
   const maintenance = 'Hệ thống đang giới hạn ghi để cập nhật bảo mật. Chức năng này tạm dừng; chưa có dữ liệu được ghi.';
-  const fields = 'id,student_id,display_name,role,active,updated_at';
+  const baseFields = 'id,student_id,display_name,role,active,updated_at';
+  let fields = baseFields + ',department';
   let profiles = [];
   const attendanceSnapshots = new Map(), attendanceWrites = new Set();
   const uuid = value => typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
@@ -137,8 +138,12 @@
   async function identity(admin = true) {
     const result = await client.auth.getUser();
     if (result.error || !result.data?.user) fail(401, 'Vui lòng đăng nhập bằng Supabase Auth.');
-    const profile = checked(await client.from('profiles').select(fields)
-      .eq('id', result.data.user.id).eq('active', true).maybeSingle());
+    let selected = await client.from('profiles').select(fields).eq('id', result.data.user.id).eq('active', true).maybeSingle();
+    if (selected.error && ['42703','PGRST204'].includes(selected.error.code)) {
+      fields = baseFields;
+      selected = await client.from('profiles').select(fields).eq('id', result.data.user.id).eq('active', true).maybeSingle();
+    }
+    const profile = checked(selected);
     if (!profile || (admin && !roles.includes(profile.role))) fail(403, 'Tài khoản không có quyền thực hiện thao tác này.');
     return profile;
   }
@@ -233,11 +238,11 @@
     const dayKey = ['cn','t2','t3','t4','t5','t6','t7'][date(stamp).getUTCDay()];
     const scheduleMap = new Map(schedules.map(row => [row.profile_id, row.schedule]));
     const attMap = new Map(records.filter(row => row.shift === shift).map(row => [row.profile_id, row]));
-    return profiles.filter(p => p.active).flatMap(p => {
+    return profiles.filter(p => p.active && p.role === 'student').flatMap(p => {
       const schedule = scheduleMap.get(p.id), att = attMap.get(p.id);
       const expected = Array.isArray(schedule?.[dayKey]) && schedule[dayKey].includes(shift);
       if (schedule && !expected && !att) return [];
-      return [{ userId: p.student_id, userName: p.display_name, department: '', profileId: p.id,
+      return [{ userId: p.student_id, userName: p.display_name, department: p.department || '', profileId: p.id,
         shift, status: att?.status || (schedule ? 'Chưa điểm danh' : 'Chưa có lịch'),
         timestamp: att?.scanned_at || null, inSchedule: expected,
         isLocked: Boolean(att?.is_locked), reason: att?.note || '', note: att?.note || '' }];
@@ -310,6 +315,21 @@
       if (data?.closed !== true) fail(503,'Chưa xác nhận được kết quả chốt ca.');
       return response({ success: true, message: data.testMode ? 'Đã chốt phiên thử; dữ liệu điểm danh thật không thay đổi.' : 'Đã chốt và khóa các bản ghi trong ca.', data });
     }
+    if (path === '/api/admin/sync-schedule' && ['GET','POST'].includes(method)) {
+      const body = method === 'POST' ? JSON.parse(options.body || '{}') : {};
+      const action = method === 'GET' ? 'status' : body.action === 'apply' ? 'apply' : 'preview';
+      if (!client.functions?.invoke) fail(503,'Chưa cấu hình Edge worker đồng bộ LHU.');
+      const result = await client.functions.invoke('lhu-sync-worker',{body:{action,week:body.week,jobId:body.jobId}});
+      if (result.error) {
+        let info;try { info = await result.error.context?.json(); } catch { /* generic fallback */ }
+        const status = result.error.context?.status;
+        fail([401,403,409].includes(status) ? status : 503,info?.message || 'Chưa kết nối được worker LHU. Cần triển khai Edge Function và Cron.');
+      }
+      if (!result.data?.success) fail(503,result.data?.message || 'Chưa xác minh được kết quả đồng bộ LHU.');
+      const payload = result.data.data;
+      if (action === 'status') return response({success:true,data:payload?.job || null,configured:payload?.configured === true,workerSeenAt:payload?.workerSeenAt});
+      return response({success:true,data:payload});
+    }
     if (method !== 'GET') return response({ success: false, code: 'WRITE_MAINTENANCE', message: maintenance }, 503);
     if (['/api/admin/sync-schedule','/api/schedule/sync'].includes(path)) {
       return response({ success: false, code: 'WRITE_MAINTENANCE', message: maintenance }, 503);
@@ -329,11 +349,11 @@
       const map = new Map(schedules.map(row => [row.profile_id, row]));
       const devices = await readAll('devices','profile_id');
       const bound = new Set(devices.map(row => row.profile_id));
-      const data = profiles.map(p => ({ _id: p.id, id: p.id, userId: p.student_id, name: p.display_name,
-        role: p.role === 'super_admin' ? 'superadmin' : p.role, active: p.active, department: '',
+      const data = profiles.filter(p => path === '/api/users' || (p.active && p.role === 'student')).map(p => ({ _id: p.id, id: p.id, userId: p.student_id, name: p.display_name,
+        role: p.role === 'super_admin' ? 'superadmin' : p.role, active: p.active, department: p.department || '',
         deviceBound: bound.has(p.id), schedule: map.get(p.id)?.schedule || emptySchedule(),
         scheduleWeek: { revision: map.get(p.id)?.revision || 0, source: map.get(p.id)?.source || 'missing' } }));
-      return response({ success: true, count: data.length, data, metadata: { week: selected } });
+      return response({ success: true, count: data.length, studentCount: profiles.filter(p => p.active && p.role === 'student').length, data, metadata: { week: selected } });
     }
     if (path === '/api/schedule/history') {
       const p = profiles.find(row => row.student_id === url.searchParams.get('userId'));
@@ -356,7 +376,7 @@
           const data = await qrRpc('admin_get_shift_attendance',{p_date:clock.date,p_shift:shift});
           if (!Array.isArray(data?.records)) fail(503,'Chưa tải được danh sách phiên điểm danh.');
           rememberAttendance(current.id,data);
-          return response({success:true,...data,data:data.records.map(row=>({...row,businessDate:data.date}))});
+          return response({success:true,...data,data:data.records.map(row=>({...row,department:profiles.find(p=>p.id===row.profileId)?.department || row.department || '',businessDate:data.date}))});
         }
         const details = [];
         for (const label of ['Sáng','Chiều','Tối']) {
@@ -403,9 +423,9 @@
         return response({success:true,testMode:true,count:data.length,data});
       }
       const records = await readAll('attendance','profile_id,status');
-      const data = profiles.map(p => {
+      const data = profiles.filter(p => p.active && p.role === 'student').map(p => {
         const rows = records.filter(row => row.profile_id === p.id);
-        return { userId: p.student_id, name: p.display_name, department: '', total: rows.length,
+        return { userId: p.student_id, name: p.display_name, department: p.department || '', total: rows.length,
           present: rows.filter(r => r.status === 'Có mặt').length, late: rows.filter(r => r.status === 'Đi trễ').length,
           excused: rows.filter(r => r.status === 'Vắng có phép').length,
           unexcused: rows.filter(r => r.status === 'Vắng không phép').length };

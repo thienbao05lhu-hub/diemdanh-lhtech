@@ -1728,7 +1728,7 @@
         const users = await resUsers.json();
         if (readGeneration !== adminReadGeneration || !window.AdminAuth?.isAuthenticated()) return;
         if (users.success) {
-          document.getElementById('totalUsers').innerText = users.count || users.data.length;
+          document.getElementById('totalUsers').innerText = users.studentCount ?? users.data.filter(u => u.role === 'student' && u.active !== false).length;
           renderUsers(users.data);
         }
 
@@ -1772,8 +1772,9 @@
     }
 
     function updateUserCounters() {
-      const total = rawUsersList.length;
-      const locked = rawUsersList.filter(u => !!u.deviceBound).length;
+      const students = rawUsersList.filter(u => u.role === 'student' && u.active !== false);
+      const total = students.length;
+      const locked = students.filter(u => !!u.deviceBound).length;
       const unlocked = total - locked;
 
       if (document.getElementById('countAll')) document.getElementById('countAll').innerText = total;
@@ -1795,7 +1796,7 @@
       }
 
       // 1. Sắp xếp danh sách A-Z theo tên tiếng Việt
-      let sorted = sortVietnameseAlphabet(rawUsersList);
+      let sorted = sortVietnameseAlphabet(rawUsersList.filter(u => u.role === 'student' && u.active !== false));
 
       // 2. Lọc theo trạng thái tab (all, locked, unlocked)
       if (currentFilterStatus === 'locked') {
@@ -1817,7 +1818,7 @@
       // Cập nhật nhãn số lượng hiển thị
       const badge = document.getElementById('usersCountBadge');
       if (badge) {
-        badge.innerText = `${sorted.length}/${rawUsersList.length} SV (A-Z)`;
+        badge.innerText = `${sorted.length}/${rawUsersList.filter(u => u.role === 'student' && u.active !== false).length} SV (A-Z)`;
       }
 
       if (sorted.length === 0) {
@@ -1837,8 +1838,8 @@
             <div class="flex items-center gap-2.5 flex-1 min-w-0">
               <span class="w-5 text-[10px] text-slate-500 text-center font-mono shrink-0">${index + 1}</span>
               <div class="flex-1 min-w-0">
-                <p class="font-bold text-white whitespace-normal break-words leading-tight">${u.name}</p>
-                <p class="text-[10px] text-slate-500 mt-1"><span class="font-mono text-emerald-400">${u.userId}</span> &bull; ${u.department || 'Chưa có lớp'}</p>
+                <p class="font-bold text-white whitespace-normal break-words leading-tight">${escapeHtml(u.name)}</p>
+                <p class="text-[10px] text-slate-500 mt-1"><span class="font-mono text-emerald-400">${u.userId}</span> &bull; ${escapeHtml(u.department || 'Chưa có lớp')}</p>
               </div>
             </div>
             <div class="flex items-center gap-2 shrink-0">
@@ -2166,8 +2167,8 @@
         return `
           <tr class="hover:bg-slate-800/40 transition">
             <td class="px-4 py-2.5">
-              <p class="font-bold text-white whitespace-normal break-words leading-tight">${u.name}</p>
-              <p class="text-[10px] text-slate-500 mt-0.5">${u.department || 'Chưa có lớp'}</p>
+              <p class="font-bold text-white whitespace-normal break-words leading-tight">${escapeHtml(u.name)}</p>
+              <p class="text-[10px] text-slate-500 mt-0.5">${escapeHtml(u.department || 'Chưa có lớp')}</p>
             </td>
             <td class="px-4 py-2.5 font-mono text-slate-300 font-semibold">${u.userId}</td>
             <td class="px-3 py-2.5 text-center">
@@ -2413,8 +2414,8 @@
         return `
           <tr class="hover:bg-slate-800/40 transition">
             <td class="px-3 py-2.5">
-              <p class="font-bold text-white text-xs whitespace-normal break-words leading-tight">${u.name}</p>
-              <p class="text-[10px] text-slate-500 font-mono mt-0.5">${u.userId} &bull; ${u.department || 'Chưa có lớp'}</p>
+              <p class="font-bold text-white text-xs whitespace-normal break-words leading-tight">${escapeHtml(u.name)}</p>
+              <p class="text-[10px] text-slate-500 font-mono mt-0.5">${u.userId} &bull; ${escapeHtml(u.department || 'Chưa có lớp')}</p>
             </td>
             ${dayCells}
             <td class="px-3 py-2.5 text-center">
@@ -2812,7 +2813,7 @@
             <span class="font-bold text-white truncate">${u.name}</span>
             <span class="text-[10px] text-slate-400 font-mono">${u.userId}</span>
           </div>
-          <span class="text-[10px] text-slate-500 font-sans shrink-0">${u.department || 'Chưa có lớp'}</span>
+          <span class="text-[10px] text-slate-500 font-sans shrink-0">${escapeHtml(u.department || 'Chưa có lớp')}</span>
         </li>
       `).join('');
 
@@ -3025,7 +3026,7 @@
                 <span class="font-bold text-xs text-white truncate">${u.name}</span>
                 ${roleBadge}
               </div>
-              <p class="text-[10px] text-slate-500 font-mono mt-0.5">${u.userId} • ${u.department || 'Chưa có lớp'}</p>
+              <p class="text-[10px] text-slate-500 font-mono mt-0.5">${u.userId} • ${escapeHtml(u.department || 'Chưa có lớp')}</p>
             </div>
             <div class="flex items-center gap-1 shrink-0">
               ${actions}
