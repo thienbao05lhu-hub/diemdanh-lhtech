@@ -309,6 +309,14 @@
     if (method === 'POST' && ['/api/schedule','/api/schedule/rollback'].includes(path)) {
       return writeSchedule(path, JSON.parse(options.body || '{}'));
     }
+    const deleteLeaveMatch = /^\/api\/leaves\/([0-9a-f-]{36})$/.exec(path);
+    if (deleteLeaveMatch && method === 'DELETE') {
+      const caps = await leaveCapabilities();
+      if (!caps?.leaveEnabled || !caps.canReview) return response({ success: false, message: maintenance }, 503);
+      const result = await qrRpc('admin_delete_leave_request', { p_leave_id: deleteLeaveMatch[1] });
+      if (result?.success !== true || result.deletedId !== deleteLeaveMatch[1]) fail(503, 'Chưa xác nhận được kết quả xóa đơn nghỉ.');
+      return response({ success: true, message: 'Đã xóa đơn xin nghỉ thành công.', deletedId: result.deletedId });
+    }
     const reviewMatch = /^\/api\/leaves\/([0-9a-f-]{36})\/review$/.exec(path);
     if (reviewMatch && method === 'POST') {
       const caps = await leaveCapabilities();
@@ -327,7 +335,8 @@
     if (path === '/api/get-qr-token' && method === 'GET') {
       const caps = await qrCapabilities();
       if (!caps?.qrEnabled) return response({ success: false, message: maintenance }, 503);
-      const data = await qrRpc('admin_get_active_qr');
+      const forceRefresh = url.searchParams.get('force') === '1' || url.searchParams.get('force') === 'true';
+      const data = await qrRpc(forceRefresh ? 'admin_refresh_active_qr' : 'admin_get_active_qr');
       if (data?.isPaused) {
         return response({ success: true, isPaused: true, shift: data.shift, date: data.date, message: data.message || 'Mã QR đang tạm dừng phát.' });
       }

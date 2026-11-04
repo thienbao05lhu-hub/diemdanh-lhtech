@@ -3,9 +3,10 @@
   'use strict';
   const clients=new WeakMap();
   const routes=Object.freeze({get_attendance_capabilities:'qr_test_get_capabilities',admin_get_active_qr:'qr_test_admin_get_qr',
+    admin_refresh_active_qr:'qr_test_admin_refresh_qr',
     submit_attendance:'qr_test_submit',admin_get_shift_attendance:'qr_test_admin_get_shift',get_my_attendance:'qr_test_get_mine',
     admin_close_attendance_session:'qr_test_admin_close',get_admin_attendance_capabilities:'qr_test_admin_edit_capabilities'});
-  const blocked=new Set(['student_create_leave_request','admin_decide_leave_request','admin_adjust_attendance']);
+  const blocked=new Set(['student_create_leave_request','admin_decide_leave_request','admin_delete_leave_request','admin_adjust_attendance']);
   const failure=error=>({data:null,error,status:error?.code==='APP_FORBIDDEN'?403:503});
   async function mode(client){
     const raw=clients.get(client);if(!raw)return {data:{testMode:false},error:null};

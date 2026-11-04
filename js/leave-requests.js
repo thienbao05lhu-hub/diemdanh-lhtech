@@ -18,6 +18,20 @@
   function notice(text) { el('leaveRequestsNotice').textContent = text; }
   function toast(type, text) { root.showToast?.[type]?.(text); notice(text); }
   const colors = { approved: 'text-emerald-300', rejected: 'text-rose-300', pending: 'text-amber-300', reviewing: 'text-blue-300' };
+
+  function createDeleteButton(request, getActionsEl) {
+    const delBtn = node(
+      'button',
+      'rounded-lg bg-slate-900 hover:bg-rose-950/60 border border-slate-700 hover:border-rose-500/40 px-3 py-2 text-xs font-semibold text-slate-300 hover:text-rose-300 transition disabled:opacity-50 inline-flex items-center gap-1.5 cursor-pointer ml-auto'
+    );
+    delBtn.type = 'button';
+    delBtn.title = 'Xóa đơn xin nghỉ này khỏi danh sách';
+    const icon = node('i', 'fa-solid fa-trash-can text-[11px]');
+    delBtn.append(icon, document.createTextNode('Xóa đơn'));
+    delBtn.addEventListener('click', () => void removeLeave(request, getActionsEl()));
+    return delBtn;
+  }
+
   function card(request, canReview, actor) {
     const admin = true;
     const allowActions = canReview && request.profileId && Number.isSafeInteger(request.revision) && request.profileId !== actor;
@@ -44,41 +58,47 @@
       });
       input.id = `leaveReviewReason_${request.id}`;
       label.htmlFor = input.id;
-      const actions = node('div', 'flex gap-2 flex-wrap');
-      const approve = node('button', 'rounded-lg bg-emerald-600 hover:bg-emerald-500 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50', 'Chấp thuận');
-      const reject = node('button', 'rounded-lg bg-rose-600/20 hover:bg-rose-600/30 border border-rose-500/30 px-3 py-2 text-xs font-semibold text-rose-300 disabled:opacity-50', 'Từ chối');
+      const actions = node('div', 'flex items-center gap-2 flex-wrap');
+      const approve = node('button', 'rounded-lg bg-emerald-600 hover:bg-emerald-500 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50 cursor-pointer', 'Chấp thuận');
+      const reject = node('button', 'rounded-lg bg-rose-600/20 hover:bg-rose-600/30 border border-rose-500/30 px-3 py-2 text-xs font-semibold text-rose-300 disabled:opacity-50 cursor-pointer', 'Từ chối');
       approve.type = reject.type = 'button';
       approve.addEventListener('click', () => review(request, 'approved', input, actions));
       reject.addEventListener('click', () => review(request, 'rejected', input, actions));
-      actions.append(approve, reject);
+      actions.append(approve, reject, createDeleteButton(request, () => actions));
       card.append(label, input, actions);
     } else if (allowActions && request.status === 'approved') {
-      const actions = node('div', 'flex gap-2 flex-wrap pt-1');
+      const actions = node('div', 'flex items-center gap-2 flex-wrap pt-1');
       const revoke = node('button', 'rounded-lg bg-slate-800 hover:bg-rose-950/40 border border-slate-700 hover:border-rose-500/40 text-slate-300 hover:text-rose-300 px-3 py-1.5 text-xs font-semibold transition disabled:opacity-50 cursor-pointer', 'Hủy duyệt (Đưa về Chờ duyệt)');
       revoke.type = 'button';
       revoke.addEventListener('click', async () => {
         if (!confirm('Bạn có chắc muốn hủy duyệt đơn này? Trạng thái điểm danh Vắng có phép sẽ bị hủy bỏ.')) return;
         await review(request, 'pending', { value: 'Hủy chấp thuận bởi Admin' }, actions);
       });
-      actions.append(revoke);
+      actions.append(revoke, createDeleteButton(request, () => actions));
       card.append(actions);
     } else if (allowActions && request.status === 'rejected') {
-      const actions = node('div', 'flex gap-2 flex-wrap pt-1');
+      const actions = node('div', 'flex items-center gap-2 flex-wrap pt-1');
       const reApprove = node('button', 'rounded-lg bg-slate-800 hover:bg-emerald-950/40 border border-slate-700 hover:border-emerald-500/40 text-slate-300 hover:text-emerald-300 px-3 py-1.5 text-xs font-semibold transition disabled:opacity-50 cursor-pointer', 'Xét duyệt lại (Chấp thuận)');
       reApprove.type = 'button';
       reApprove.addEventListener('click', async () => {
         await review(request, 'approved', { value: 'Xét duyệt lại: Chấp thuận' }, actions);
       });
-      actions.append(reApprove);
+      actions.append(reApprove, createDeleteButton(request, () => actions));
       card.append(actions);
     } else if (allowActions && request.status === 'reviewing') {
       card.append(node('p', 'text-[11px] text-slate-400', request.needsRecovery
         ? 'Có gián đoạn khi ghi dữ liệu. Bấm đối chiếu để kiểm tra trạng thái đã lưu.'
         : 'Đơn đang được xử lý. Có thể đối chiếu nếu lượt xử lý gián đoạn quá 5 phút.'));
-      const reconcile = node('button', 'rounded-lg border border-blue-400/30 bg-blue-500/10 px-3 py-2 text-xs font-semibold text-blue-300 disabled:opacity-50', 'Đối chiếu trạng thái');
+      const actions = node('div', 'flex items-center gap-2 flex-wrap pt-1');
+      const reconcile = node('button', 'rounded-lg border border-blue-400/30 bg-blue-500/10 px-3 py-2 text-xs font-semibold text-blue-300 disabled:opacity-50 cursor-pointer', 'Đối chiếu trạng thái');
       reconcile.type = 'button';
       reconcile.addEventListener('click', () => toast('warning', 'Đơn cũ cần đối chiếu dữ liệu trước khi xử lý.'));
-      card.append(reconcile);
+      actions.append(reconcile, createDeleteButton(request, () => actions));
+      card.append(actions);
+    } else if (canReview) {
+      const actions = node('div', 'flex items-center gap-2 flex-wrap pt-1');
+      actions.append(createDeleteButton(request, () => actions));
+      card.append(actions);
     }
     return card;
   }
@@ -97,7 +117,7 @@
       total = result.total;
       el('leaveRequestsList').replaceChildren();
       for (const request of result.data) el('leaveRequestsList').append(card(request, result.leaveEnabled === true && result.canReview === true, result.profileId));
-      notice(result.leaveEnabled ? `${total} đơn theo bộ lọc. Ca đã chốt hoặc hết giờ không được thay đổi.`
+      notice(result.leaveEnabled ? `${total} đơn theo bộ lọc. Ca đã chốt hoặc hết giờ không được duyệt nhưng có thể xóa.`
         : `${total} đơn theo bộ lọc. Xét duyệt đang chờ hoàn tất cập nhật.`);
       el('leaveRequestsPage').textContent = `Trang ${page}/${Math.max(1, Math.ceil(total / 25))}`;
       el('leaveRequestsPrev').disabled = page <= 1;
@@ -105,6 +125,51 @@
     } catch (error) { if (version === generation) { el('leaveRequestsList').replaceChildren(); notice(error.message || 'Không tải được đơn nghỉ.'); } }
     finally { loading = false; }
   }
+
+  async function removeLeave(request, actions) {
+    if (deciding || !authenticated()) return;
+    const dateLabel = request.date ? request.date.split('-').reverse().join('/') : '';
+    let confirmed = false;
+    if (typeof root.showConfirmDialog === 'function') {
+      confirmed = await root.showConfirmDialog({
+        title: 'Xóa Đơn Xin Nghỉ',
+        message: `Bạn có chắc chắn muốn xóa đơn xin nghỉ của <strong class="text-white">${request.userName} (${request.userId})</strong> — Ca ${request.shift} ngày ${dateLabel} khỏi hệ thống?`,
+        confirmText: 'Xóa đơn',
+        cancelText: 'Hủy',
+        isDanger: true,
+      });
+    } else {
+      confirmed = root.confirm(`Bạn có chắc chắn muốn xóa đơn xin nghỉ của ${request.userName} (${request.userId}) - Ca ${request.shift} ngày ${dateLabel}?`);
+    }
+    if (!confirmed) return;
+
+    deciding = true;
+    const buttons = actions ? [...actions.querySelectorAll('button')] : [];
+    const version = generation;
+    buttons.forEach(button => { button.disabled = true; });
+    try {
+      const response = await root.fetch(`/api/leaves/${encodeURIComponent(request.id)}`, {
+        method: 'DELETE',
+        headers: root.getAdminHeaders(),
+        signal: AbortSignal.timeout(20000),
+      });
+      const result = await response.json();
+      if (version !== generation || !authenticated()) return;
+      if (!response.ok || result.success !== true) throw new Error(result.message || 'Chưa xóa được đơn xin nghỉ.');
+      draftReasons.delete(request.id);
+      toast('success', result.message || 'Đã xóa đơn xin nghỉ thành công.');
+      if (typeof root.fetchTodayAttendance === 'function') void root.fetchTodayAttendance();
+      if (typeof root.fetchPersonalStats === 'function') void root.fetchPersonalStats();
+      if (root.AdminTools?.loadAudit) void root.AdminTools.loadAudit();
+    } catch (error) {
+      toast('warning', error.message || 'Chưa xóa được đơn xin nghỉ. Vui lòng thử lại.');
+    } finally {
+      deciding = false;
+      buttons.forEach(button => { button.disabled = false; });
+      await load();
+    }
+  }
+
   async function review(request, decision, input, actions) {
     if (deciding || !authenticated()) return;
     const reason = input.value.trim();

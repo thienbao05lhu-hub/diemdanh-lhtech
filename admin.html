@@ -11,8 +11,8 @@
   <script src="js/attendance-csv.js?v=20261101-logic1"></script>
   <script src="vendor/supabase-2.118.0.js"></script>
   <script src="js/config.js?v=20261101-safe-read"></script>
-  <script src="js/attendance-trial.js?v=20261102-trial1"></script>
-  <script src="js/supabase-read-api.js?v=20261102-p3"></script>
+  <script src="js/attendance-trial.js?v=20261104-qr2"></script>
+  <script src="js/supabase-read-api.js?v=20261104-qr2"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
     body { font-family: 'Plus Jakarta Sans', sans-serif; }
@@ -1678,18 +1678,18 @@
       initQrPauseControl();
     }
 
-    async function updateDynamicQR() {
+    async function updateDynamicQR(force = false) {
       initQrPauseControl();
-      if (qrLoading) return false;
+      if (qrLoading && !force) return false;
       qrLoading = true;
       const started = performance.now();
       qrNextPoll = started + 10000;
       try {
-        const res = await fetch('/api/get-qr-token');
+        const res = await fetch(force ? '/api/get-qr-token?force=1' : '/api/get-qr-token', { cache: 'no-store' });
         const data = await res.json();
         const receivedAt = performance.now();
         if (!res.ok || data.success !== true) {
-          if (receivedAt >= qrDeadline) clearDynamicQR(data.message || 'Chưa lấy được mã QR.');
+          if (receivedAt >= qrDeadline || force) clearDynamicQR(data.message || 'Chưa lấy được mã QR.');
           else qrNextPoll = Math.min(qrDeadline, receivedAt + 1500);
           return false;
         }
@@ -1715,7 +1715,7 @@
         remainingSeconds = Math.max(0, Math.ceil((qrDeadline - receivedAt) / 1000));
         const nextTokenText = data.testMode ? 'THỬ NGHIỆM · ' + data.token : data.token;
         const tokenEl = document.getElementById('currentQrTokenText');
-        const isSameToken = tokenEl && tokenEl.textContent === nextTokenText && document.querySelector('#qrcodeCanvas canvas, #qrcodeCanvas img');
+        const isSameToken = !force && tokenEl && tokenEl.textContent === nextTokenText && document.querySelector('#qrcodeCanvas canvas, #qrcodeCanvas img');
         if (tokenEl) tokenEl.textContent = nextTokenText;
         document.getElementById('qrCountdown').textContent = `${remainingSeconds}s`;
         const zoomCd = document.getElementById('qrZoomCountdown');
@@ -1784,10 +1784,16 @@
       if (btn) btn.disabled = true;
 
       try {
-        const updated = await updateDynamicQR();
+        const updated = await updateDynamicQR(true);
         startCountdown();
         if (updated && typeof showToast !== 'undefined') {
-          showToast.success('Đã cập nhật mã QR động mới!');
+          if (isQrCurrentlyPaused) {
+            showToast.warning('Mã QR hiện đang tạm dừng phát.');
+          } else {
+            showToast.success('Đã cấp mã QR động mới (30s)!');
+          }
+        } else if (!updated && typeof showToast !== 'undefined') {
+          showToast.warning('Chưa thể cấp mã QR mới lúc này.');
         }
       } catch (err) {
         console.error('Lỗi khi làm mới mã QR:', err);
@@ -1812,7 +1818,7 @@
 
       try {
         await Promise.all([
-          updateDynamicQR(),
+          updateDynamicQR(true),
           fetchAllData(),
         ]);
         startCountdown();
@@ -3742,8 +3748,8 @@
   <script src="js/admin-auth.js?v=20261102-owner1"></script>
   <script src="js/weekly-schedule.js?v=20261101-live1"></script>
   <script src="js/schedule-sync.js?v=20261101-live1"></script>
-  <script src="js/admin-tools.js?v=20261101_08"></script>
-  <script src="js/leave-requests.js?v=20261101-live1"></script>
+  <script src="js/admin-tools.js?v=20261104-qr2"></script>
+  <script src="js/leave-requests.js?v=20261104-qr2"></script>
   <script defer src="js/admin-live.js?v=20261101-live1"></script>
 </body>
 </html>

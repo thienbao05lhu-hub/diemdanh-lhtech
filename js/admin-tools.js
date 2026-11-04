@@ -10,6 +10,7 @@
     'attendance.update': 'Sửa điểm danh', 'attendance.clear': 'Đặt lại điểm danh',
     'attendance.cancel': 'Hủy lượt quét', 'attendance.reset': 'Reset ngày', 'attendance.reset-all': 'Reset toàn bộ',
     'schedule.update': 'Cập nhật lịch tuần', 'leave.approved': 'Chấp thuận nghỉ', 'leave.rejected': 'Từ chối nghỉ',
+    'leave.reviewed': 'Xét duyệt đơn nghỉ', 'leave.deleted': 'Xóa đơn nghỉ',
     'leave.submitted': 'Gửi đơn nghỉ', 'leave.reconciled': 'Đối chiếu đơn gián đoạn',
     'schedule.sync.start': 'Bắt đầu đồng bộ', 'schedule.sync.complete': 'Hoàn tất đồng bộ',
   };
