@@ -2624,14 +2624,15 @@
           `;
         }
 
-        const noteTag = item.note ? `<span class="ml-1 text-[9px] text-amber-400 italic">(${escapeHtml(item.note)})</span>` : '';
-        const reasonTag = item.reason ? `<p class="text-[10px] text-amber-300/80 italic mt-0.5 max-w-[220px] truncate" title="Lý do nghỉ: ${escapeHtml(item.reason)}"><i class="fa-regular fa-message text-[9px] mr-1"></i>${escapeHtml(item.reason)}</p>` : '';
+        const isSystemAutoNote = !item.note || item.note.includes('chưa ghi nhận điểm danh') || item.note.startsWith('Chốt ca:');
+        const customNote = isSystemAutoNote ? '' : (item.reason || item.note);
+        const reasonTag = customNote ? `<p class="text-[10px] text-amber-300/80 italic mt-0.5 max-w-[220px] truncate" title="Ghi chú: ${escapeHtml(customNote)}"><i class="fa-regular fa-message text-[9px] mr-1"></i>${escapeHtml(customNote)}</p>` : '';
 
         return `
           <tr class="hover:bg-slate-800/40 transition">
             <td class="px-4 py-2 font-mono font-bold text-emerald-400">${item.userId}</td>
             <td class="px-4 py-2 font-medium text-white whitespace-nowrap">
-              <p class="leading-tight">${escapeHtml(item.userName || 'N/A')}${noteTag}</p>
+              <p class="leading-tight">${escapeHtml(item.userName || 'N/A')}</p>
               ${reasonTag}
             </td>
             <td class="px-3 py-2 text-slate-400">${timeStr}</td>
@@ -3159,7 +3160,7 @@
                 <td class="px-3 py-2 text-center font-mono ${v.scannedAt ? 'text-emerald-400' : 'text-slate-600'}">${scanTimeStr}</td>
                 <td class="px-3 py-2 text-center font-mono ${isLate ? 'text-orange-400 font-bold' : 'text-slate-600'}">${isLate ? v.lateMinutes + ' phút' : '-'}</td>
                 <td class="px-3 py-2 text-right font-mono font-bold text-amber-400">${formatVND(v.fine)}</td>
-                <td class="px-3 py-2 text-slate-400 text-[11px] truncate max-w-[140px]">${escapeHtml(v.note || '-')}</td>
+                <td class="px-3 py-2 text-slate-400 text-[11px] truncate max-w-[140px]">${escapeHtml((!v.note || v.note.includes('chưa ghi nhận điểm danh') || v.note.startsWith('Chốt ca:')) ? '-' : v.note)}</td>
               </tr>
             `;
           }).join('');
