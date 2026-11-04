@@ -25,11 +25,13 @@
   const rpc = async (name, args) => api.checkResult(await api.client.rpc(name,args)).data;
   function token() {
     const key = 'lhtech_device_token_v2';
-    let value = root.localStorage.getItem(key);
-    if (value && value.length >= 10 && value.length <= 255) return value;
+    const readCookie = () => { try { const m = (document.cookie || '').split('; ').find(r => r.startsWith(key + '=')); return m ? decodeURIComponent(m.slice(key.length + 1)) : ''; } catch (_) { return ''; } };
+    const writeCookie = v => { try { document.cookie = `${key}=${encodeURIComponent(v)}; max-age=31536000; path=/; SameSite=Lax${root.location.protocol === 'https:' ? '; Secure' : ''}`; } catch (_) {} };
+    let value = root.localStorage.getItem(key) || readCookie();
+    if (value && value.length >= 10 && value.length <= 255) { root.localStorage.setItem(key, value); writeCookie(value); return value; }
     value = root.localStorage.getItem('qr_device_id') || root.localStorage.getItem('lhtech_device_fp');
     if (!value || value.length < 10 || value.length > 255) value = Array.from(root.crypto.getRandomValues(new Uint8Array(32)),n=>n.toString(16).padStart(2,'0')).join('');
-    root.localStorage.setItem(key,value); return value;
+    root.localStorage.setItem(key,value); writeCookie(value); return value;
   }
   function ready() { return verified && caps?.qrEnabled === true && caps?.canScan === true && performance.now() < deadline; }
   function controls() {
