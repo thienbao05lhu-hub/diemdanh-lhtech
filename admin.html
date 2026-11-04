@@ -7,7 +7,7 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'self' https: data: blob: 'unsafe-inline' 'unsafe-eval'; connect-src https://oalnswbnjhkkovxjxtlz.supabase.co wss://oalnswbnjhkkovxjxtlz.supabase.co https:; font-src https: data:; style-src 'self' 'unsafe-inline' https:; img-src 'self' data: blob: https:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https:;">
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
-  <script src="vendor/qrcode.min.js"></script>
+  <script src="vendor/qrcode.min.js?v=20261104-qr1"></script>
   <script src="js/attendance-csv.js?v=20261101-logic1"></script>
   <script src="vendor/supabase-2.118.0.js"></script>
   <script src="js/config.js?v=20261101-safe-read"></script>
@@ -1454,6 +1454,67 @@
     // QR chỉ hiển thị trong thời gian server cho phép; không giữ mã cũ khi lỗi.
     let qrDeadline = 0, qrLoading = false, qrNextPoll = 0, activeQrSession = null;
     let isQrCurrentlyPaused = false;
+    let currentActiveQrToken = '';
+
+    function getQrCardSize() {
+      return (typeof window !== 'undefined' && window.innerWidth < 640) ? 200 : 160;
+    }
+
+    function openQrZoomModal() {
+      if (!currentActiveQrToken || isQrCurrentlyPaused) return;
+      let modal = document.getElementById('qrZoomModal');
+      if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'qrZoomModal';
+        modal.className = 'fixed inset-0 z-[9998] bg-slate-950/95 backdrop-blur-md flex flex-col items-center justify-center p-4';
+        modal.innerHTML = `
+          <div class="bg-slate-900 border-2 border-emerald-500/50 rounded-3xl p-5 sm:p-6 w-full max-w-sm shadow-2xl flex flex-col items-center text-center space-y-4">
+            <div class="flex items-center justify-between w-full">
+              <span class="inline-flex items-center gap-1.5 text-xs font-extrabold text-emerald-400 uppercase tracking-wider">
+                <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping"></span> MÃ QR ĐIỂM DANH
+              </span>
+              <span id="qrZoomCountdown" class="text-sm font-mono font-bold text-amber-300 bg-amber-400/15 px-3 py-1 rounded-full border border-amber-400/30">30s</span>
+            </div>
+            <div class="bg-white p-4 rounded-2xl shadow-xl border-2 border-white flex items-center justify-center">
+              <div id="qrZoomCanvas" class="flex items-center justify-center"></div>
+            </div>
+            <p class="text-xs font-mono font-bold text-emerald-300 break-all" id="qrZoomTokenText"></p>
+            <p class="text-[11px] text-slate-400">Giữ màn hình sáng và hướng camera điện thoại sinh viên vào mã QR</p>
+            <button type="button" onclick="closeQrZoomModal()" class="w-full py-2.5 px-4 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 text-white border border-slate-700 transition cursor-pointer">
+              Đóng khung phóng to
+            </button>
+          </div>
+        `;
+        modal.addEventListener('click', (e) => { if (e.target === modal) closeQrZoomModal(); });
+        document.body.appendChild(modal);
+      }
+      modal.classList.remove('hidden');
+      renderZoomQr();
+    }
+
+    function closeQrZoomModal() {
+      const modal = document.getElementById('qrZoomModal');
+      if (modal) modal.classList.add('hidden');
+    }
+
+    function renderZoomQr() {
+      const modal = document.getElementById('qrZoomModal');
+      if (!modal || modal.classList.contains('hidden') || !currentActiveQrToken) return;
+      const zoomContainer = document.getElementById('qrZoomCanvas');
+      const zoomTokenEl = document.getElementById('qrZoomTokenText');
+      if (zoomTokenEl) zoomTokenEl.textContent = document.getElementById('currentQrTokenText')?.textContent || currentActiveQrToken;
+      if (zoomContainer) {
+        zoomContainer.replaceChildren();
+        new QRCode(zoomContainer, {
+          text: currentActiveQrToken,
+          width: 275,
+          height: 275,
+          colorDark: '#000000',
+          colorLight: '#ffffff',
+          correctLevel: QRCode.CorrectLevel.L,
+        });
+      }
+    }
 
     function initQrPauseControl() {
       const totalUsersEl = document.getElementById('totalUsers');
@@ -1464,6 +1525,24 @@
         dateWrap.className = 'flex items-center gap-1 shrink-0';
         dateWrap.innerHTML = `<input type="date" id="attendanceDateFilter" onchange="handleChangeAttendanceDate(this.value)" title="Xem lịch sử điểm danh theo ngày" class="bg-slate-950 border border-slate-800 hover:border-slate-700 focus:border-emerald-500 rounded-lg px-2 py-1 text-[11px] font-mono text-slate-200 focus:outline-none transition [color-scheme:dark]" /><button type="button" id="btnResetAttendanceDate" onclick="handleChangeAttendanceDate('')" title="Quay về Hôm nay" class="hidden px-2 py-1 rounded-lg text-[10px] font-bold bg-blue-500/15 text-blue-300 border border-blue-500/30 hover:bg-blue-500/25 transition">Hôm nay</button>`;
         cutoffBadge.parentElement.insertBefore(dateWrap, cutoffBadge);
+      }
+      const qrCanvasEl = document.getElementById('qrcodeCanvas');
+      if (qrCanvasEl && qrCanvasEl.parentElement && !qrCanvasEl.parentElement.dataset.zoomBound) {
+        qrCanvasEl.parentElement.dataset.zoomBound = '1';
+        qrCanvasEl.parentElement.classList.add('cursor-pointer', 'p-3');
+        qrCanvasEl.parentElement.title = 'Chạm để phóng to mã QR trên điện thoại';
+        qrCanvasEl.parentElement.addEventListener('click', () => openQrZoomModal());
+      }
+      const countdownEl = document.getElementById('qrCountdown');
+      if (countdownEl && countdownEl.parentElement && !document.getElementById('btnZoomQr')) {
+        const zoomBtn = document.createElement('button');
+        zoomBtn.id = 'btnZoomQr';
+        zoomBtn.type = 'button';
+        zoomBtn.onclick = () => openQrZoomModal();
+        zoomBtn.title = 'Phóng to mã QR toàn màn hình để sinh viên dễ quét trên điện thoại';
+        zoomBtn.className = 'px-2 py-0.5 text-[10px] font-semibold text-sky-300 hover:text-sky-200 bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/25 rounded-md transition flex items-center gap-1 cursor-pointer';
+        zoomBtn.innerHTML = '<i class="fa-solid fa-expand text-[10px]"></i> Phóng to';
+        countdownEl.parentElement.insertBefore(zoomBtn, countdownEl);
       }
       const tokenEl = document.getElementById('currentQrTokenText');
       if (!tokenEl) return;
@@ -1577,13 +1656,17 @@
     }
 
     function clearDynamicQR(message = 'Chưa có mã QR đang hiệu lực.') {
-      qrDeadline = 0; activeQrSession = null;
+      qrDeadline = 0; activeQrSession = null; currentActiveQrToken = '';
+      closeQrZoomModal();
       const container = document.getElementById('qrcodeCanvas');
       if (container) {
         container.replaceChildren();
         const isRefreshing = message.includes('Đang');
         const placeholder = document.createElement('div');
-        placeholder.className = 'w-[140px] h-[140px] flex flex-col items-center justify-center bg-slate-900 rounded-lg p-2.5 text-center border border-slate-700/70';
+        const sz = getQrCardSize();
+        placeholder.style.width = `${sz}px`;
+        placeholder.style.height = `${sz}px`;
+        placeholder.className = 'flex flex-col items-center justify-center bg-slate-900 rounded-lg p-2.5 text-center border border-slate-700/70';
         placeholder.innerHTML = isRefreshing
           ? '<i class="fa-solid fa-arrows-rotate fa-spin text-2xl text-emerald-400 mb-2"></i><span class="text-[11px] font-bold text-emerald-300">ĐANG CẤP MÃ MỚI</span><span class="text-[9px] text-slate-400 mt-1 leading-tight">Chu kỳ bảo mật 30 giây</span>'
           : `<i class="fa-solid fa-qrcode text-2xl text-slate-500 mb-2"></i><span class="text-[10px] font-semibold text-slate-300 leading-snug">${escapeHtml(message)}</span>`;
@@ -1612,6 +1695,8 @@
         }
         if (data.isPaused) {
           activeQrSession = { date: data.date, shift: data.shift };
+          currentActiveQrToken = '';
+          closeQrZoomModal();
           setQrPausedUI(true, data.message);
           if (document.getElementById('closeQrSession')) document.getElementById('closeQrSession').disabled = false;
           return true;
@@ -1626,18 +1711,23 @@
         qrDeadline = receivedAt + Math.max(500, lifetime - 200);
         qrNextPoll = Math.max(receivedAt + 700, qrDeadline - 2200);
         activeQrSession = { date: data.date, shift: data.shift };
+        currentActiveQrToken = data.token;
         remainingSeconds = Math.max(0, Math.ceil((qrDeadline - receivedAt) / 1000));
         const nextTokenText = data.testMode ? 'THỬ NGHIỆM · ' + data.token : data.token;
         const tokenEl = document.getElementById('currentQrTokenText');
         const isSameToken = tokenEl && tokenEl.textContent === nextTokenText && document.querySelector('#qrcodeCanvas canvas, #qrcodeCanvas img');
         if (tokenEl) tokenEl.textContent = nextTokenText;
         document.getElementById('qrCountdown').textContent = `${remainingSeconds}s`;
+        const zoomCd = document.getElementById('qrZoomCountdown');
+        if (zoomCd) zoomCd.textContent = `${remainingSeconds}s`;
         if (document.getElementById('closeQrSession')) document.getElementById('closeQrSession').disabled = false;
         if (!isSameToken) {
           const container = document.getElementById('qrcodeCanvas');
           container.replaceChildren();
-          qrGenerator = new QRCode(container, { text: data.token, width: 140, height: 140,
-            colorDark: '#0f172a', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.M });
+          const qrSize = getQrCardSize();
+          qrGenerator = new QRCode(container, { text: data.token, width: qrSize, height: qrSize,
+            colorDark: '#000000', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.L });
+          renderZoomQr();
         }
         return true;
       } catch (_) {
@@ -1656,6 +1746,8 @@
         if (qrDeadline > now) {
           remainingSeconds = Math.ceil((qrDeadline - now) / 1000);
           document.getElementById('qrCountdown').textContent = `${remainingSeconds}s`;
+          const zoomCd = document.getElementById('qrZoomCountdown');
+          if (zoomCd) zoomCd.textContent = `${remainingSeconds}s`;
           if (!qrLoading && now >= qrNextPoll) void updateDynamicQR();
         } else {
           if (qrDeadline && (!qrLoading || now - qrDeadline > 3000)) {

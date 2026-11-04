@@ -197,8 +197,8 @@
     if(pendingToken){const value=pendingToken;pendingToken=null;await submit(value);return;}
     const version=generation; cameraStarting=true; controls();
     try {
-      scanner ||= new root.Html5Qrcode('reader');
-      await scanner.start({facingMode:'environment'},{fps:10,qrbox:{width:250,height:250}},text=>{if(cameraOn&&!busy)void submit(text);},()=>{});
+      scanner ||= new root.Html5Qrcode('reader', { verbose: false, formatsToSupport: [0], experimentalFeatures: { useBarCodeDetectorIfSupported: true } });
+      await scanner.start({facingMode:'environment'},{fps:15,qrbox:(vw,vh)=>{const s=Math.max(180,Math.min(260,Math.floor(Math.min(vw||250,vh||250)*0.8)));return {width:s,height:s};}},text=>{if(cameraOn&&!busy)void submit(text);},()=>{});
       cameraOn=true;
       if(version!==generation || document.hidden || !ready()){await stopCamera();return;}
       el('scanAlert').classList.add('hidden'); el('btnResumeScan').classList.add('hidden'); el('scanOverlay').classList.remove('hidden');
