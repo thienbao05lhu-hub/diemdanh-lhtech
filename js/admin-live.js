@@ -153,7 +153,10 @@
     const jobs = [];
     if (selected.has('profiles') || selected.has('devices')) jobs.push(root.fetchAllData());
     else {
-      if (selected.has('attendance') || selected.has('schedules')) jobs.push(root.fetchTodayAttendance(),root.fetchPersonalStats());
+      if (selected.has('attendance') || selected.has('schedules')) {
+        jobs.push(root.fetchTodayAttendance(),root.fetchPersonalStats());
+        if (typeof root.fetchFinesData === 'function') jobs.push(root.fetchFinesData());
+      }
       if (selected.has('schedules')) jobs.push(root.fetchScheduleList());
     }
     if (selected.has('leaves')) jobs.push(root.LeaveRequestsUI?.loadAdmin());

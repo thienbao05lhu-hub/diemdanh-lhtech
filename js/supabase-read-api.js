@@ -396,7 +396,7 @@
       return response({ success: true, data: (rows || []).map(publicLeave) });
     }
     const allowed = ['/api/users','/api/schedule','/api/schedule/history','/api/attendance/today',
-      '/api/attendance/daily-summary','/api/attendance/stats/all','/api/admin/audit-logs','/api/leaves','/api/attendance'];
+      '/api/attendance/daily-summary','/api/attendance/stats/all','/api/admin/audit-logs','/api/leaves','/api/attendance','/api/attendance/fines'];
     if (!allowed.includes(path)) return response({ success: false, message: 'API này chưa được triển khai.' }, 404);
     if (path !== '/api/attendance/stats/all') await refreshProfiles();
     if (path === '/api/users' || path === '/api/schedule') {
@@ -538,6 +538,132 @@
         data: rows.map(row => ({ id: row.id, action: row.action, actorId: profileLabel(row.actor_id),
           targetId: row.target_id ? profileLabel(row.target_id) : 'Hệ thống',
           reason: row.details?.reason || row.details?.reviewReason || '', createdAt: row.created_at })) });
+    }
+    if (path === '/api/attendance/fines') {
+      const students = profiles.filter(p => p.active && p.role === 'student');
+      const studentMap = new Map(students.map(p => [p.id, p]));
+      const studentByUserId = new Map(students.map(p => [p.student_id, p]));
+
+      const from = url.searchParams.get('from');
+      const to = url.searchParams.get('to');
+      if (from) date(from);
+      if (to) date(to);
+
+      const records = [];
+      for (let offset = 0; offset < 10000; offset += 500) {
+        let q = client.from('attendance')
+          .select('id,profile_id,student_id,business_date,shift,status,scanned_at,note')
+          .order('business_date', { ascending: false })
+          .order('shift');
+        if (from) q = q.gte('business_date', from);
+        if (to) q = q.lte('business_date', to);
+        const page = checked(await q.range(offset, offset + 499));
+        records.push(...(page || []));
+        if ((page || []).length < 500) break;
+      }
+
+      const shiftCutoffs = {
+        'Sáng': '08:15:00',
+        'Chiều': '13:15:00',
+        'Tối': '18:15:00'
+      };
+
+      const studentDataMap = new Map();
+      for (const p of students) {
+        studentDataMap.set(p.id, {
+          profileId: p.id,
+          userId: p.student_id,
+          name: p.display_name,
+          department: p.department || '',
+          lateCount: 0,
+          totalLateMinutes: 0,
+          lateFine: 0,
+          unexcusedCount: 0,
+          unexcusedFine: 0,
+          totalFine: 0,
+          violations: []
+        });
+      }
+
+      for (const record of records) {
+        const s = studentDataMap.get(record.profile_id) || (record.student_id && studentByUserId.get(record.student_id) ? studentDataMap.get(studentByUserId.get(record.student_id).id) : null);
+        if (!s) continue;
+
+        const st = (record.status || '').trim();
+        if (st === 'Đi trễ') {
+          const cutoffTime = shiftCutoffs[record.shift] || '08:15:00';
+          const cutoffIso = `${record.business_date}T${cutoffTime}+07:00`;
+          const cutoffMs = Date.parse(cutoffIso);
+          let lateMinutes = 1;
+          if (record.scanned_at) {
+            const scanMs = Date.parse(record.scanned_at);
+            if (!Number.isNaN(scanMs) && !Number.isNaN(cutoffMs)) {
+              const diff = Math.floor((scanMs - cutoffMs) / 60000);
+              lateMinutes = Math.max(1, diff > 0 ? diff : 1);
+            }
+          }
+          const fine = Math.min(30000, lateMinutes * 500);
+
+          s.lateCount += 1;
+          s.totalLateMinutes += lateMinutes;
+          s.lateFine += fine;
+          s.totalFine += fine;
+          s.violations.push({
+            id: record.id,
+            date: record.business_date,
+            shift: record.shift,
+            status: 'Đi trễ',
+            scannedAt: record.scanned_at,
+            lateMinutes,
+            fine,
+            note: record.note || ''
+          });
+        } else if (st === 'Vắng không phép' || st === 'Vắng KP') {
+          const fine = 30000;
+          s.unexcusedCount += 1;
+          s.unexcusedFine += fine;
+          s.totalFine += fine;
+          s.violations.push({
+            id: record.id,
+            date: record.business_date,
+            shift: record.shift,
+            status: 'Vắng không phép',
+            scannedAt: null,
+            lateMinutes: 0,
+            fine,
+            note: record.note || ''
+          });
+        }
+      }
+
+      const list = Array.from(studentDataMap.values());
+      const summary = {
+        totalFine: 0,
+        totalLateFine: 0,
+        totalLateMinutes: 0,
+        totalLateCount: 0,
+        totalUnexcusedFine: 0,
+        totalUnexcusedCount: 0,
+        studentsWithFines: 0,
+        totalStudents: students.length
+      };
+
+      for (const s of list) {
+        summary.totalFine += s.totalFine;
+        summary.totalLateFine += s.lateFine;
+        summary.totalLateMinutes += s.totalLateMinutes;
+        summary.totalLateCount += s.lateCount;
+        summary.totalUnexcusedFine += s.unexcusedFine;
+        summary.totalUnexcusedCount += s.unexcusedCount;
+        if (s.totalFine > 0) summary.studentsWithFines += 1;
+      }
+
+      return response({
+        success: true,
+        summary,
+        data: list,
+        filter: { from: from || null, to: to || null }
+      });
     }
     return response({ success: false, message: 'API này chưa được triển khai.' }, 404);
   }

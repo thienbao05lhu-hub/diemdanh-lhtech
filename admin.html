@@ -12,7 +12,7 @@
   <script src="vendor/supabase-2.118.0.js"></script>
   <script src="js/config.js?v=20261101-safe-read"></script>
   <script src="js/attendance-trial.js?v=20261104-qr2"></script>
-  <script src="js/supabase-read-api.js?v=20261104-qr3"></script>
+  <script src="js/supabase-read-api.js?v=20261104-fines1"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
     body { font-family: 'Plus Jakarta Sans', sans-serif; }
@@ -492,6 +492,20 @@
           class="px-4 sm:px-5 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition flex items-center gap-2.5 shrink-0 bg-slate-950/80 text-slate-300 border border-slate-800">
           <span class="tab-icon-box w-7 h-7 rounded-lg flex items-center justify-center bg-slate-800 text-amber-400"><i class="fa-solid fa-clipboard-check"></i></span>
           <span>Duyệt Nghỉ & Nhật Ký</span>
+        </button>
+        <button
+          id="tabBtnFines"
+          type="button"
+          onclick="switchTab('tab-fines')"
+          class="px-4 sm:px-5 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all duration-200 flex items-center gap-2.5 shrink-0 bg-slate-950/80 hover:bg-slate-800/90 text-slate-300 hover:text-white border border-slate-800 hover:border-slate-700 cursor-pointer"
+        >
+          <span class="tab-icon-box w-7 h-7 rounded-lg flex items-center justify-center bg-slate-800/80 text-amber-400 shadow-sm text-sm">
+            <i class="fa-solid fa-coins"></i>
+          </span>
+          <span>Quỹ Phạt & Đi Trễ</span>
+          <span class="tab-badge text-[10px] font-medium px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-300 border border-amber-500/20">
+            Quỹ Phạt
+          </span>
         </button>
       </div>
     </div>
@@ -1135,11 +1149,298 @@
           <button id="auditNext" type="button" onclick="AdminTools.auditPage(1)" class="px-3 py-2 rounded-lg bg-slate-800 disabled:opacity-40">Sau</button>
         </div>
       </section>
+        <!-- ============================================================== -->
+    <!-- SECTION 5 (id="tab-fines"): QUỸ PHẠT & THEO DÕI ĐI TRỄ -->
+    <!-- ============================================================== -->
+    <section id="tab-fines" class="tab-content hidden w-full space-y-5">
+      <!-- Header & Bộ Lọc Nâng Cao -->
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-xl space-y-4">
+        <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-800 pb-4">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center text-lg border border-amber-500/20 shrink-0">
+              <i class="fa-solid fa-coins"></i>
+            </div>
+            <div>
+              <div class="flex items-center gap-2 flex-wrap">
+                <h2 class="text-sm sm:text-base font-bold text-white flex items-center gap-2">
+                  Quỹ Phạt & Theo Dõi Đi Trễ
+                  <span id="finesActiveFilterBadge" class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30">Tất cả thời gian</span>
+                </h2>
+              </div>
+              <p class="text-[11px] text-slate-400 mt-0.5">Tự động tính phạt đi trễ (500đ/phút, tối đa 30.000đ/ca) & vắng không phép (30.000đ/buổi)</p>
+            </div>
+          </div>
+
+          <!-- Action buttons & Export CSV -->
+          <div class="flex items-center gap-2.5 flex-wrap">
+            <button
+              type="button"
+              onclick="fetchFinesData()"
+              class="px-3 py-2 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 transition flex items-center gap-1.5 cursor-pointer shadow-sm"
+              title="Làm mới số liệu quỹ phạt"
+            >
+              <i class="fa-solid fa-rotate text-xs"></i>
+              <span>Làm Mới</span>
+            </button>
+            <button
+              type="button"
+              id="btnExportFinesCSV"
+              onclick="exportFinesToCSV()"
+              class="px-4 py-2 rounded-xl text-xs font-bold bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-lg shadow-emerald-500/20 border border-emerald-400/40 transition flex items-center gap-2 cursor-pointer active:scale-95"
+              title="Tải bảng tổng hợp thu quỹ phạt về máy định dạng Excel CSV"
+            >
+              <i class="fa-solid fa-file-excel text-sm"></i>
+              <span>Xuất CSV Tiền Phạt</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Thanh Điều Khiển Bộ Lọc & Tìm Kiếm -->
+        <div class="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 text-xs flex-wrap">
+          <!-- Nhóm nút lọc thời gian nhanh -->
+          <div class="flex items-center gap-1.5 bg-slate-950 p-1 rounded-xl border border-slate-800 shrink-0">
+            <button
+              type="button"
+              id="finesFilterAll"
+              onclick="setFinesFilter('all')"
+              class="px-3 py-1.5 rounded-lg font-bold text-xs transition bg-amber-600 text-white shadow-sm border border-amber-500"
+            >
+              Tất cả
+            </button>
+            <button
+              type="button"
+              id="finesFilterWeek"
+              onclick="setFinesFilter('week')"
+              class="px-3 py-1.5 rounded-lg font-medium text-xs text-slate-400 hover:text-white hover:bg-slate-800/80 transition"
+            >
+              Tuần này
+            </button>
+            <button
+              type="button"
+              id="finesFilterMonth"
+              onclick="setFinesFilter('month')"
+              class="px-3 py-1.5 rounded-lg font-medium text-xs text-slate-400 hover:text-white hover:bg-slate-800/80 transition"
+            >
+              Tháng này
+            </button>
+          </div>
+
+          <!-- Tùy chọn khoảng ngày Từ - Đến -->
+          <div class="flex items-center gap-2 flex-wrap">
+            <div class="flex items-center gap-1 text-slate-400">
+              <span class="text-[11px]">Từ:</span>
+              <input
+                type="date"
+                id="fromFinesDate"
+                class="bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs text-white [color-scheme:dark] focus:outline-none focus:border-amber-500"
+              />
+            </div>
+            <div class="flex items-center gap-1 text-slate-400">
+              <span class="text-[11px]">Đến:</span>
+              <input
+                type="date"
+                id="toFinesDate"
+                class="bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs text-white [color-scheme:dark] focus:outline-none focus:border-amber-500"
+              />
+            </div>
+            <button
+              type="button"
+              onclick="applyFinesCustomDate()"
+              class="px-3 py-1 bg-amber-600/20 hover:bg-amber-600/30 text-amber-300 border border-amber-500/40 rounded-lg font-semibold transition cursor-pointer"
+            >
+              Lọc
+            </button>
+          </div>
+
+          <!-- Ô tìm kiếm sinh viên -->
+          <div class="relative flex-1 min-w-[200px]">
+            <span class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-500">
+              <i class="fa-solid fa-magnifying-glass text-xs"></i>
+            </span>
+            <input
+              type="text"
+              id="finesSearchInput"
+              oninput="filterFinesStudents()"
+              placeholder="Tìm kiếm sinh viên (Tên, MSSV, Lớp)..."
+              class="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500 transition"
+            />
+          </div>
+        </div>
+      </div>
+
+      <!-- Hàng 4 Thẻ Thống Kê Nhanh (KPI Cards) -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <!-- Card 1: Tổng tiền phạt toàn xưởng -->
+        <div class="bg-slate-900 border border-amber-500/30 rounded-2xl p-4 shadow-xl relative overflow-hidden flex flex-col justify-between">
+          <div class="absolute -right-3 -top-3 w-16 h-16 bg-amber-500/10 rounded-full blur-xl pointer-events-none"></div>
+          <div class="flex items-center justify-between">
+            <span class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Tổng Quỹ Phạt</span>
+            <div class="w-8 h-8 rounded-lg bg-amber-500/10 text-amber-400 flex items-center justify-center text-sm border border-amber-500/20">
+              <i class="fa-solid fa-sack-dollar"></i>
+            </div>
+          </div>
+          <div class="mt-2">
+            <p id="kpiTotalFine" class="text-2xl font-bold font-mono text-amber-400">0 đ</p>
+            <p class="text-[10px] text-slate-400 mt-0.5">Toàn bộ tiền phạt phát sinh</p>
+          </div>
+        </div>
+
+        <!-- Card 2: Phạt đi trễ -->
+        <div class="bg-slate-900 border border-orange-500/30 rounded-2xl p-4 shadow-xl relative overflow-hidden flex flex-col justify-between">
+          <div class="absolute -right-3 -top-3 w-16 h-16 bg-orange-500/10 rounded-full blur-xl pointer-events-none"></div>
+          <div class="flex items-center justify-between">
+            <span class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Phạt Đi Trễ</span>
+            <div class="w-8 h-8 rounded-lg bg-orange-500/10 text-orange-400 flex items-center justify-center text-sm border border-orange-500/20">
+              <i class="fa-solid fa-clock-rotate-left"></i>
+            </div>
+          </div>
+          <div class="mt-2">
+            <p id="kpiTotalLateFine" class="text-2xl font-bold font-mono text-orange-400">0 đ</p>
+            <p id="kpiLateSubtext" class="text-[10px] text-slate-400 mt-0.5">0 lượt trễ • 0 phút trễ</p>
+          </div>
+        </div>
+
+        <!-- Card 3: Phạt vắng không phép -->
+        <div class="bg-slate-900 border border-rose-500/30 rounded-2xl p-4 shadow-xl relative overflow-hidden flex flex-col justify-between">
+          <div class="absolute -right-3 -top-3 w-16 h-16 bg-rose-500/10 rounded-full blur-xl pointer-events-none"></div>
+          <div class="flex items-center justify-between">
+            <span class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Phạt Vắng Không Phép</span>
+            <div class="w-8 h-8 rounded-lg bg-rose-500/10 text-rose-400 flex items-center justify-center text-sm border border-rose-500/20">
+              <i class="fa-solid fa-user-xmark"></i>
+            </div>
+          </div>
+          <div class="mt-2">
+            <p id="kpiTotalUnexcusedFine" class="text-2xl font-bold font-mono text-rose-400">0 đ</p>
+            <p id="kpiUnexcusedSubtext" class="text-[10px] text-slate-400 mt-0.5">0 buổi vắng (30.000đ/buổi)</p>
+          </div>
+        </div>
+
+        <!-- Card 4: Sinh viên có phát sinh tiền phạt -->
+        <div class="bg-slate-900 border border-indigo-500/30 rounded-2xl p-4 shadow-xl relative overflow-hidden flex flex-col justify-between">
+          <div class="absolute -right-3 -top-3 w-16 h-16 bg-indigo-500/10 rounded-full blur-xl pointer-events-none"></div>
+          <div class="flex items-center justify-between">
+            <span class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">SV Có Tiền Phạt</span>
+            <div class="w-8 h-8 rounded-lg bg-indigo-500/10 text-indigo-400 flex items-center justify-center text-sm border border-indigo-500/20">
+              <i class="fa-solid fa-triangle-exclamation"></i>
+            </div>
+          </div>
+          <div class="mt-2">
+            <p id="kpiStudentsWithFines" class="text-2xl font-bold font-mono text-indigo-400">0 / 0 SV</p>
+            <p id="kpiStudentsSubtext" class="text-[10px] text-slate-400 mt-0.5">Chưa phát sinh tiền phạt</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bảng Danh Sách Sinh Viên & Tiền Phạt -->
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden flex flex-col">
+        <div class="p-4 border-b border-slate-800 flex items-center justify-between flex-wrap gap-2.5">
+          <div class="flex items-center gap-2">
+            <h3 class="text-white font-bold text-sm flex items-center gap-2">
+              Bảng Tổng Hợp Tiền Phạt Cá Nhân
+              <span id="finesStudentCountBadge" class="text-[10px] font-mono px-2 py-0.5 rounded-full bg-slate-800 text-amber-300 border border-slate-700">0 SV</span>
+            </h3>
+          </div>
+          <div class="text-[11px] text-slate-400">
+            <span>Công thức: Đi trễ = 500đ/phút (max 30k) • Vắng KP = 30.000đ/buổi • Có mặt / Vắng CP = 0đ</span>
+          </div>
+        </div>
+
+        <div class="overflow-x-auto max-h-[520px] overflow-y-auto custom-scrollbar">
+          <table class="w-full text-left text-xs text-slate-300">
+            <thead class="bg-slate-950/80 text-[11px] uppercase text-slate-400 border-b border-slate-800 sticky top-0 z-10 backdrop-blur-sm">
+              <tr>
+                <th class="px-3 py-3 text-center w-12">STT</th>
+                <th class="px-4 py-3 min-w-[170px]">Sinh Viên</th>
+                <th class="px-3 py-3 text-center min-w-[130px]">Trễ & Số Phút</th>
+                <th class="px-3 py-3 text-right text-orange-400 min-w-[110px]">Phạt Đi Trễ</th>
+                <th class="px-3 py-3 text-center min-w-[100px]">Vắng KP</th>
+                <th class="px-3 py-3 text-right text-rose-400 min-w-[110px]">Phạt Vắng KP</th>
+                <th class="px-4 py-3 text-right text-amber-400 min-w-[130px]">Tổng Phạt</th>
+                <th class="px-3 py-3 text-center w-24">Chi Tiết</th>
+              </tr>
+            </thead>
+            <tbody id="finesTableBody" class="divide-y divide-slate-800/60">
+              <tr>
+                <td colspan="8" class="px-4 py-8 text-center text-slate-500">
+                  <i class="fa-solid fa-spinner fa-spin mr-1.5"></i> Đang tải dữ liệu quỹ phạt...
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
     </section>
+
   </main>
 
   <!-- Toast Notification Container (Góc trên bên phải) -->
   <div id="toastContainer" class="fixed top-5 right-5 z-[9999] flex flex-col gap-2.5 max-w-sm sm:max-w-md w-full pointer-events-none px-4 sm:px-0"></div>
+
+  <!-- Modal Chi Tiết Ca Vi Phạm Quỹ Phạt -->
+  <div id="finesDetailModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm transition-all duration-200">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-3xl p-5 sm:p-6 shadow-2xl relative space-y-4 max-h-[90vh] flex flex-col">
+      <!-- Modal Header -->
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <div class="flex items-center gap-2.5">
+          <div class="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center text-lg border border-amber-500/20 shrink-0">
+            <i class="fa-solid fa-receipt"></i>
+          </div>
+          <div>
+            <h3 id="finesDetailStudentName" class="text-sm sm:text-base font-bold text-white flex items-center gap-2 flex-wrap">
+              Chi Tiết Vi Phạm & Tiền Phạt
+            </h3>
+            <p id="finesDetailStudentInfo" class="text-[11px] text-slate-400 mt-0.5">MSSV: - | Lớp: -</p>
+          </div>
+        </div>
+        <button onclick="closeFinesDetailModal()" class="text-slate-400 hover:text-white transition p-1.5 rounded-lg hover:bg-slate-800 cursor-pointer">
+          <i class="fa-solid fa-xmark text-sm"></i>
+        </button>
+      </div>
+
+      <!-- Summary banner inside modal -->
+      <div class="bg-slate-950/80 border border-amber-500/30 rounded-xl p-3 flex items-center justify-between flex-wrap gap-2">
+        <div class="text-xs">
+          <span class="text-slate-400">Tổng tiền phạt cần nộp:</span>
+          <span id="finesDetailTotalAmount" class="ml-2 font-mono font-bold text-amber-400 text-base">0 đ</span>
+        </div>
+        <div id="finesDetailBadgeContainer" class="flex items-center gap-2 text-xs"></div>
+      </div>
+
+      <!-- Table of violated shifts -->
+      <div class="overflow-x-auto overflow-y-auto max-h-[350px] custom-scrollbar rounded-xl border border-slate-800">
+        <table class="w-full text-left text-xs text-slate-300">
+          <thead class="bg-slate-950 text-[11px] uppercase text-slate-400 border-b border-slate-800 sticky top-0 z-10">
+            <tr>
+              <th class="px-3 py-2.5 text-center w-10">STT</th>
+              <th class="px-3 py-2.5">Ngày</th>
+              <th class="px-3 py-2.5">Ca</th>
+              <th class="px-3 py-2.5 text-center">Trạng Thái</th>
+              <th class="px-3 py-2.5 text-center">Giờ Quét</th>
+              <th class="px-3 py-2.5 text-center">Phút Trễ</th>
+              <th class="px-3 py-2.5 text-right text-amber-400">Tiền Phạt</th>
+              <th class="px-3 py-2.5">Ghi Chú</th>
+            </tr>
+          </thead>
+          <tbody id="finesDetailTableBody" class="divide-y divide-slate-800/60">
+            <tr>
+              <td colspan="8" class="px-4 py-6 text-center text-slate-500">Không có vi phạm nào.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Footer -->
+      <div class="flex items-center justify-end pt-2 border-t border-slate-800">
+        <button
+          type="button"
+          onclick="closeFinesDetailModal()"
+          class="px-4 py-2 rounded-xl text-xs font-semibold text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 transition cursor-pointer"
+        >
+          Đóng
+        </button>
+      </div>
+    </div>
+  </div>
 
   <!-- Modal Xác Nhận Hiện Đại Thay Thế confirm() Mặc Định -->
   <div id="customConfirmModal" class="hidden fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md transition-all duration-200">
@@ -1878,6 +2179,15 @@
           inactiveClass: 'px-4 sm:px-5 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition flex items-center gap-2.5 shrink-0 bg-slate-950/80 text-slate-300 border border-slate-800',
           inactiveIconColor: 'text-amber-400',
         },
+        {
+          id: 'tab-fines',
+          btnId: 'tabBtnFines',
+          activeClass: 'px-4 sm:px-5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all duration-200 flex items-center gap-2.5 shrink-0 bg-gradient-to-r from-amber-600 via-orange-600 to-amber-600 text-white shadow-lg shadow-orange-500/30 border border-orange-400/50 ring-2 ring-orange-400/20 cursor-pointer scale-[1.02]',
+          inactiveClass: 'px-4 sm:px-5 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all duration-200 flex items-center gap-2.5 shrink-0 bg-slate-950/80 hover:bg-slate-800/90 text-slate-300 hover:text-white border border-slate-800 hover:border-slate-700 cursor-pointer',
+          inactiveIconColor: 'text-amber-400',
+          badgeActive: 'tab-badge text-[10px] font-bold px-2 py-0.5 rounded-full bg-white/20 text-white border border-white/30 shadow-sm',
+          badgeInactive: 'tab-badge text-[10px] font-medium px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-300 border border-amber-500/20'
+        },
       ];
 
       tabs.forEach(t => {
@@ -1908,6 +2218,8 @@
         fetchScheduleList();
       } else if (tabId === 'tab-admin-tools') {
         window.AdminTools?.refresh();
+      } else if (tabId === 'tab-fines' && typeof fetchFinesData === 'function') {
+        fetchFinesData();
       }
     }
 
@@ -2536,6 +2848,395 @@
     }
 
     // ==============================================================
+    // ==============================================================
+    // QUẢN LÝ QUỸ PHẠT & THEO DÕI ĐI TRỄ
+    // ==============================================================
+    let rawFinesData = [];
+    let rawFinesSummary = null;
+    let currentFinesFilter = 'all'; // 'all' | 'week' | 'month' | 'custom'
+    let finesReadVersion = 0;
+
+    function formatVND(amount) {
+      return Number(amount || 0).toLocaleString('vi-VN') + ' đ';
+    }
+
+    function getThisWeekDates() {
+      const now = new Date();
+      const day = (now.getDay() + 6) % 7; // 0 for Mon, 6 for Sun
+      const monday = new Date(now);
+      monday.setDate(now.getDate() - day);
+      const sunday = new Date(monday);
+      sunday.setDate(monday.getDate() + 6);
+      const fmt = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      return { from: fmt(monday), to: fmt(sunday) };
+    }
+
+    function getThisMonthDates() {
+      const now = new Date();
+      const first = new Date(now.getFullYear(), now.getMonth(), 1);
+      const last = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+      const fmt = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      return { from: fmt(first), to: fmt(last) };
+    }
+
+    function setFinesFilter(type) {
+      currentFinesFilter = type;
+      const btnAll = document.getElementById('finesFilterAll');
+      const btnWeek = document.getElementById('finesFilterWeek');
+      const btnMonth = document.getElementById('finesFilterMonth');
+      const badge = document.getElementById('finesActiveFilterBadge');
+
+      const activeClass = 'px-3 py-1.5 rounded-lg font-bold text-xs transition bg-amber-600 text-white shadow-sm border border-amber-500';
+      const inactiveClass = 'px-3 py-1.5 rounded-lg font-medium text-xs text-slate-400 hover:text-white hover:bg-slate-800/80 transition';
+
+      if (btnAll) btnAll.className = type === 'all' ? activeClass : inactiveClass;
+      if (btnWeek) btnWeek.className = type === 'week' ? activeClass : inactiveClass;
+      if (btnMonth) btnMonth.className = type === 'month' ? activeClass : inactiveClass;
+
+      if (type === 'all') {
+        if (badge) badge.innerText = 'Tất cả thời gian';
+        const fromInput = document.getElementById('fromFinesDate');
+        const toInput = document.getElementById('toFinesDate');
+        if (fromInput) fromInput.value = '';
+        if (toInput) toInput.value = '';
+      } else if (type === 'week') {
+        const w = getThisWeekDates();
+        if (badge) badge.innerText = `Tuần này (${w.from.split('-').reverse().slice(0, 2).join('/')} - ${w.to.split('-').reverse().slice(0, 2).join('/')})`;
+        const fromInput = document.getElementById('fromFinesDate');
+        const toInput = document.getElementById('toFinesDate');
+        if (fromInput) fromInput.value = w.from;
+        if (toInput) toInput.value = w.to;
+      } else if (type === 'month') {
+        const m = getThisMonthDates();
+        if (badge) badge.innerText = `Tháng này (Tháng ${new Date().getMonth() + 1}/${new Date().getFullYear()})`;
+        const fromInput = document.getElementById('fromFinesDate');
+        const toInput = document.getElementById('toFinesDate');
+        if (fromInput) fromInput.value = m.from;
+        if (toInput) toInput.value = m.to;
+      }
+      fetchFinesData();
+    }
+
+    function applyFinesCustomDate() {
+      const from = document.getElementById('fromFinesDate')?.value;
+      const to = document.getElementById('toFinesDate')?.value;
+      if (!from && !to) {
+        setFinesFilter('all');
+        return;
+      }
+      currentFinesFilter = 'custom';
+      const btnAll = document.getElementById('finesFilterAll');
+      const btnWeek = document.getElementById('finesFilterWeek');
+      const btnMonth = document.getElementById('finesFilterMonth');
+      const inactiveClass = 'px-3 py-1.5 rounded-lg font-medium text-xs text-slate-400 hover:text-white hover:bg-slate-800/80 transition';
+      if (btnAll) btnAll.className = inactiveClass;
+      if (btnWeek) btnWeek.className = inactiveClass;
+      if (btnMonth) btnMonth.className = inactiveClass;
+
+      const badge = document.getElementById('finesActiveFilterBadge');
+      if (badge) {
+        const fromStr = from ? from.split('-').reverse().join('/') : '...';
+        const toStr = to ? to.split('-').reverse().join('/') : '...';
+        badge.innerText = `Từ ${fromStr} đến ${toStr}`;
+      }
+      fetchFinesData();
+    }
+
+    async function fetchFinesData() {
+      const readVersion = ++finesReadVersion;
+      const tbody = document.getElementById('finesTableBody');
+      if (tbody && rawFinesData.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="8" class="px-4 py-8 text-center text-slate-500"><i class="fa-solid fa-spinner fa-spin mr-1.5"></i> Đang tính toán dữ liệu quỹ phạt...</td></tr>`;
+      }
+
+      try {
+        let url = '/api/attendance/fines';
+        const params = new URLSearchParams();
+        if (currentFinesFilter === 'week') {
+          const w = getThisWeekDates();
+          params.set('from', w.from);
+          params.set('to', w.to);
+        } else if (currentFinesFilter === 'month') {
+          const m = getThisMonthDates();
+          params.set('from', m.from);
+          params.set('to', m.to);
+        } else if (currentFinesFilter === 'custom') {
+          const from = document.getElementById('fromFinesDate')?.value;
+          const to = document.getElementById('toFinesDate')?.value;
+          if (from) params.set('from', from);
+          if (to) params.set('to', to);
+        }
+
+        const qs = params.toString();
+        if (qs) url += '?' + qs;
+
+        const res = await fetch(url, { headers: getAdminHeaders() });
+        const result = await res.json();
+        if (readVersion !== finesReadVersion) return;
+
+        if (result.success) {
+          rawFinesData = result.data || [];
+          rawFinesSummary = result.summary || {};
+          renderFinesSummary(rawFinesSummary);
+          filterFinesStudents();
+        } else {
+          showToast.error(result.message || 'Không thể tải dữ liệu quỹ phạt.');
+        }
+      } catch (err) {
+        console.error('Lỗi khi tải dữ liệu quỹ phạt:', err);
+        showToast.error('Lỗi kết nối khi tải dữ liệu quỹ phạt!');
+      }
+    }
+
+    function renderFinesSummary(summary) {
+      if (!summary) return;
+      const kpiTotal = document.getElementById('kpiTotalFine');
+      const kpiLate = document.getElementById('kpiTotalLateFine');
+      const kpiLateSub = document.getElementById('kpiLateSubtext');
+      const kpiUnexcused = document.getElementById('kpiTotalUnexcusedFine');
+      const kpiUnexcusedSub = document.getElementById('kpiUnexcusedSubtext');
+      const kpiStudents = document.getElementById('kpiStudentsWithFines');
+      const kpiStudentsSub = document.getElementById('kpiStudentsSubtext');
+
+      if (kpiTotal) kpiTotal.innerText = formatVND(summary.totalFine);
+      if (kpiLate) kpiLate.innerText = formatVND(summary.totalLateFine);
+      if (kpiLateSub) kpiLateSub.innerText = `${summary.totalLateCount || 0} lượt trễ • ${summary.totalLateMinutes || 0} phút trễ`;
+      if (kpiUnexcused) kpiUnexcused.innerText = formatVND(summary.totalUnexcusedFine);
+      if (kpiUnexcusedSub) kpiUnexcusedSub.innerText = `${summary.totalUnexcusedCount || 0} buổi vắng (30.000đ/buổi)`;
+
+      const totalS = summary.totalStudents || rawFinesData.length || 0;
+      const fineS = summary.studentsWithFines || 0;
+      if (kpiStudents) kpiStudents.innerText = `${fineS} / ${totalS} SV`;
+      if (kpiStudentsSub) {
+        kpiStudentsSub.innerText = fineS > 0 ? `${((fineS / (totalS || 1)) * 100).toFixed(0)}% sinh viên có vi phạm` : 'Chưa có sinh viên nào bị phạt';
+      }
+    }
+
+    function renderFinesTable(data) {
+      const tbody = document.getElementById('finesTableBody');
+      const badge = document.getElementById('finesStudentCountBadge');
+      if (badge) badge.innerText = `${data.length} SV`;
+      if (!tbody) return;
+
+      if (!data || data.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="8" class="px-4 py-8 text-center text-slate-500">Không tìm thấy sinh viên phù hợp.</td></tr>`;
+        return;
+      }
+
+      // Sắp xếp: Ưu tiên tiền phạt giảm dần; nếu bằng nhau thì theo thứ tự anphabe tiếng Việt
+      const sorted = [...data].sort((a, b) => b.totalFine - a.totalFine || a.name.localeCompare(b.name, 'vi'));
+
+      tbody.innerHTML = sorted.map((s, index) => {
+        const hasFine = s.totalFine > 0;
+        const rowClass = hasFine ? 'bg-amber-950/10 hover:bg-amber-950/20' : 'hover:bg-slate-800/40';
+        return `
+          <tr class="${rowClass} transition">
+            <td class="px-3 py-2.5 text-center font-mono text-slate-500">${index + 1}</td>
+            <td class="px-4 py-2.5">
+              <div class="flex items-center gap-1.5">
+                <p class="font-bold text-white whitespace-normal break-words leading-tight">${escapeHtml(s.name)}</p>
+                ${s.totalFine >= 60000 ? `<span class="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/40 shrink-0">Phạt cao</span>` : ''}
+              </div>
+              <p class="text-[10px] text-slate-400 mt-0.5">
+                <span class="font-mono text-slate-300 font-semibold">${s.userId}</span> • <span>${escapeHtml(s.department || 'Chưa có lớp')}</span>
+              </p>
+            </td>
+            <td class="px-3 py-2.5 text-center">
+              ${s.lateCount > 0
+                ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-orange-500/10 text-orange-300 border border-orange-500/25">${s.lateCount} lần (${s.totalLateMinutes}p)</span>`
+                : `<span class="text-slate-600 font-mono">-</span>`}
+            </td>
+            <td class="px-3 py-2.5 text-right font-mono font-semibold ${s.lateFine > 0 ? 'text-orange-400' : 'text-slate-500'}">
+              ${s.lateFine > 0 ? formatVND(s.lateFine) : '0 đ'}
+            </td>
+            <td class="px-3 py-2.5 text-center">
+              ${s.unexcusedCount > 0
+                ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-rose-500/10 text-rose-300 border border-rose-500/25">${s.unexcusedCount} buổi</span>`
+                : `<span class="text-slate-600 font-mono">0</span>`}
+            </td>
+            <td class="px-3 py-2.5 text-right font-mono font-semibold ${s.unexcusedFine > 0 ? 'text-rose-400' : 'text-slate-500'}">
+              ${s.unexcusedFine > 0 ? formatVND(s.unexcusedFine) : '0 đ'}
+            </td>
+            <td class="px-4 py-2.5 text-right">
+              <span class="font-mono font-bold text-sm ${hasFine ? 'text-amber-400 px-2 py-0.5 rounded-md bg-amber-500/10 border border-amber-500/30' : 'text-slate-500'}">
+                ${formatVND(s.totalFine)}
+              </span>
+            </td>
+            <td class="px-3 py-2.5 text-center">
+              <button
+                type="button"
+                onclick="openFinesDetailModal('${s.userId}')"
+                class="px-2.5 py-1 text-xs rounded-lg bg-slate-800 hover:bg-slate-700 text-indigo-300 hover:text-white border border-slate-700 hover:border-indigo-500/50 transition flex items-center justify-center gap-1 mx-auto cursor-pointer shadow-sm"
+                title="Xem chi tiết các ca vi phạm"
+              >
+                <i class="fa-solid fa-receipt text-[10px]"></i>
+                <span>Chi tiết</span>
+              </button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function filterFinesStudents() {
+      const keyword = (document.getElementById('finesSearchInput')?.value || '').trim().toLowerCase();
+      if (!keyword) {
+        renderFinesTable(rawFinesData);
+        return;
+      }
+      const filtered = rawFinesData.filter(s => {
+        const name = (s.name || '').toLowerCase();
+        const id = (s.userId || '').toLowerCase();
+        const dept = (s.department || '').toLowerCase();
+        return name.includes(keyword) || id.includes(keyword) || dept.includes(keyword);
+      });
+      renderFinesTable(filtered);
+    }
+
+    function openFinesDetailModal(userId) {
+      const s = rawFinesData.find(item => item.userId === userId);
+      if (!s) {
+        showToast.warning('Không tìm thấy thông tin sinh viên.');
+        return;
+      }
+
+      const modal = document.getElementById('finesDetailModal');
+      const nameEl = document.getElementById('finesDetailStudentName');
+      const infoEl = document.getElementById('finesDetailStudentInfo');
+      const totalEl = document.getElementById('finesDetailTotalAmount');
+      const badgeBox = document.getElementById('finesDetailBadgeContainer');
+      const tbody = document.getElementById('finesDetailTableBody');
+
+      if (nameEl) nameEl.innerText = s.name;
+      if (infoEl) infoEl.innerText = `MSSV: ${s.userId} | Lớp: ${s.department || 'Chưa có lớp'}`;
+      if (totalEl) totalEl.innerText = formatVND(s.totalFine);
+
+      if (badgeBox) {
+        badgeBox.innerHTML = `
+          <span class="px-2 py-0.5 rounded-md bg-orange-500/10 text-orange-300 border border-orange-500/30">
+            ${s.lateCount} ca trễ (${formatVND(s.lateFine)})
+          </span>
+          <span class="px-2 py-0.5 rounded-md bg-rose-500/10 text-rose-300 border border-rose-500/30">
+            ${s.unexcusedCount} ca vắng (${formatVND(s.unexcusedFine)})
+          </span>
+        `;
+      }
+
+      if (tbody) {
+        const violations = s.violations || [];
+        if (violations.length === 0) {
+          tbody.innerHTML = `
+            <tr>
+              <td colspan="8" class="px-4 py-8 text-center text-slate-400">
+                <i class="fa-solid fa-circle-check text-emerald-400 text-lg mb-1 block"></i>
+                Sinh viên không có ca vi phạm nào (không đi trễ, không vắng không phép).
+              </td>
+            </tr>
+          `;
+        } else {
+          tbody.innerHTML = violations.map((v, i) => {
+            const dateStr = v.date ? v.date.split('-').reverse().join('/') : '-';
+            let scanTimeStr = '-';
+            if (v.scannedAt) {
+              try {
+                scanTimeStr = new Date(v.scannedAt).toLocaleTimeString('vi-VN', {
+                  hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'Asia/Ho_Chi_Minh'
+                });
+              } catch (_) {
+                scanTimeStr = v.scannedAt.slice(11, 19);
+              }
+            }
+            const isLate = v.status === 'Đi trễ';
+            const statusBadge = isLate
+              ? `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-orange-500/15 text-orange-300 border border-orange-500/30">Đi trễ</span>`
+              : `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-500/15 text-rose-300 border border-rose-500/30">Vắng không phép</span>`;
+            return `
+              <tr class="hover:bg-slate-800/40 transition">
+                <td class="px-3 py-2 text-center font-mono text-slate-500">${i + 1}</td>
+                <td class="px-3 py-2 font-mono text-slate-200">${dateStr}</td>
+                <td class="px-3 py-2 font-semibold text-slate-300">Ca ${escapeHtml(v.shift)}</td>
+                <td class="px-3 py-2 text-center">${statusBadge}</td>
+                <td class="px-3 py-2 text-center font-mono ${v.scannedAt ? 'text-emerald-400' : 'text-slate-600'}">${scanTimeStr}</td>
+                <td class="px-3 py-2 text-center font-mono ${isLate ? 'text-orange-400 font-bold' : 'text-slate-600'}">${isLate ? v.lateMinutes + ' phút' : '-'}</td>
+                <td class="px-3 py-2 text-right font-mono font-bold text-amber-400">${formatVND(v.fine)}</td>
+                <td class="px-3 py-2 text-slate-400 text-[11px] truncate max-w-[140px]">${escapeHtml(v.note || '-')}</td>
+              </tr>
+            `;
+          }).join('');
+        }
+      }
+
+      if (modal) modal.classList.remove('hidden');
+    }
+
+    function closeFinesDetailModal() {
+      const modal = document.getElementById('finesDetailModal');
+      if (modal) modal.classList.add('hidden');
+    }
+
+    function exportFinesToCSV() {
+      if (!rawFinesData || rawFinesData.length === 0) {
+        showToast.warning('Không có dữ liệu quỹ phạt để xuất CSV.');
+        return;
+      }
+      const headers = [
+        'STT',
+        'Mã Sinh Viên',
+        'Họ Và Tên',
+        'Lớp / Khoa',
+        'Số Lần Đi Trễ',
+        'Tổng Phút Trễ',
+        'Tiền Phạt Đi Trễ (VNĐ)',
+        'Số Buổi Vắng Không Phép',
+        'Tiền Phạt Vắng KP (VNĐ)',
+        'Tổng Tiền Phạt (VNĐ)',
+        'Chi Tiết Ca Vi Phạm'
+      ];
+
+      const escapeCSV = (val) => (window.AttendanceCsv ? window.AttendanceCsv.cell(val) : ('"' + String(val ?? "").replace(/"/g, '""') + '"'));
+
+      const sorted = [...rawFinesData].sort((a, b) => b.totalFine - a.totalFine || a.name.localeCompare(b.name, 'vi'));
+
+      const rows = sorted.map((s, index) => {
+        const violationSummary = (s.violations || []).map(v => {
+          const d = v.date ? v.date.split('-').reverse().join('/') : '';
+          if (v.status === 'Đi trễ') {
+            return `${d} Ca ${v.shift} (Trễ ${v.lateMinutes}p: ${v.fine.toLocaleString('vi-VN')}đ)`;
+          } else {
+            return `${d} Ca ${v.shift} (Vắng KP: ${v.fine.toLocaleString('vi-VN')}đ)`;
+          }
+        }).join('; ');
+
+        return [
+          index + 1,
+          s.userId,
+          s.name,
+          s.department || '',
+          s.lateCount,
+          s.totalLateMinutes,
+          s.lateFine,
+          s.unexcusedCount,
+          s.unexcusedFine,
+          s.totalFine,
+          violationSummary
+        ].map(escapeCSV).join(',');
+      });
+
+      const filterLabel = currentFinesFilter === 'week' ? 'TuanNay' : (currentFinesFilter === 'month' ? 'ThangNay' : 'TatCa');
+      const todayStr = new Date().toISOString().slice(0, 10);
+      const csvContent = '\uFEFF' + [headers.map(escapeCSV).join(','), ...rows].join('\r\n') + '\r\n';
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `Bao_Cao_Quy_Phat_${filterLabel}_${todayStr}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      showToast.success('Đã tải xuống file CSV Báo Cáo Quỹ Phạt!');
+    }
+
     // QUẢN LÝ LỊCH LÊN XƯỞNG MẶC ĐỊNH (T2 -> CN, Ca Sáng / Ca Chiều)
     // ==============================================================
     async function fetchScheduleList() {
@@ -3741,6 +4442,9 @@
     setInterval(() => { if (!window.AdminLiveRefresh && !document.hidden && window.AdminAuth?.isAuthenticated()) void fetchTodayAttendance(); }, 15000);
     // 2. Dự phòng thống kê 30 giây; module mới quản lý lịch đọc khi hoạt động
     setInterval(() => { const statsSection = document.getElementById('tab-stats'); if (!window.AdminLiveRefresh && !document.hidden && window.AdminAuth?.isAuthenticated() && statsSection && !statsSection.classList.contains('hidden')) void fetchPersonalStats(); }, 30000);
+    // 3. Dự phòng quỹ phạt 30 giây khi tab đang mở
+    setInterval(() => { const finesSection = document.getElementById('tab-fines'); if (!window.AdminLiveRefresh && !document.hidden && window.AdminAuth?.isAuthenticated() && finesSection && !finesSection.classList.contains('hidden')) void fetchFinesData(); }, 30000);
+    window.fetchFinesData = fetchFinesData;
 
     // Lịch gửi đã tạm dừng trong giai đoạn giới hạn ghi.
   </script>
@@ -3750,6 +4454,6 @@
   <script src="js/schedule-sync.js?v=20261101-live1"></script>
   <script src="js/admin-tools.js?v=20261104-qr2"></script>
   <script src="js/leave-requests.js?v=20261104-qr2"></script>
-  <script defer src="js/admin-live.js?v=20261101-live1"></script>
+  <script defer src="js/admin-live.js?v=20261104-fines1"></script>
 </body>
 </html>
