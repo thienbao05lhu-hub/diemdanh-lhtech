@@ -455,11 +455,11 @@
         const shift = url.searchParams.get('shift') || (clock.minutes < 720 ? 'Sáng' : clock.minutes < 1080 ? 'Chiều' : 'Tối');
         if (!['Sáng','Chiều','Tối'].includes(shift)) fail(400, 'Ca không hợp lệ.');
         const data = shiftRows(shift, targetDate, schedules, records);
-        const [cutoff, closing] = shift === 'Sáng' ? [510,660] : shift === 'Chiều' ? [810,1020] : [1110,1320];
+        const [cutoff, closing] = shift === 'Sáng' ? [495,660] : shift === 'Chiều' ? [795,1020] : [1095,1320];
         const isClosed = targetDate < clock.date ? true : targetDate > clock.date ? false : clock.minutes >= closing;
         const isPastCutoff = targetDate < clock.date ? true : targetDate > clock.date ? false : clock.minutes > cutoff;
         return response({ success: true, date: targetDate, data, shift, isClosed,
-          isPastCutoff, cutoffTimeStr: shift === 'Sáng' ? '08:30' : shift === 'Chiều' ? '13:30' : '18:30',
+          isPastCutoff, cutoffTimeStr: shift === 'Sáng' ? '08:15' : shift === 'Chiều' ? '13:15' : '18:15',
           closingTimeStr: shift === 'Sáng' ? '11:00' : shift === 'Chiều' ? '17:00' : '22:00',
           stats: { total: data.length, present: data.filter(r => r.status === 'Có mặt').length,
             late: data.filter(r => r.status === 'Đi trễ').length,

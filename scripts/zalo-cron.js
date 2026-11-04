@@ -28,15 +28,15 @@ async function runCronReport(forcedType, forcedShift) {
   let reportType = forcedType;
 
   if (!shift || !reportType) {
-    if (totalMins >= 510 && totalMins < 660) {
+    if (totalMins >= 495 && totalMins < 660) {
       shift = 'Sáng'; reportType = 'early';
-    } else if (totalMins >= 660 && totalMins < 810) {
+    } else if (totalMins >= 660 && totalMins < 795) {
       shift = 'Sáng'; reportType = 'closing';
-    } else if (totalMins >= 810 && totalMins < 1020) {
+    } else if (totalMins >= 795 && totalMins < 1020) {
       shift = 'Chiều'; reportType = 'early';
-    } else if (totalMins >= 1020 && totalMins < 1110) {
+    } else if (totalMins >= 1020 && totalMins < 1095) {
       shift = 'Chiều'; reportType = 'closing';
-    } else if (totalMins >= 1110 && totalMins < 1320) {
+    } else if (totalMins >= 1095 && totalMins < 1320) {
       shift = 'Tối'; reportType = 'early';
     } else {
       shift = 'Tối'; reportType = 'closing';
