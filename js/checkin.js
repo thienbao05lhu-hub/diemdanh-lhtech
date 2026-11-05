@@ -121,8 +121,9 @@
     }
   }
   let currentZoom = 1.0;
-  let autoZoomEnabled = false;
-  let autoZoomTriggered = false;
+  let autoZoomEnabled = true; // Mặc định BẬT để hỗ trợ sinh viên quét màn hình OLED nhỏ
+  let autoZoomTimer1 = null;
+  let autoZoomTimer2 = null;
   let trackerInterval = null;
   let barcodeDetector = null;
 
@@ -130,6 +131,33 @@
     try {
       barcodeDetector = new root.BarcodeDetector({ formats: ['qr_code'] });
     } catch (_) {}
+  }
+
+  function clearAutoZoomTimers() {
+    if (autoZoomTimer1) { clearTimeout(autoZoomTimer1); autoZoomTimer1 = null; }
+    if (autoZoomTimer2) { clearTimeout(autoZoomTimer2); autoZoomTimer2 = null; }
+  }
+
+  function startAutoZoomSequence() {
+    clearAutoZoomTimers();
+    if (!autoZoomEnabled || !cameraOn) return;
+
+    // Sau 1.5 giây nếu camera đang chạy ở 1.0x mà chưa quét được (đang đứng cách xa), tự động phóng to lên 2.0x
+    autoZoomTimer1 = setTimeout(() => {
+      if (cameraOn && !busy && currentZoom === 1.0 && autoZoomEnabled) {
+        void root.setCameraZoom(2.0, false);
+        const hint = el('cameraHintText');
+        if (hint) hint.innerText = 'Đang tự phóng to 2x để bắt mã OLED...';
+
+        // Sau tiếp 2.5 giây ở 2.0x nếu vẫn chưa quét được, tự động zoom tiếp lên 2.5x
+        autoZoomTimer2 = setTimeout(() => {
+          if (cameraOn && !busy && currentZoom === 2.0 && autoZoomEnabled) {
+            void root.setCameraZoom(2.5, false);
+            if (hint) hint.innerText = 'Đang tự phóng to 2.5x để đọc mã...';
+          }
+        }, 2500);
+      }
+    }, 1500);
   }
 
   function updateZoomButtons(zoomLevel) {
@@ -142,14 +170,26 @@
     if (b3) b3.className = (zoomLevel > 2.2) ? activeClass : inactiveClass;
   }
 
-  root.setCameraZoom = async function(zoomLevel) {
+  root.setCameraZoom = async function(zoomLevel, manual = false) {
     currentZoom = zoomLevel;
     updateZoomButtons(zoomLevel);
 
-    let hardwareApplied = false;
-    // 1. Native MediaStreamTrack hardware zoom
+    if (manual) {
+      clearAutoZoomTimers();
+      const hint = el('cameraHintText');
+      if (hint) hint.innerText = `Đã chọn phóng to ${zoomLevel}x`;
+    }
+
+    // 1. Luôn áp dụng visual CSS Transform trên video để người dùng nhìn thấy camera phóng to ngay lập tức
+    const videoEl = document.querySelector('#reader video');
+    if (videoEl) {
+      videoEl.style.transform = `scale(${zoomLevel})`;
+      videoEl.style.transformOrigin = 'center center';
+      videoEl.style.transition = 'transform 0.25s cubic-bezier(0.2, 0, 0, 1)';
+    }
+
+    // 2. Thử gọi zoom phần cứng MediaStreamTrack trên camera
     try {
-      const videoEl = document.querySelector('#reader video');
       const track = videoEl?.srcObject?.getVideoTracks?.()[0];
       if (track) {
         const caps = track.getCapabilities ? track.getCapabilities() : {};
@@ -158,29 +198,15 @@
           const max = caps.zoom.max || 5;
           const target = Math.max(min, Math.min(max, zoomLevel));
           await track.applyConstraints({ advanced: [{ zoom: target }] });
-          hardwareApplied = true;
         }
       }
     } catch (_) {}
 
-    // 2. html5-qrcode applyVideoConstraints fallback
-    if (!hardwareApplied && scanner) {
+    // 3. Thử gọi zoom qua thư viện html5-qrcode
+    if (scanner) {
       try {
         await scanner.applyVideoConstraints({ advanced: [{ zoom: zoomLevel }] });
-        hardwareApplied = true;
       } catch (_) {}
-    }
-
-    // 3. Digital Zoom via CSS Transform fallback (works everywhere)
-    const videoEl = document.querySelector('#reader video');
-    if (videoEl) {
-      if (hardwareApplied) {
-        videoEl.style.transform = 'scale(1.0)';
-      } else {
-        videoEl.style.transform = `scale(${zoomLevel})`;
-        videoEl.style.transformOrigin = 'center center';
-        videoEl.style.transition = 'transform 0.2s cubic-bezier(0.2, 0, 0, 1)';
-      }
     }
   };
 
@@ -191,9 +217,14 @@
     if (autoZoomEnabled) {
       if (btn) btn.className = 'px-2.5 h-8 rounded-full text-[11px] font-bold transition flex items-center justify-center gap-1 bg-amber-500/25 text-amber-300 border border-amber-500/50 shadow-sm cursor-pointer active:scale-95';
       if (label) label.innerText = 'Auto: BẬT';
+      startAutoZoomSequence();
+      root.showToast?.info?.('Đã bật Tự động phóng to khi quét xa');
     } else {
       if (btn) btn.className = 'px-2.5 h-8 rounded-full text-[11px] font-semibold transition flex items-center justify-center gap-1 bg-slate-800/80 text-slate-300 hover:text-white border border-slate-700/60 cursor-pointer active:scale-95';
       if (label) label.innerText = 'Auto';
+      clearAutoZoomTimers();
+      const hint = el('cameraHintText');
+      if (hint) hint.innerText = 'Đã tắt tự động phóng to';
     }
   };
 
@@ -255,18 +286,8 @@
         if (barcodes && barcodes.length > 0) {
           const barcode = barcodes[0];
           highlightReticle(barcode.boundingBox, videoEl);
-
-          // Smart Auto-Zoom: If QR code is small (< 25% of viewport) and user hasn't zoomed
-          if (autoZoomEnabled && !autoZoomTriggered && currentZoom === 1.0) {
-            const qrRelSize = barcode.boundingBox.width / (videoEl.videoWidth || 640);
-            if (qrRelSize < 0.25) {
-              autoZoomTriggered = true;
-              void root.setCameraZoom(2.0);
-              setTimeout(() => { autoZoomTriggered = false; }, 3000);
-            }
-          }
-
           if (barcode.rawValue && cameraOn && !busy) {
+            clearAutoZoomTimers();
             void submit(barcode.rawValue);
           }
         } else {
@@ -298,6 +319,7 @@
       if (e.touches.length === 2) {
         initialDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
         startZoom = currentZoom;
+        clearAutoZoomTimers();
       }
     }, { passive: true });
 
@@ -306,7 +328,7 @@
         const dist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
         const factor = dist / initialDist;
         const target = Math.max(1.0, Math.min(3.5, Math.round((startZoom * factor) * 10) / 10));
-        void root.setCameraZoom(target);
+        void root.setCameraZoom(target, true);
       }
     }, { passive: true });
 
@@ -319,6 +341,7 @@
 
   function handleBarcodeSuccess(text, decodedResult) {
     if (!cameraOn || busy) return;
+    clearAutoZoomTimers();
     const points = decodedResult?.result?.points;
     const videoEl = document.querySelector('#reader video');
     if (points && points.length >= 2 && videoEl) {
@@ -340,6 +363,7 @@
   }
 
   async function stopCamera() {
+    clearAutoZoomTimers();
     stopAutoTracker();
     if (cameraOn && scanner) {
       cameraOn = false;
@@ -352,7 +376,10 @@
     updateZoomButtons(1.0);
     const videoEl = document.querySelector('#reader video');
     if (videoEl) videoEl.style.transform = 'scale(1.0)';
+    const hint = el('cameraHintText');
+    if (hint) hint.innerText = 'Hướng camera vào mã QR để tự động quét';
   }
+
   async function capabilities() {
     if (refreshing || !current) return;
     refreshing = true; const version = generation, started = performance.now(), wasReady = ready();
@@ -367,7 +394,9 @@
         if (!ready()) {
           await stopCamera();
           scanMessage('warning','Chưa nhận điểm danh',!data.qrEnabled ? 'Điểm danh đang tạm dừng để cập nhật.' : !data.window ? 'Hiện ngoài giờ nhận điểm danh.' : data.sessionClosed ? 'Ca điểm danh đã chốt.' : data.isPaused ? 'Quản trị viên đang tạm dừng phát mã QR cho ca này.' : 'Đang chờ quản trị viên mở mã QR.');
-        } else if (!wasReady && !stickyResult) scanMessage('warning','Sẵn sàng quét','Bấm Tiếp Tục Quét Lại để mở camera.');
+        } else if (!cameraOn && !cameraStarting && !stickyResult) {
+          void root.resumeScanner();
+        }
       }
     } catch(error) {
       if (version !== generation) return;
@@ -385,7 +414,11 @@
     if (version!==generation) throw {code:'SESSION_CHANGED'};
     if (result?.deviceVerified!==true || result.profileId!==current.profile.id) throw Error('Invalid device response');
     verified=true; displayIdentity(); void loadMyAttendance();
-    scanMessage('warning','Thiết bị đã xác minh',pendingToken ? 'Đã nhận liên kết QR. Bấm Tiếp Tục Quét Lại để xác nhận điểm danh.' : 'Bấm Tiếp Tục Quét Lại để mở camera.');
+    if (ready() && !cameraOn && !cameraStarting) {
+      void root.resumeScanner();
+    } else if (pendingToken) {
+      scanMessage('warning','Đã nhận mã QR','Bấm Tiếp Tục Quét Lại để xác nhận điểm danh.');
+    }
   }
   root.handleRegisterDevice=async event=>{
     event.preventDefault(); if(busy || caps?.qrEnabled!==true) return;
@@ -452,6 +485,7 @@
       el('zoomControls')?.classList.remove('hidden');
       setupPinchZoom();
       startAutoTracker();
+      startAutoZoomSequence();
     }catch(_) {scanMessage(false,'Không mở được camera','Kiểm tra quyền camera của trình duyệt rồi bấm Tiếp Tục Quét Lại.');}
     finally {cameraStarting=false;controls();}
   };
@@ -488,6 +522,9 @@
       if(caps?.qrEnabled&&caps.deviceBound) {try{await verifyDevice();}catch(error){registration(errorText(error),true);}}
       else if(caps?.qrEnabled)registration('Xác nhận để gắn trình duyệt này với tài khoản đang đăng nhập.');
       await capabilities();
+      if(verified && ready() && !cameraOn && !cameraStarting) {
+        void root.resumeScanner();
+      }
     }catch(error){registration(errorText(error),true);}
     controls();
   }
