@@ -12,7 +12,7 @@
   <script src="vendor/supabase-2.118.0.js"></script>
   <script src="js/config.js?v=20261101-safe-read"></script>
   <script src="js/attendance-trial.js?v=20261104-qr2"></script>
-  <script src="js/supabase-read-api.js?v=20261105-rbac1"></script>
+  <script src="js/supabase-read-api.js?v=20261105-superadmin1"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
     body { font-family: 'Plus Jakarta Sans', sans-serif; }
@@ -134,7 +134,7 @@
               type="text"
               id="adminUserIdInput"
               required
-              placeholder="VD: 123000896"
+              placeholder="VD: 900000001"
               class="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-3 py-2.5 text-xs text-white placeholder-slate-600 uppercase font-mono focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 transition"
             />
           </div>
@@ -3922,7 +3922,7 @@
         if (nameEl) nameEl.innerText = (user.name || user.userId);
 
         if (roleTag) {
-          if (user.role === 'superadmin' || user.role === 'super_admin' || user.userId === '123000896') {
+          if (user.userId === '900000001') {
             roleTag.className = 'px-2 py-0.5 rounded-md font-bold text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/30';
             roleTag.innerHTML = '<i class="fa-solid fa-crown mr-1 text-[9px]"></i> Super Admin';
           } else {
@@ -3933,7 +3933,7 @@
 
         // ⭐ ĐẶC QUYỀN SUPER ADMIN: Chỉ hiện Card Phân quyền nếu là Super Admin (Cha đẻ)
         if (superAdminSec) {
-          if (user.role === 'superadmin' || user.role === 'super_admin' || user.userId === '123000896') {
+          if (user.userId === '900000001') {
             superAdminSec.classList.remove('hidden');
             renderRbacUsers();
           } else {
@@ -3953,7 +3953,7 @@
       if (!container) return;
 
       const currUser = window.AdminAuth?.getUser();
-      const isSuperAdmin = currUser && (currUser.role === 'superadmin' || currUser.role === 'super_admin' || currUser.userId === '123000896');
+      const isSuperAdmin = currUser && currUser.userId === '900000001';
       if (!isSuperAdmin) return;
 
       const keyword = (document.getElementById('rbacSearchInput')?.value || '').trim().toLowerCase();
@@ -3974,8 +3974,8 @@
       }
 
       container.innerHTML = list.map(u => {
-        const isSuper = u.role === 'superadmin' || u.role === 'super_admin' || u.userId === '123000896';
-        const isAdmin = u.role === 'admin';
+        const isSuper = u.userId === '900000001';
+        const isAdmin = u.role === 'admin' && u.userId !== '900000001';
 
         let roleBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-medium bg-slate-800/80 text-slate-400 border border-slate-700/60">Sinh viên</span>`;
         if (isSuper) {
