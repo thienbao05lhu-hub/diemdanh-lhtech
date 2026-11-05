@@ -7,16 +7,24 @@ export async function sendReport(item,{fetchImpl=fetch,timeoutMs=10000}={}) {
     || typeof item.text!=='string' || item.text.length<1 || item.text.length>2000)
     return {outcome:'rejected',messageId:null,errorCode:'INVALID_CONFIG'};
   try {
-    const response=await fetchImpl(`https://bot-api.zaloplatforms.com/bot${item.token}/sendMessage`,{
-      method:'POST',headers:{'Content-Type':'application/json'},redirect:'error',
-      body:JSON.stringify({chat_id:item.chatId,text:item.text}),signal:AbortSignal.timeout(timeoutMs)
-    });
-    const body=await response.json();
-    const id=body?.result?.message_id;
-    if(response.ok && body?.ok===true && typeof id==='string' && id.length>0 && id.length<=200 && !/[\x00-\x1f\x7f]/.test(id))
-      return {outcome:'sent',messageId:id,errorCode:null};
-    if(response.status<500 && body?.ok===false)
-      return {outcome:'rejected',messageId:null,errorCode:'ZALO_REJECTED'};
+    const chatIds = item.chatId.split(',').map(s=>s.trim()).filter(Boolean);
+    let lastId = null;
+    let anyRejected = false;
+    for (const cid of chatIds) {
+      const response=await fetchImpl(`https://bot-api.zaloplatforms.com/bot${item.token}/sendMessage`,{
+        method:'POST',headers:{'Content-Type':'application/json'},redirect:'error',
+        body:JSON.stringify({chat_id:cid,text:item.text}),signal:AbortSignal.timeout(timeoutMs)
+      });
+      const body=await response.json();
+      const id=body?.result?.message_id;
+      if(response.ok && body?.ok===true && typeof id==='string' && id.length>0 && id.length<=200 && !/[\x00-\x1f\x7f]/.test(id)) {
+        lastId = id;
+      } else if(response.status<500 && body?.ok===false) {
+        anyRejected = true;
+      }
+    }
+    if (lastId) return {outcome:'sent',messageId:lastId,errorCode:null};
+    if (anyRejected) return {outcome:'rejected',messageId:null,errorCode:'ZALO_REJECTED'};
   }catch{/* Timeout/connection loss/invalid response could occur after Zalo accepted the message. */}
   return {outcome:'unknown',messageId:null,errorCode:'ZALO_UNKNOWN'};
 }

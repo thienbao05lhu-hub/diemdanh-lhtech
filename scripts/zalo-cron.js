@@ -9,7 +9,7 @@ const ZALO_BOT_TOKEN = process.env.ZALO_BOT_TOKEN;
 const ZALO_CHAT_ID = process.env.ZALO_CHAT_ID;
 
 async function runCronReport(forcedType, forcedShift) {
-  if (!ANON_KEY || ANON_KEY.startsWith('sb_publishable_') || !ZALO_BOT_TOKEN || !ZALO_CHAT_ID) {
+  if (!ANON_KEY || ANON_KEY.startsWith('sb_publishable_') || !ZALO_BOT_TOKEN || (!ZALO_CHAT_ID && !process.env.ZALO_GROUP_CHAT_ID && !process.env.ZALO_CHAT_IDS)) {
     throw new Error('Thiếu credential server. Tác vụ Zalo đang tạm dừng.');
   }
   const vnNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Ho_Chi_Minh' }));
@@ -140,18 +140,40 @@ async function runCronReport(forcedType, forcedShift) {
 
   console.log('[Zalo Cron] Đã tạo nội dung báo cáo; không ghi dữ liệu cá nhân vào log.');
 
-  // 6. Gửi tin nhắn qua Zalo Bot API
+  // 6. Gửi tin nhắn qua Zalo Bot API (Hỗ trợ gửi song song cả Zalo Cá Nhân và Nhóm Zalo)
+  const targetChatIds = [
+    ...(process.env.ZALO_CHAT_ID ? [process.env.ZALO_CHAT_ID] : []),
+    ...(process.env.ZALO_GROUP_CHAT_ID ? [process.env.ZALO_GROUP_CHAT_ID] : []),
+    ...(process.env.ZALO_CHAT_IDS ? process.env.ZALO_CHAT_IDS.split(',') : [])
+  ].map(s => s.trim()).filter((id, idx, arr) => id && arr.indexOf(id) === idx);
+
+  if (targetChatIds.length === 0 && ZALO_CHAT_ID) {
+    targetChatIds.push(ZALO_CHAT_ID);
+  }
+
   const endpoint = `https://bot-api.zaloplatforms.com/bot${ZALO_BOT_TOKEN}/sendMessage`;
-  const res = await fetch(endpoint, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ chat_id: ZALO_CHAT_ID, text: reportMsg })
-  });
-  const data = await res.json();
-  if (data.ok) {
-    console.log('✅ Gửi báo cáo Zalo thành công!', data.result?.message_id);
-  } else {
-    throw new Error('Zalo chưa xác nhận gửi thành công.');
+  let sentCount = 0;
+  for (const cid of targetChatIds) {
+    try {
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chat_id: cid, text: reportMsg })
+      });
+      const data = await res.json();
+      if (data.ok) {
+        console.log(`✅ Gửi báo cáo thành công tới ${cid}! Message ID:`, data.result?.message_id);
+        sentCount++;
+      } else {
+        console.error(`❌ Gửi tới ${cid} thất bại:`, data);
+      }
+    } catch (err) {
+      console.error(`❌ Lỗi mạng khi gửi tới ${cid}:`, err.message);
+    }
+  }
+
+  if (sentCount === 0) {
+    throw new Error('Zalo chưa xác nhận gửi thành công tới bất kỳ nơi nhận nào.');
   }
 }
 

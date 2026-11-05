@@ -181,7 +181,9 @@
     }
 
     // 1. Luôn áp dụng visual CSS Transform trên video để người dùng nhìn thấy camera phóng to ngay lập tức
-    const videoEl = document.querySelector('#reader video');
+    const videoEl = (typeof document !== 'undefined' && typeof document.querySelector === 'function')
+      ? document.querySelector('#reader video')
+      : null;
     if (videoEl) {
       videoEl.style.transform = `scale(${zoomLevel})`;
       videoEl.style.transformOrigin = 'center center';
@@ -261,12 +263,12 @@
 
   function hideReticle() {
     const reticle = el('qrReticle');
-    if (reticle && !reticle.classList.contains('hidden')) {
+    if (reticle && reticle.classList && typeof reticle.classList.contains === 'function' && !reticle.classList.contains('hidden')) {
       reticle.classList.add('hidden');
       reticle.classList.remove('reticle-locked');
     }
     const targetBox = el('scanTargetBox');
-    if (targetBox) {
+    if (targetBox && targetBox.style) {
       targetBox.style.borderColor = '';
       targetBox.style.transform = '';
     }
@@ -278,7 +280,9 @@
 
     trackerInterval = setInterval(async () => {
       if (!cameraOn || busy) return;
-      const videoEl = document.querySelector('#reader video');
+      const videoEl = (typeof document !== 'undefined' && typeof document.querySelector === 'function')
+      ? document.querySelector('#reader video')
+      : null;
       if (!videoEl || videoEl.readyState < 2) return;
 
       try {
@@ -343,7 +347,9 @@
     if (!cameraOn || busy) return;
     clearAutoZoomTimers();
     const points = decodedResult?.result?.points;
-    const videoEl = document.querySelector('#reader video');
+    const videoEl = (typeof document !== 'undefined' && typeof document.querySelector === 'function')
+      ? document.querySelector('#reader video')
+      : null;
     if (points && points.length >= 2 && videoEl) {
       let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
       for (const pt of points) {
@@ -374,7 +380,9 @@
     hideReticle();
     currentZoom = 1.0;
     updateZoomButtons(1.0);
-    const videoEl = document.querySelector('#reader video');
+    const videoEl = (typeof document !== 'undefined' && typeof document.querySelector === 'function')
+      ? document.querySelector('#reader video')
+      : null;
     if (videoEl) videoEl.style.transform = 'scale(1.0)';
     const hint = el('cameraHintText');
     if (hint) hint.innerText = 'Hướng camera vào mã QR để tự động quét';
@@ -394,8 +402,6 @@
         if (!ready()) {
           await stopCamera();
           scanMessage('warning','Chưa nhận điểm danh',!data.qrEnabled ? 'Điểm danh đang tạm dừng để cập nhật.' : !data.window ? 'Hiện ngoài giờ nhận điểm danh.' : data.sessionClosed ? 'Ca điểm danh đã chốt.' : data.isPaused ? 'Quản trị viên đang tạm dừng phát mã QR cho ca này.' : 'Đang chờ quản trị viên mở mã QR.');
-        } else if (!cameraOn && !cameraStarting && !stickyResult) {
-          void root.resumeScanner();
         }
       }
     } catch(error) {
