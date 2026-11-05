@@ -120,9 +120,238 @@
       if (historyRefreshBtn) historyRefreshBtn.disabled = false;
     }
   }
+  let currentZoom = 1.0;
+  let autoZoomEnabled = false;
+  let autoZoomTriggered = false;
+  let trackerInterval = null;
+  let barcodeDetector = null;
+
+  if ('BarcodeDetector' in root) {
+    try {
+      barcodeDetector = new root.BarcodeDetector({ formats: ['qr_code'] });
+    } catch (_) {}
+  }
+
+  function updateZoomButtons(zoomLevel) {
+    const activeClass = 'w-8 h-8 rounded-full text-xs font-bold transition flex items-center justify-center bg-emerald-500/25 text-emerald-400 border border-emerald-500/40 shadow-sm cursor-pointer active:scale-95';
+    const inactiveClass = 'w-8 h-8 rounded-full text-xs font-bold transition flex items-center justify-center bg-slate-800/80 text-slate-300 hover:text-white border border-slate-700/60 cursor-pointer active:scale-95';
+
+    const b1 = el('btnZoom1x'), b2 = el('btnZoom2x'), b3 = el('btnZoom3x');
+    if (b1) b1.className = (zoomLevel <= 1.2) ? activeClass : inactiveClass;
+    if (b2) b2.className = (zoomLevel > 1.2 && zoomLevel <= 2.2) ? activeClass : inactiveClass;
+    if (b3) b3.className = (zoomLevel > 2.2) ? activeClass : inactiveClass;
+  }
+
+  root.setCameraZoom = async function(zoomLevel) {
+    currentZoom = zoomLevel;
+    updateZoomButtons(zoomLevel);
+
+    let hardwareApplied = false;
+    // 1. Native MediaStreamTrack hardware zoom
+    try {
+      const videoEl = document.querySelector('#reader video');
+      const track = videoEl?.srcObject?.getVideoTracks?.()[0];
+      if (track) {
+        const caps = track.getCapabilities ? track.getCapabilities() : {};
+        if (caps.zoom) {
+          const min = caps.zoom.min || 1;
+          const max = caps.zoom.max || 5;
+          const target = Math.max(min, Math.min(max, zoomLevel));
+          await track.applyConstraints({ advanced: [{ zoom: target }] });
+          hardwareApplied = true;
+        }
+      }
+    } catch (_) {}
+
+    // 2. html5-qrcode applyVideoConstraints fallback
+    if (!hardwareApplied && scanner) {
+      try {
+        await scanner.applyVideoConstraints({ advanced: [{ zoom: zoomLevel }] });
+        hardwareApplied = true;
+      } catch (_) {}
+    }
+
+    // 3. Digital Zoom via CSS Transform fallback (works everywhere)
+    const videoEl = document.querySelector('#reader video');
+    if (videoEl) {
+      if (hardwareApplied) {
+        videoEl.style.transform = 'scale(1.0)';
+      } else {
+        videoEl.style.transform = `scale(${zoomLevel})`;
+        videoEl.style.transformOrigin = 'center center';
+        videoEl.style.transition = 'transform 0.2s cubic-bezier(0.2, 0, 0, 1)';
+      }
+    }
+  };
+
+  root.toggleAutoZoom = function() {
+    autoZoomEnabled = !autoZoomEnabled;
+    const btn = el('btnAutoZoom');
+    const label = el('autoZoomLabel');
+    if (autoZoomEnabled) {
+      if (btn) btn.className = 'px-2.5 h-8 rounded-full text-[11px] font-bold transition flex items-center justify-center gap-1 bg-amber-500/25 text-amber-300 border border-amber-500/50 shadow-sm cursor-pointer active:scale-95';
+      if (label) label.innerText = 'Auto: BẬT';
+    } else {
+      if (btn) btn.className = 'px-2.5 h-8 rounded-full text-[11px] font-semibold transition flex items-center justify-center gap-1 bg-slate-800/80 text-slate-300 hover:text-white border border-slate-700/60 cursor-pointer active:scale-95';
+      if (label) label.innerText = 'Auto';
+    }
+  };
+
+  function highlightReticle(box, videoEl) {
+    const reticle = el('qrReticle');
+    const container = el('reader');
+    if (!reticle || !container || !videoEl || !box) return;
+
+    const videoRect = videoEl.getBoundingClientRect();
+    const containerRect = container.getBoundingClientRect();
+    if (videoRect.width === 0 || videoEl.videoWidth === 0) return;
+
+    const scaleX = videoRect.width / videoEl.videoWidth;
+    const scaleY = videoRect.height / videoEl.videoHeight;
+
+    const left = (box.x * scaleX) + (videoRect.left - containerRect.left);
+    const top = (box.y * scaleY) + (videoRect.top - containerRect.top);
+    const width = Math.max(50, box.width * scaleX);
+    const height = Math.max(50, box.height * scaleY);
+
+    reticle.style.left = `${Math.round(left - 8)}px`;
+    reticle.style.top = `${Math.round(top - 8)}px`;
+    reticle.style.width = `${Math.round(width + 16)}px`;
+    reticle.style.height = `${Math.round(height + 16)}px`;
+    reticle.classList.remove('hidden');
+    reticle.classList.add('reticle-locked');
+
+    const targetBox = el('scanTargetBox');
+    if (targetBox) {
+      targetBox.style.borderColor = '#34d399';
+      targetBox.style.transform = 'scale(0.96)';
+    }
+  }
+
+  function hideReticle() {
+    const reticle = el('qrReticle');
+    if (reticle && !reticle.classList.contains('hidden')) {
+      reticle.classList.add('hidden');
+      reticle.classList.remove('reticle-locked');
+    }
+    const targetBox = el('scanTargetBox');
+    if (targetBox) {
+      targetBox.style.borderColor = '';
+      targetBox.style.transform = '';
+    }
+  }
+
+  function startAutoTracker() {
+    stopAutoTracker();
+    if (!barcodeDetector) return;
+
+    trackerInterval = setInterval(async () => {
+      if (!cameraOn || busy) return;
+      const videoEl = document.querySelector('#reader video');
+      if (!videoEl || videoEl.readyState < 2) return;
+
+      try {
+        const barcodes = await barcodeDetector.detect(videoEl);
+        if (barcodes && barcodes.length > 0) {
+          const barcode = barcodes[0];
+          highlightReticle(barcode.boundingBox, videoEl);
+
+          // Smart Auto-Zoom: If QR code is small (< 25% of viewport) and user hasn't zoomed
+          if (autoZoomEnabled && !autoZoomTriggered && currentZoom === 1.0) {
+            const qrRelSize = barcode.boundingBox.width / (videoEl.videoWidth || 640);
+            if (qrRelSize < 0.25) {
+              autoZoomTriggered = true;
+              void root.setCameraZoom(2.0);
+              setTimeout(() => { autoZoomTriggered = false; }, 3000);
+            }
+          }
+
+          if (barcode.rawValue && cameraOn && !busy) {
+            void submit(barcode.rawValue);
+          }
+        } else {
+          hideReticle();
+        }
+      } catch (_) {
+        hideReticle();
+      }
+    }, 120);
+  }
+
+  function stopAutoTracker() {
+    if (trackerInterval) {
+      clearInterval(trackerInterval);
+      trackerInterval = null;
+    }
+    hideReticle();
+  }
+
+  function setupPinchZoom() {
+    const container = el('reader');
+    if (!container || container.dataset.pinchSetup) return;
+    container.dataset.pinchSetup = 'true';
+
+    let initialDist = 0;
+    let startZoom = 1.0;
+
+    container.addEventListener('touchstart', e => {
+      if (e.touches.length === 2) {
+        initialDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+        startZoom = currentZoom;
+      }
+    }, { passive: true });
+
+    container.addEventListener('touchmove', e => {
+      if (e.touches.length === 2 && initialDist > 0) {
+        const dist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+        const factor = dist / initialDist;
+        const target = Math.max(1.0, Math.min(3.5, Math.round((startZoom * factor) * 10) / 10));
+        void root.setCameraZoom(target);
+      }
+    }, { passive: true });
+
+    container.addEventListener('touchend', e => {
+      if (e.touches.length < 2) {
+        initialDist = 0;
+      }
+    }, { passive: true });
+  }
+
+  function handleBarcodeSuccess(text, decodedResult) {
+    if (!cameraOn || busy) return;
+    const points = decodedResult?.result?.points;
+    const videoEl = document.querySelector('#reader video');
+    if (points && points.length >= 2 && videoEl) {
+      let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+      for (const pt of points) {
+        if (pt.x < minX) minX = pt.x;
+        if (pt.x > maxX) maxX = pt.x;
+        if (pt.y < minY) minY = pt.y;
+        if (pt.y > maxY) maxY = pt.y;
+      }
+      highlightReticle({
+        x: minX,
+        y: minY,
+        width: maxX - minX,
+        height: maxY - minY
+      }, videoEl);
+    }
+    void submit(text);
+  }
+
   async function stopCamera() {
-    if (cameraOn && scanner) { cameraOn = false; try { await scanner.stop(); scanner.clear(); } catch (_) {} }
-    el('scanOverlay').classList.add('hidden');
+    stopAutoTracker();
+    if (cameraOn && scanner) {
+      cameraOn = false;
+      try { await scanner.stop(); scanner.clear(); } catch (_) {}
+    }
+    el('scanOverlay')?.classList.add('hidden');
+    el('zoomControls')?.classList.add('hidden');
+    hideReticle();
+    currentZoom = 1.0;
+    updateZoomButtons(1.0);
+    const videoEl = document.querySelector('#reader video');
+    if (videoEl) videoEl.style.transform = 'scale(1.0)';
   }
   async function capabilities() {
     if (refreshing || !current) return;
@@ -200,10 +429,29 @@
     const version=generation; cameraStarting=true; controls();
     try {
       scanner ||= new root.Html5Qrcode('reader', { verbose: false, formatsToSupport: [0], experimentalFeatures: { useBarCodeDetectorIfSupported: true } });
-      await scanner.start({facingMode:'environment'},{fps:15,qrbox:(vw,vh)=>{const s=Math.max(180,Math.min(260,Math.floor(Math.min(vw||250,vh||250)*0.8)));return {width:s,height:s};}},text=>{if(cameraOn&&!busy)void submit(text);},()=>{});
+      await scanner.start(
+        { facingMode: 'environment' },
+        {
+          fps: 20,
+          qrbox: (vw, vh) => {
+            const minDim = Math.min(vw || 280, vh || 280);
+            const s = Math.max(220, Math.floor(minDim * 0.92));
+            return { width: s, height: s };
+          }
+        },
+        (text, decodedResult) => {
+          handleBarcodeSuccess(text, decodedResult);
+        },
+        () => {}
+      );
       cameraOn=true;
       if(version!==generation || document.hidden || !ready()){await stopCamera();return;}
-      el('scanAlert').classList.add('hidden'); el('btnResumeScan').classList.add('hidden'); el('scanOverlay').classList.remove('hidden');
+      el('scanAlert').classList.add('hidden');
+      el('btnResumeScan').classList.add('hidden');
+      el('scanOverlay').classList.remove('hidden');
+      el('zoomControls')?.classList.remove('hidden');
+      setupPinchZoom();
+      startAutoTracker();
     }catch(_) {scanMessage(false,'Không mở được camera','Kiểm tra quyền camera của trình duyệt rồi bấm Tiếp Tục Quét Lại.');}
     finally {cameraStarting=false;controls();}
   };
