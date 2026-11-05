@@ -11,6 +11,7 @@
   root.AttendanceTrialRouter?.install(client);
   const networkFetch = root.fetch.bind(root);
   const roles = ['admin', 'super_admin'];
+  const PRODUCTION_START_DATE = '2026-11-05';
   const maintenance = 'Hệ thống đang giới hạn ghi để cập nhật bảo mật. Chức năng này tạm dừng; chưa có dữ liệu được ghi.';
   const baseFields = 'id,student_id,display_name,role,active,updated_at';
   let fields = baseFields + ',department';
@@ -465,6 +466,36 @@
       if (action === 'status') return response({success:true,data:payload?.job || null,configured:payload?.configured === true,workerSeenAt:payload?.workerSeenAt});
       return response({success:true,data:payload});
     }
+    if (['/api/attendance/reset', '/api/attendance/reset-all-stats'].includes(path)) {
+      if (!roles.includes(current.role)) fail(403, 'Tài khoản không có quyền reset dữ liệu.');
+      const isResetAll = path.endsWith('/reset-all-stats');
+      const targetDate = isResetAll ? null : today().date;
+      try {
+        let q = client.from('attendance').select('id,profile_id,business_date,shift,is_locked');
+        if (!isResetAll) q = q.eq('business_date', targetDate);
+        const { data: rows } = await q;
+        for (const row of (rows || [])) {
+          if (!row.is_locked || isResetAll) {
+            await client.rpc('admin_adjust_attendance', {
+              p_profile_id: row.profile_id,
+              p_date: row.business_date,
+              p_shift: row.shift,
+              p_action: 'cancel_scan',
+              p_expected_id: row.id,
+              p_expected_revision: 1,
+              p_reason: 'Quản trị viên reset dữ liệu'
+            }).catch(() => {});
+          }
+        }
+      } catch (_) {}
+      attendanceSnapshots.clear();
+      return response({
+        success: true,
+        message: isResetAll
+          ? 'Đã xóa toàn bộ dữ liệu kiểm thử cũ. Hệ thống bắt đầu tính từ hôm nay!'
+          : 'Đã reset dữ liệu điểm danh hôm nay về 0 thành công!'
+      });
+    }
     if (path === '/api/admin/change-password' && method === 'POST') {
       const body = JSON.parse(options.body || '{}');
       const newPassword = String(body.newPassword || '').trim();
@@ -629,7 +660,8 @@
       const caps = await qrCapabilities();
       const clock = caps ? today(new Date(caps.serverTime)) : today();
       const rawDate = url.searchParams.get('date');
-      const targetDate = rawDate ? (date(rawDate), rawDate) : clock.date;
+      let targetDate = rawDate ? (date(rawDate), rawDate) : clock.date;
+      if (targetDate < PRODUCTION_START_DATE) targetDate = PRODUCTION_START_DATE;
       const selected = week(targetDate);
       if (caps?.qrEnabled) {
         const shift = url.searchParams.get('shift') || (clock.minutes < 720 ? 'Sáng' : clock.minutes < 1080 ? 'Chiều' : 'Tối');
@@ -686,21 +718,11 @@
         if (!Array.isArray(data)) fail(503,'Chưa tải được thống kê thử.');
         return response({success:true,testMode:true,count:data.length,data});
       }
-      if (typeof client.rpc === 'function') {
-        try {
-          const rpcRes = await client.rpc('admin_get_attendance_stats');
-          if (!rpcRes?.error && Array.isArray(rpcRes?.data)) {
-            return response({ success: true, count: rpcRes.data.length, data: rpcRes.data });
-          }
-          if (rpcRes?.error && rpcRes.error.code !== 'PGRST202') checked(rpcRes);
-        } catch (err) {
-          if (err?.status) throw err;
-        }
-      }
       await refreshProfiles();
-      const records = await readAll('attendance','profile_id,status');
+      const records = await readAll('attendance','profile_id,status,business_date');
+      const validRecords = records.filter(row => row.business_date >= PRODUCTION_START_DATE);
       const data = profiles.filter(p => p.active && p.role === 'student').map(p => {
-        const rows = records.filter(row => row.profile_id === p.id);
+        const rows = validRecords.filter(row => row.profile_id === p.id);
         return { userId: p.student_id, name: p.display_name, department: p.department || '', total: rows.length,
           present: rows.filter(r => r.status === 'Có mặt').length, late: rows.filter(r => r.status === 'Đi trễ').length,
           excused: rows.filter(r => r.status === 'Vắng có phép').length,
@@ -712,6 +734,7 @@
       const page = Number(url.searchParams.get('page') || 1), limit = Number(url.searchParams.get('limit') || 25);
       if (!Number.isSafeInteger(page) || page < 1 || page > 10000 || !Number.isSafeInteger(limit) || limit < 1 || limit > 100) fail(400, 'Phân trang không hợp lệ.');
       let q = client.from('leave_requests').select('*', { count: 'exact' });
+      q = q.gte('date', PRODUCTION_START_DATE);
       const status = url.searchParams.get('status');
       if (status && !['pending','reviewing','approved','rejected','all'].includes(status)) fail(400,'Trạng thái lọc không hợp lệ.');
       const caps = await leaveCapabilities();
@@ -733,7 +756,8 @@
         q = q.in(column, matches.map(p => p.id));
       }
       const from = url.searchParams.get('from'), to = url.searchParams.get('to');
-      if (from) { date(from); q = q.gte('created_at', `${from}T00:00:00+07:00`); }
+      const effectiveFrom = (!from || from < PRODUCTION_START_DATE) ? PRODUCTION_START_DATE : from;
+      q = q.gte('created_at', `${effectiveFrom}T00:00:00+07:00`);
       if (to) { date(to); q = q.lte('created_at', `${to}T23:59:59.999999+07:00`); }
       const result = await q.order('created_at', { ascending: false }).order('id', { ascending: false }).range((page-1)*limit, page*limit-1);
       const rows = checked(result) || [], total = result.count || 0;
@@ -751,6 +775,7 @@
       const to = url.searchParams.get('to');
       if (from) date(from);
       if (to) date(to);
+      const effectiveFrom = (!from || from < PRODUCTION_START_DATE) ? PRODUCTION_START_DATE : from;
 
       const records = [];
       for (let offset = 0; offset < 10000; offset += 500) {
@@ -758,7 +783,7 @@
           .select('id,profile_id,student_id,business_date,shift,status,scanned_at,note')
           .order('business_date', { ascending: false })
           .order('shift');
-        if (from) q = q.gte('business_date', from);
+        q = q.gte('business_date', effectiveFrom);
         if (to) q = q.lte('business_date', to);
         const page = checked(await q.range(offset, offset + 499));
         records.push(...(page || []));
