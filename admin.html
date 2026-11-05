@@ -12,7 +12,7 @@
   <script src="vendor/supabase-2.118.0.js"></script>
   <script src="js/config.js?v=20261101-safe-read"></script>
   <script src="js/attendance-trial.js?v=20261104-qr2"></script>
-  <script src="js/supabase-read-api.js?v=20261105-deluser1"></script>
+  <script src="js/supabase-read-api.js?v=20261105-dualrole1"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
     body { font-family: 'Plus Jakarta Sans', sans-serif; }
@@ -2320,7 +2320,7 @@
         const users = await resUsers.json();
         if (readGeneration !== adminReadGeneration || !window.AdminAuth?.isAuthenticated()) return;
         if (users.success) {
-          document.getElementById('totalUsers').innerText = users.studentCount ?? users.data.filter(u => u.role === 'student' && u.active !== false).length;
+          document.getElementById('totalUsers').innerText = users.studentCount ?? users.data.filter(u => u.userId !== '900000001' && u.active !== false).length;
           renderUsers(users.data);
         }
 
@@ -2364,7 +2364,7 @@
     }
 
     function updateUserCounters() {
-      const students = rawUsersList.filter(u => u.role === 'student' && u.active !== false);
+      const students = rawUsersList.filter(u => u.userId !== '900000001' && u.active !== false);
       const total = students.length;
       const locked = students.filter(u => !!u.deviceBound).length;
       const unlocked = total - locked;
@@ -2388,7 +2388,7 @@
       }
 
       // 1. Sắp xếp danh sách A-Z theo tên tiếng Việt
-      let sorted = sortVietnameseAlphabet(rawUsersList.filter(u => u.role === 'student' && u.active !== false));
+      let sorted = sortVietnameseAlphabet(rawUsersList.filter(u => u.userId !== '900000001' && u.active !== false));
 
       // 2. Lọc theo trạng thái tab (all, locked, unlocked)
       if (currentFilterStatus === 'locked') {
@@ -2410,7 +2410,7 @@
       // Cập nhật nhãn số lượng hiển thị
       const badge = document.getElementById('usersCountBadge');
       if (badge) {
-        badge.innerText = `${sorted.length}/${rawUsersList.filter(u => u.role === 'student' && u.active !== false).length} SV (A-Z)`;
+        badge.innerText = `${sorted.length}/${rawUsersList.filter(u => u.userId !== '900000001' && u.active !== false).length} SV (A-Z)`;
       }
 
       if (sorted.length === 0) {

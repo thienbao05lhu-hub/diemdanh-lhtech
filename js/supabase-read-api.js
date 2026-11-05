@@ -15,6 +15,7 @@
   const maintenance = 'Hệ thống đang giới hạn ghi để cập nhật bảo mật. Chức năng này tạm dừng; chưa có dữ liệu được ghi.';
   const baseFields = 'id,student_id,display_name,role,active,updated_at';
   let fields = baseFields + ',department';
+  const isStudentUser = p => Boolean(p && p.active !== false && p.student_id !== '900000001');
   function getDeletedStudentIds() {
     try {
       const raw = root.localStorage?.getItem('deleted_student_ids');
@@ -320,7 +321,7 @@
     const dayKey = ['cn','t2','t3','t4','t5','t6','t7'][date(stamp).getUTCDay()];
     const scheduleMap = new Map(schedules.map(row => [row.profile_id, row.schedule]));
     const attMap = new Map(records.filter(row => row.shift === shift).map(row => [row.profile_id, row]));
-    return profiles.filter(p => p.active && p.role === 'student').flatMap(p => {
+    return profiles.filter(isStudentUser).flatMap(p => {
       const schedule = scheduleMap.get(p.id), att = attMap.get(p.id);
       const expected = Array.isArray(schedule?.[dayKey]) && schedule[dayKey].includes(shift);
       if (schedule && !expected && !att) return [];
@@ -776,7 +777,7 @@
       const map = new Map(schedules.map(row => [row.profile_id, row]));
       const devices = await readAll('devices','profile_id');
       const bound = new Set(devices.map(row => row.profile_id));
-      const data = profiles.filter(p => p.active && (path === '/api/users' || p.role === 'student')).map(p => {
+      const data = profiles.filter(p => p.active && (path === '/api/users' || isStudentUser(p))).map(p => {
         const isSuper = p.student_id === '900000001';
         const effectiveRole = isSuper ? 'superadmin' : (p.role === 'super_admin' ? 'student' : p.role);
         return {
@@ -786,7 +787,7 @@
           scheduleWeek: { revision: map.get(p.id)?.revision || 0, source: map.get(p.id)?.source || 'missing' }
         };
       });
-      return response({ success: true, count: data.length, studentCount: profiles.filter(p => p.active && p.role === 'student').length, data, metadata: { week: selected } });
+      return response({ success: true, count: data.length, studentCount: profiles.filter(isStudentUser).length, data, metadata: { week: selected } });
     }
     if (path === '/api/schedule/history') {
       const p = profiles.find(row => row.student_id === url.searchParams.get('userId'));
@@ -864,7 +865,7 @@
       await refreshProfiles();
       const records = await readAll('attendance','profile_id,status,business_date');
       const validRecords = records.filter(row => row.business_date >= PRODUCTION_START_DATE);
-      const data = profiles.filter(p => p.active && p.role === 'student').map(p => {
+      const data = profiles.filter(isStudentUser).map(p => {
         const rows = validRecords.filter(row => row.profile_id === p.id);
         return { userId: p.student_id, name: p.display_name, department: p.department || '', total: rows.length,
           present: rows.filter(r => r.status === 'Có mặt').length, late: rows.filter(r => r.status === 'Đi trễ').length,
@@ -910,7 +911,7 @@
           reason: row.details?.reason || row.details?.reviewReason || '', createdAt: row.created_at })) });
     }
     if (path === '/api/attendance/fines') {
-      const students = profiles.filter(p => p.active && p.role === 'student');
+      const students = profiles.filter(isStudentUser);
       const studentMap = new Map(students.map(p => [p.id, p]));
       const studentByUserId = new Map(students.map(p => [p.student_id, p]));
 
