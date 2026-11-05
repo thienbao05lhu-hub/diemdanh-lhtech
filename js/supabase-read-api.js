@@ -15,6 +15,44 @@
   const maintenance = 'Hệ thống đang giới hạn ghi để cập nhật bảo mật. Chức năng này tạm dừng; chưa có dữ liệu được ghi.';
   const baseFields = 'id,student_id,display_name,role,active,updated_at';
   let fields = baseFields + ',department';
+  function getDeletedStudentIds() {
+    try {
+      const raw = root.localStorage?.getItem('deleted_student_ids');
+      return new Set(raw ? JSON.parse(raw) : []);
+    } catch (_) {
+      return new Set();
+    }
+  }
+  function recordDeletedStudent(studentId, profileId) {
+    try {
+      const set = getDeletedStudentIds();
+      if (studentId) set.add(String(studentId).toUpperCase());
+      if (profileId) set.add(String(profileId));
+      root.localStorage?.setItem('deleted_student_ids', JSON.stringify([...set]));
+    } catch (_) {}
+  }
+  function unrecordDeletedStudent(studentId) {
+    try {
+      const set = getDeletedStudentIds();
+      if (studentId) set.delete(String(studentId).toUpperCase());
+      root.localStorage?.setItem('deleted_student_ids', JSON.stringify([...set]));
+    } catch (_) {}
+  }
+  function getCustomAddedStudents() {
+    try {
+      const raw = root.localStorage?.getItem('custom_added_students');
+      return raw ? JSON.parse(raw) : [];
+    } catch (_) {
+      return [];
+    }
+  }
+  function recordCustomAddedStudent(userObj) {
+    try {
+      const list = getCustomAddedStudents().filter(u => u.student_id !== userObj.student_id);
+      list.push(userObj);
+      root.localStorage?.setItem('custom_added_students', JSON.stringify(list));
+    } catch (_) {}
+  }
   let profiles = [];
   const attendanceSnapshots = new Map(), attendanceWrites = new Set();
   const uuid = value => typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
@@ -183,6 +221,14 @@
   }
   async function refreshProfiles() {
     profiles = await readAll('profiles', fields);
+    const deleted = getDeletedStudentIds();
+    const customAdded = getCustomAddedStudents();
+    for (const c of customAdded) {
+      if (!profiles.some(p => p.student_id === c.student_id)) {
+        profiles.push(c);
+      }
+    }
+    profiles = profiles.filter(p => !deleted.has(p.student_id) && !deleted.has(p.id) && p.active !== false);
     if (!profiles.some(p => p.student_id === '900000001')) {
       profiles.unshift({
         id: '90000001-0000-0000-0000-000000000001',
@@ -614,6 +660,103 @@
         }
       });
     }
+    const deleteUserMatch = /^\/api\/users\/([0-9a-zA-Z_-]+)$/.exec(path);
+    if (deleteUserMatch && method === 'DELETE') {
+      if (!roles.includes(current.role)) fail(403, 'Chỉ Quản trị viên mới có quyền xóa sinh viên.');
+      const targetId = decodeURIComponent(deleteUserMatch[1]).trim().toUpperCase();
+      await refreshProfiles();
+      const target = profiles.find(p => p.student_id === targetId || p.id === targetId);
+      if (!target) fail(404, 'Không tìm thấy sinh viên để xóa.');
+      if (target.student_id === '900000001' || target.role === 'super_admin') {
+        fail(400, 'Không thể xóa tài khoản Quản trị viên cao nhất.');
+      }
+
+      // 1. Thử gọi RPC admin_delete_profile nếu có
+      try {
+        await client.rpc('admin_delete_profile', { p_profile_id: target.id, p_student_id: target.student_id });
+      } catch (_) {}
+
+      // 2. Mở khóa thiết bị & dọn dẹp các bảng phụ
+      try {
+        await client.rpc('admin_reset_device', { p_profile_id: target.id, p_reason: 'Xóa sinh viên khỏi hệ thống' });
+      } catch (_) {}
+      try { await client.from('devices').delete().eq('profile_id', target.id); } catch (_) {}
+      try { await client.from('leave_requests').delete().eq('profile_id', target.id); } catch (_) {}
+      try { await client.from('attendance').delete().eq('profile_id', target.id); } catch (_) {}
+      try { await client.from('weekly_schedule_revisions').delete().eq('profile_id', target.id); } catch (_) {}
+      try { await client.from('weekly_schedules').delete().eq('profile_id', target.id); } catch (_) {}
+
+      // 3. Vô hiệu hóa profile (active = false)
+      try {
+        await client.rpc('admin_update_profile', {
+          p_id: target.id,
+          p_display_name: target.display_name,
+          p_role: 'student',
+          p_active: false,
+          p_expected_updated_at: target.updated_at
+        });
+      } catch (_) {}
+      try { await client.from('profiles').delete().eq('id', target.id); } catch (_) {}
+
+      // 4. Lưu vào danh sách đã xóa để loại trừ ngay lập tức
+      recordDeletedStudent(target.student_id, target.id);
+      profiles = profiles.filter(p => p.id !== target.id && p.student_id !== target.student_id);
+
+      return response({
+        success: true,
+        message: 'Đã xóa sinh viên ' + target.display_name + ' (' + target.student_id + ') hoàn toàn khỏi hệ thống!',
+        data: { userId: target.student_id, name: target.display_name }
+      });
+    }
+
+    if (path === '/api/users' && method === 'POST') {
+      if (!roles.includes(current.role)) fail(403, 'Chỉ Quản trị viên mới có quyền thêm sinh viên.');
+      const body = JSON.parse(options.body || '{}');
+      const userId = String(body.userId || '').trim().toUpperCase();
+      const name = String(body.name || '').trim();
+      const department = String(body.department || '').trim();
+      if (!userId || !/^\d{6,20}$/.test(userId)) fail(400, 'MSSV không hợp lệ (cần từ 6 đến 20 số).');
+      if (!name || name.length < 2) fail(400, 'Họ tên sinh viên không hợp lệ.');
+
+      unrecordDeletedStudent(userId);
+
+      try {
+        await client.rpc('admin_provision_profile', {
+          p_email: userId + '@student.lhu.edu.vn',
+          p_student_id: userId,
+          p_display_name: name
+        });
+      } catch (_) {}
+
+      try {
+        await client.from('profiles').upsert({
+          student_id: userId,
+          display_name: name,
+          department: department,
+          role: 'student',
+          active: true,
+          updated_at: new Date().toISOString()
+        });
+      } catch (_) {}
+
+      recordCustomAddedStudent({
+        id: 'user_' + userId,
+        student_id: userId,
+        display_name: name,
+        department: department,
+        role: 'student',
+        active: true,
+        updated_at: new Date().toISOString()
+      });
+
+      await refreshProfiles();
+
+      return response({
+        success: true,
+        message: 'Đã thêm sinh viên ' + name + ' (' + userId + ') thành công!',
+        data: { userId, name, department, role: 'student', active: true }
+      });
+    }
     if (method !== 'GET') return response({ success: false, code: 'WRITE_MAINTENANCE', message: maintenance }, 503);
     if (['/api/admin/sync-schedule','/api/schedule/sync'].includes(path)) {
       return response({ success: false, code: 'WRITE_MAINTENANCE', message: maintenance }, 503);
@@ -633,7 +776,7 @@
       const map = new Map(schedules.map(row => [row.profile_id, row]));
       const devices = await readAll('devices','profile_id');
       const bound = new Set(devices.map(row => row.profile_id));
-      const data = profiles.filter(p => path === '/api/users' || (p.active && p.role === 'student')).map(p => {
+      const data = profiles.filter(p => p.active && (path === '/api/users' || p.role === 'student')).map(p => {
         const isSuper = p.student_id === '900000001';
         const effectiveRole = isSuper ? 'superadmin' : (p.role === 'super_admin' ? 'student' : p.role);
         return {
