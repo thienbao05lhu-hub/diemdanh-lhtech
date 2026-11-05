@@ -140,7 +140,7 @@ async function runCronReport(forcedType, forcedShift) {
 
   console.log('[Zalo Cron] Đã tạo nội dung báo cáo; không ghi dữ liệu cá nhân vào log.');
 
-  // 6. Gửi tin nhắn qua Zalo Bot API (Hỗ trợ gửi song song cả Zalo Cá Nhân và Nhóm Zalo)
+  // 6. Gửi tin nhắn qua Zalo Bot API (Gửi vào Nhóm Zalo ADMIN)
   const targetChatIds = [
     ...(process.env.ZALO_CHAT_ID ? [process.env.ZALO_CHAT_ID] : []),
     ...(process.env.ZALO_GROUP_CHAT_ID ? [process.env.ZALO_GROUP_CHAT_ID] : []),
