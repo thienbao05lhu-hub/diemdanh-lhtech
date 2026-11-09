@@ -94,24 +94,24 @@
     try {
       const identity = await api.identity();
       if (!identity || identity.profile.id !== current.profile.id) throw { code: 'SESSION_CHANGED' };
-      await capability(generation);
+      if (!caps) await capability(generation);
       if (generation !== requestGeneration || caps?.leaveEnabled !== true) throw { code: 'SESSION_CHANGED' };
       const result = await rpc('student_create_leave_request', { p_date: el('leaveDate').value,
         p_shift: el('leaveShift').value, p_reason: el('leaveReason').value.trim() });
       if (generation !== requestGeneration) return;
       if (result?.success !== true || result.data?.profile_id !== current.profile.id || !result.data?.id
         || !Object.hasOwn(labels, result.data.status)) throw new Error('Invalid leave response');
-      status(result.alreadySubmitted ? 'Bạn đã có đơn cho ca này. Đơn đã lưu được giữ nguyên.' : 'Đã gửi đơn. Đang chờ quản trị viên duyệt.');
+      status(result.alreadySubmitted ? 'Bạn đã có đơn cho ca này. Đơn đã lưu được giữ nguyên.' : 'Đã gửi đơn và thông báo tới nhóm Zalo Admin. Đang chờ quản trị viên duyệt.');
       el('leaveReason').value = '';
       el('leaveModal').classList.add('hidden');
-      root.showToast?.success(result.alreadySubmitted ? 'Bạn đã có đơn cho ca này.' : 'Đã gửi đơn xin nghỉ. Đang chờ duyệt.');
+      root.showToast?.success(result.alreadySubmitted ? 'Bạn đã có đơn cho ca này.' : 'Đã gửi đơn xin nghỉ & báo về nhóm Zalo Admin.');
       await history(generation);
     } catch (error) { status(message(error), true); }
     finally { sending = false; controls(); }
   };
   root.openLeaveModal = async () => {
     if (!current) return;
-    await capability();
+    if (!caps?.leaveEnabled) await capability();
     if (!caps?.leaveEnabled) { root.showToast?.warning('Xin nghỉ đang chờ quản trị viên hoàn tất cập nhật.'); return; }
     el('leaveReason').value = '';
     el('leaveModal').classList.remove('hidden');

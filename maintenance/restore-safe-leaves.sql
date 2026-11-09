@@ -232,6 +232,33 @@ begin
     returning * into l;
   insert into public.audit_logs(actor_id,action,target_id,details) values(actor,'leave.submitted',actor,
     jsonb_build_object('leaveId',l.id,'date',p_date,'shift',p_shift,'revision',l.revision));
+  if pg_catalog.to_regclass('private.zalo_outbox') is not null
+    and pg_catalog.to_regprocedure('private.zalo_delivery_available()') is not null then
+    begin
+      if private.zalo_delivery_available() then
+        insert into private.zalo_outbox(session_id,leave_id,report_type,actor_id,recipient_id,body,expires_at)
+        select null,l.id,'leave',actor,cfg.recipient_id,
+          format(
+            E'📋 THÔNG BÁO XIN NGHỈ PHÉP\n• Sinh viên: %s (%s)\n• Lớp: %s\n• Ngày nghỉ: %s — Ca %s\n• Lý do: %s\n• Trạng thái: Chờ Admin xét duyệt',
+            regexp_replace(p.display_name,'[[:cntrl:]]',' ','g'),
+            p.student_id,
+            coalesce(nullif(btrim(coalesce(to_jsonb(p)->>'department','')),''),'Chưa cập nhật'),
+            to_char(p_date,'DD/MM/YYYY'),
+            p_shift,
+            btrim(regexp_replace(p_reason,'[[:cntrl:]]',' ','g'))
+          ),
+          clock_timestamp()+interval '1 hour'
+        from private.zalo_delivery_settings cfg
+        where cfg.id and cfg.enabled and cfg.recipient_id is not null
+        on conflict (leave_id) where leave_id is not null do nothing;
+        if pg_catalog.to_regprocedure('private.dispatch_zalo_worker()') is not null then
+          perform private.dispatch_zalo_worker();
+        end if;
+      end if;
+    exception when others then
+      null;
+    end;
+  end if;
   return jsonb_build_object('success',true,'alreadySubmitted',false,'data',to_jsonb(l));
 end;
 $$;

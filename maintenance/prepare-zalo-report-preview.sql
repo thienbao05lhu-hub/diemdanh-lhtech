@@ -41,7 +41,7 @@ begin
     'name',regexp_replace(r->>'userName','[[:cntrl:]]',' ','g'),
     'status',r->>'status','inSchedule',(r->>'inSchedule')::boolean) order by r->>'userId'),'[]') into rows
   from jsonb_array_elements(report->'records') r join public.profiles p on p.id=(r->>'profileId')::uuid
-  where p.student_id<>'900000001';
+  where p.role<>'super_admin' and p.student_id<>'900000001';
   select jsonb_build_object('total',count(*),'expected',count(*) filter(where (r->>'inSchedule')::boolean),
     'present',count(*) filter(where r->>'status'='Có mặt'),'late',count(*) filter(where r->>'status'='Đi trễ'),
     'excused',count(*) filter(where r->>'status'='Vắng có phép'),'unexcused',count(*) filter(where r->>'status'='Vắng không phép'),

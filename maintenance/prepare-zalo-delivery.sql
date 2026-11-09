@@ -15,8 +15,9 @@ create table if not exists private.zalo_delivery_settings (
 );
 insert into private.zalo_delivery_settings(id) values(true) on conflict(id) do nothing;
 create table if not exists private.zalo_outbox (
- id uuid primary key default gen_random_uuid(),session_id uuid not null references private.qr_sessions(id),
- report_type text not null check(report_type in ('early','closing')),
+ id uuid primary key default gen_random_uuid(),session_id uuid references private.qr_sessions(id),
+ leave_id uuid references public.leave_requests(id) on delete cascade,
+ report_type text not null check(report_type in ('early','closing','leave')),
  actor_id uuid not null references public.profiles(id),recipient_id text not null,
  body text not null check(length(body) between 1 and 2000),
  status text not null default 'pending' check(status in ('pending','sending','sent','failed','unknown','cancelled')),
@@ -24,6 +25,16 @@ create table if not exists private.zalo_outbox (
  lease_id uuid,lease_until timestamptz,finished_at timestamptz,message_id text,error_code text,
  unique(session_id,report_type)
 );
+alter table private.zalo_outbox alter column session_id drop not null;
+alter table private.zalo_outbox add column if not exists leave_id uuid references public.leave_requests(id) on delete cascade;
+alter table private.zalo_outbox drop constraint if exists zalo_outbox_report_type_check;
+alter table private.zalo_outbox add constraint zalo_outbox_report_type_check check(report_type in ('early','closing','leave'));
+alter table private.zalo_outbox drop constraint if exists zalo_outbox_target_check;
+alter table private.zalo_outbox add constraint zalo_outbox_target_check check(
+ (report_type in ('early','closing') and session_id is not null and leave_id is null)
+ or (report_type='leave' and session_id is null and leave_id is not null)
+);
+create unique index if not exists zalo_outbox_leave_unique on private.zalo_outbox(leave_id) where leave_id is not null;
 create index if not exists zalo_outbox_pending on private.zalo_outbox(created_at,id) where status='pending';
 create index if not exists zalo_outbox_sending on private.zalo_outbox(lease_until) where status='sending';
 alter table private.zalo_delivery_settings enable row level security;
@@ -92,8 +103,9 @@ begin
  update private.zalo_outbox set status='unknown',error_code='WORKER_EXPIRED',finished_at=n where status='sending' and lease_until<=n;
  update private.zalo_outbox o set status='cancelled',error_code='STALE_JOB',finished_at=n where status='pending'
    and (expires_at<=n or recipient_id<>cfg.recipient_id
-     or not exists(select 1 from public.profiles p where p.id=o.actor_id and p.active and p.role in ('admin','super_admin'))
-     or (report_type='early' and exists(select 1 from private.qr_sessions s where s.id=o.session_id and (s.closed_at is not null or s.ends_at<=n))));
+     or not exists(select 1 from public.profiles p where p.id=o.actor_id and p.active and (o.report_type='leave' or p.role in ('admin','super_admin')))
+     or (report_type='early' and exists(select 1 from private.qr_sessions s where s.id=o.session_id and (s.closed_at is not null or s.ends_at<=n)))
+     or (report_type='leave' and not exists(select 1 from public.leave_requests l where l.id=o.leave_id and l.status='pending')));
  select * into j from private.zalo_outbox where status='pending' order by created_at,id for update skip locked limit 1;
  if not found then return null;end if;
  select decrypted_secret into token from vault.decrypted_secrets where name='lhtech_zalo_bot_token';
