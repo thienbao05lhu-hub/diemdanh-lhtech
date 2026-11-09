@@ -79,7 +79,11 @@ begin
  case when w.source in ('manual','rollback') then 'Giữ lịch đã chỉnh thủ công/khôi phục.' else '' end
  from public.profiles p left join public.weekly_schedules w on w.profile_id=p.id and w.week_start=p_week_start
  where p.active and p.role='student';
- if not exists(select 1 from private.lhu_sync_items where job_id=j and status='pending') then update private.lhu_sync_jobs set status='completed',finished_at=clock_timestamp() where id=j; end if;
+ if not exists(select 1 from private.lhu_sync_items where job_id=j and status='pending') then
+  update private.lhu_sync_jobs set status='completed',finished_at=clock_timestamp() where id=j;
+ elsif pg_catalog.to_regprocedure('private.dispatch_lhu_worker()') is not null then
+  perform private.dispatch_lhu_worker();
+ end if;
  insert into public.audit_logs(actor_id,action,details) values(actor,'schedule.lhu.preview.started',jsonb_build_object('jobId',j,'weekStart',p_week_start));
  return private.lhu_job_dto(j);
 end; $$;
@@ -98,9 +102,9 @@ begin
  if exists(select 1 from private.lhu_sync_items where job_id=j.id and status='pending' and lease_until>n) then return null;end if;
  update private.lhu_sync_items set status='failed',message='Hết số lần thử kết nối LHU.',lease_id=null,lease_until=null
  where job_id=j.id and status='pending' and attempts>=3;
- select * into i from private.lhu_sync_items where job_id=j.id and status='pending' order by student_id limit 1 for update;
+ select * into i from private.lhu_sync_items where job_id=j.id and status='pending' order by (lease_id is null),attempts,student_id limit 1 for update;
  if not found then update private.lhu_sync_jobs set status='completed',finished_at=n where id=j.id;return null;end if;
- update private.lhu_sync_items set attempts=attempts+1,lease_id=gen_random_uuid(),lease_until=n+interval '90 seconds'
+ update private.lhu_sync_items set attempts=attempts+1,lease_id=gen_random_uuid(),lease_until=n+interval '60 seconds'
  where job_id=j.id and profile_id=i.profile_id returning * into i;
  return jsonb_build_object('jobId',j.id,'profileId',i.profile_id,'studentId',i.student_id,'weekStart',j.week_start,'leaseId',i.lease_id);
 end; $$;

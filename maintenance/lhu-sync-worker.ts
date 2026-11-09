@@ -130,8 +130,8 @@ export function createHandler({createClient, env, fetchOptions={}}) {
         if (authorized.error) return reply({success:false,message:'Chưa xác minh được worker.'},503);
         if (authorized.data!==true) return reply({success:false},401);
         const started=Date.now();let last={status:'idle'},processed=0;
-        // Xử lý tối đa 15 sinh viên mỗi lượt, dừng khi vượt quá 35s (dưới mức timeout 55s của pg_net)
-        while(processed<15 && Date.now()-started<35000) {
+        // Xử lý tối đa 15 sinh viên mỗi lượt, dừng khi vượt quá 40s (dưới mức timeout 55s của pg_net)
+        while(processed<15 && Date.now()-started<40000) {
           last=await runWorker(db,fetchOptions);
           if(last.status==='idle') break;
           processed++;
