@@ -120,17 +120,28 @@
       if (historyRefreshBtn) historyRefreshBtn.disabled = false;
     }
   }
+  const isIOS = (() => {
+    if (typeof navigator === 'undefined') return false;
+    const ua = navigator.userAgent || '';
+    const platform = navigator.platform || '';
+    const maxTouchPoints = navigator.maxTouchPoints || 0;
+    return /iPad|iPhone|iPod/.test(ua) || (platform === 'MacIntel' && maxTouchPoints > 1);
+  })();
+
   let currentZoom = 1.0;
-  let autoZoomEnabled = true; // Mặc định BẬT để hỗ trợ sinh viên quét màn hình OLED nhỏ
+  let autoZoomEnabled = false; // Mặc định TẮT. Màn hình trạm CYD 2.8" đã có kích thước lớn chuẩn, auto-zoom CSS làm lệch canvas và mờ khung hình trên iPhone!
   let autoZoomTimer1 = null;
   let autoZoomTimer2 = null;
   let trackerInterval = null;
   let barcodeDetector = null;
 
-  if ('BarcodeDetector' in root) {
+  // CHỈ dùng BarcodeDetector trên Android/Chromium; KHÔNG kích hoạt trên iOS vì WebKit BarcodeDetector bị lỗi/không ổn định
+  if (!isIOS && 'BarcodeDetector' in root) {
     try {
       barcodeDetector = new root.BarcodeDetector({ formats: ['qr_code'] });
-    } catch (_) {}
+    } catch (_) {
+      barcodeDetector = null;
+    }
   }
 
   function clearAutoZoomTimers() {
@@ -385,7 +396,11 @@
       : null;
     if (videoEl) videoEl.style.transform = 'scale(1.0)';
     const hint = el('cameraHintText');
-    if (hint) hint.innerText = 'Hướng camera vào mã QR để tự động quét';
+    if (hint) {
+      hint.innerText = isIOS
+        ? 'Giữ camera cách màn hình 15 - 25 cm để bắt nét rõ'
+        : 'Hướng camera vào mã QR để tự động quét';
+    }
   }
 
   async function capabilities() {
@@ -467,24 +482,59 @@
     if(pendingToken){const value=pendingToken;pendingToken=null;await submit(value);return;}
     const version=generation; cameraStarting=true; controls();
     try {
-      scanner ||= new root.Html5Qrcode('reader', { verbose: false, formatsToSupport: [0], experimentalFeatures: { useBarCodeDetectorIfSupported: true } });
-      await scanner.start(
-        { facingMode: 'environment' },
-        {
-          fps: 20,
-          qrbox: (vw, vh) => {
-            const minDim = Math.min(vw || 280, vh || 280);
-            const s = Math.max(220, Math.floor(minDim * 0.92));
-            return { width: s, height: s };
+      if (!scanner) {
+        scanner = new root.Html5Qrcode('reader', {
+          verbose: false,
+          formatsToSupport: [0], // 0: QR_CODE
+          experimentalFeatures: {
+            useBarCodeDetectorIfSupported: !isIOS
           }
-        },
-        (text, decodedResult) => {
-          handleBarcodeSuccess(text, decodedResult);
-        },
-        () => {}
-      );
+        });
+      }
+
+      const scanConfig = {
+        fps: isIOS ? 15 : 20,
+        videoConstraints: {
+          facingMode: { ideal: 'environment' },
+          width: { min: 640, ideal: 1280, max: 1920 },
+          height: { min: 480, ideal: 720, max: 1080 }
+        }
+      };
+
+      try {
+        await scanner.start(
+          { facingMode: 'environment' },
+          scanConfig,
+          (text, decodedResult) => {
+            handleBarcodeSuccess(text, decodedResult);
+          },
+          () => {}
+        );
+      } catch (errConstraints) {
+        console.warn('Fallback sang cau hinh camera co ban:', errConstraints);
+        await scanner.start(
+          { facingMode: 'environment' },
+          { fps: isIOS ? 15 : 20 },
+          (text, decodedResult) => {
+            handleBarcodeSuccess(text, decodedResult);
+          },
+          () => {}
+        );
+      }
+
       cameraOn=true;
       if(version!==generation || document.hidden || !ready()){await stopCamera();return;}
+
+      const videoEl = (typeof document !== 'undefined' && typeof document.querySelector === 'function')
+        ? document.querySelector('#reader video')
+        : null;
+      if (videoEl) {
+        videoEl.setAttribute('playsinline', 'true');
+        videoEl.setAttribute('webkit-playsinline', 'true');
+        videoEl.setAttribute('muted', 'true');
+        videoEl.muted = true;
+      }
+
       el('scanAlert').classList.add('hidden');
       el('btnResumeScan').classList.add('hidden');
       el('scanOverlay').classList.remove('hidden');
@@ -492,6 +542,13 @@
       setupPinchZoom();
       startAutoTracker();
       startAutoZoomSequence();
+
+      const hint = el('cameraHintText');
+      if (hint) {
+        hint.innerText = isIOS
+          ? 'Giữ camera cách màn hình 15 - 25 cm để bắt nét rõ'
+          : 'Hướng camera vào mã QR để tự động quét';
+      }
     }catch(_) {scanMessage(false,'Không mở được camera','Kiểm tra quyền camera của trình duyệt rồi bấm Tiếp Tục Quét Lại.');}
     finally {cameraStarting=false;controls();}
   };
