@@ -25,7 +25,7 @@ begin
   select coalesce(jsonb_agg(jsonb_build_object('profileId',p.id,'userId',p.student_id,'userName',p.display_name,'department',coalesce(to_jsonb(p)->>'department',''),
     'shift',p_shift,'recordId',a.id,'recordRevision',case when a.id is null then 0 else 1 end,'status',coalesce(a.status,'Chưa điểm danh'),
     'timestamp',a.scanned_at,'inSchedule',false,'isLocked',s.closed_at is not null,'note','Thử nghiệm QR','reason','Thử nghiệm QR') order by p.student_id),'[]') into result
-    from public.profiles p left join private.qr_test_attendance a on a.profile_id=p.id and a.session_id=s.id where p.active and p.role='student';
+    from public.profiles p left join private.qr_test_attendance a on a.profile_id=p.id and a.session_id=s.id where p.active and p.student_id<>'900000001';
   return jsonb_build_object('testMode',true,'date',p_date,'shift',p_shift,'sessionId',s.id,'records',result,
     'isClosed',s.closed_at is not null,'isPastCutoff',false,'cutoffTimeStr','THỬ','closingTimeStr','THỬ',
     'stats',jsonb_build_object('total',jsonb_array_length(result),'present',(select count(*) from jsonb_array_elements(result) x where x->>'status'='Có mặt'),
@@ -42,7 +42,7 @@ begin
     (select p.student_id as "userId",p.display_name as name,coalesce(to_jsonb(p)->>'department','') as department,
       count(a.id) as total,count(a.id) filter(where a.status='Có mặt') as present,count(a.id) filter(where a.status='Đi trễ') as late,0 as excused,0 as unexcused
      from public.profiles p left join (private.qr_test_attendance a join private.qr_test_sessions s on s.id=a.session_id and s.context_id=cfg.context_id)
-       on a.profile_id=p.id where p.active and p.role='student' group by p.id) r;
+       on a.profile_id=p.id where p.active and p.student_id<>'900000001' group by p.id) r;
   return result;
 end;
 $$;

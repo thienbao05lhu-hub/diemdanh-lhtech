@@ -78,7 +78,7 @@ begin
  case when w.source in ('manual','rollback') then 'skipped' else 'pending' end,
  case when w.source in ('manual','rollback') then 'Giữ lịch đã chỉnh thủ công/khôi phục.' else '' end
  from public.profiles p left join public.weekly_schedules w on w.profile_id=p.id and w.week_start=p_week_start
- where p.active and p.role='student';
+ where p.active and p.student_id<>'900000001';
  if not exists(select 1 from private.lhu_sync_items where job_id=j and status='pending') then
   update private.lhu_sync_jobs set status='completed',finished_at=clock_timestamp() where id=j;
  elsif pg_catalog.to_regprocedure('private.dispatch_lhu_worker()') is not null then
@@ -145,7 +145,7 @@ begin
  for i in select * from private.lhu_sync_items where job_id=j.id and status='ready' order by profile_id for update loop
   select * into p from public.profiles where id=i.profile_id;
   select * into w from public.weekly_schedules where profile_id=i.profile_id and week_start=j.week_start for update;
-  if not p.active or p.role<>'student' or p.updated_at is distinct from i.profile_updated_at or coalesce(w.revision,0)<>i.expected_revision or w.source in ('manual','rollback') then
+  if not p.active or p.student_id='900000001' or p.updated_at is distinct from i.profile_updated_at or coalesce(w.revision,0)<>i.expected_revision or w.source in ('manual','rollback') then
    update private.lhu_sync_items set status='skipped',message='Hồ sơ/lịch đã thay đổi sau khi xem trước; giữ dữ liệu hiện tại.' where job_id=j.id and profile_id=i.profile_id;
    continue;
   end if;
