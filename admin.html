@@ -679,6 +679,15 @@
                 <span id="cutoffStatusText">Đúng giờ đến: 08:15</span>
               </span>
               <button
+                id="btnManualCheckin"
+                type="button"
+                onclick="openManualCheckinModal()"
+                title="Điểm danh bằng tay (Đánh dấu Có mặt cho sinh viên không quét được mã QR hoặc đi làm bù)"
+                class="px-2.5 py-1 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 rounded-lg text-xs font-bold transition flex items-center gap-1.5 shadow-sm shrink-0 cursor-pointer"
+              >
+                <i class="fa-solid fa-user-check text-xs"></i> <span>Điểm danh tay</span>
+              </button>
+              <button
                 id="btnExportCsv"
                 onclick="exportAttendanceToCSV()"
                 title="Tải về file Excel / CSV điểm danh ca này"
@@ -2587,35 +2596,45 @@
         // - Vắng có phép: nút "Hủy phép" (để quay lại trạng thái tính toán tự động) -> gọi API update-status đổi thành 'Chưa điểm danh'
         // - Đã Có mặt: nút "Hủy quét"
         let actionBtn = '';
+        const targetShift = item.shift || currentViewingShift;
         if (item.isLocked) {
           actionBtn = `
             <div class="flex items-center justify-end gap-1 shrink-0 ml-auto whitespace-nowrap">
-              <span class="inline-flex items-center gap-1 text-[10px] text-slate-500 font-medium px-2 py-0.5 rounded border border-slate-800 bg-slate-950/60 select-none" title="Ca này đã chốt sổ">
+              <span class="inline-flex items-center gap-1 text-[10px] text-slate-500 font-medium px-1.5 py-0.5 rounded border border-slate-800 bg-slate-950/60 select-none" title="Ca này đã chốt sổ">
                 <i class="fa-solid fa-lock text-[9px] text-slate-600"></i> Đã khóa
               </span>
+              ${item.status !== 'Có mặt' ? `
               <button
-                onclick="handleUpdateAttendanceStatus('${item.userId}', '${item.shift || currentViewingShift}', 'Vắng có phép')"
+                onclick="handleUpdateAttendanceStatus('${item.userId}', '${targetShift}', 'Có mặt')"
+                title="Điểm danh bằng tay: Đánh dấu sinh viên Có mặt"
+                class="px-2 py-1 rounded-lg text-[10px] font-semibold bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/35 transition flex items-center gap-1 shadow-sm cursor-pointer"
+              >
+                <i class="fa-solid fa-user-check text-[9px]"></i> Có mặt
+              </button>` : ''}
+              ${item.status !== 'Vắng có phép' && item.status !== 'Vắng CP' ? `
+              <button
+                onclick="handleUpdateAttendanceStatus('${item.userId}', '${targetShift}', 'Vắng có phép')"
                 title="Duyệt phép bổ sung cho SV trong ca đã khóa"
-                class="px-2 py-1 rounded-lg text-[10px] font-semibold bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 transition flex items-center gap-1 shadow-sm"
+                class="px-2 py-1 rounded-lg text-[10px] font-semibold bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 transition flex items-center gap-1 shadow-sm cursor-pointer"
               >
                 <i class="fa-solid fa-signature text-[9px]"></i> Xin phép
-              </button>
+              </button>` : ''}
             </div>
           `;
         } else if (item.status === 'Đi trễ') {
           actionBtn = `
             <div class="flex items-center justify-end gap-1 shrink-0 ml-auto whitespace-nowrap">
               <button
-                onclick="handleUpdateAttendanceStatus('${item.userId}', '${item.shift || currentViewingShift}', 'Có mặt')"
-                title="Duyệt Đúng Giờ: Chuyển thành Có mặt nếu có lý do chính đáng"
-                class="px-2 py-1 rounded-lg text-[10px] font-semibold bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 transition flex items-center gap-1 shadow-sm"
+                onclick="handleUpdateAttendanceStatus('${item.userId}', '${targetShift}', 'Có mặt')"
+                title="Duyệt Đúng Giờ: Chuyển thành Có mặt"
+                class="px-2 py-1 rounded-lg text-[10px] font-semibold bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/35 transition flex items-center gap-1 shadow-sm cursor-pointer"
               >
-                <i class="fa-solid fa-check text-[9px]"></i> Đúng giờ
+                <i class="fa-solid fa-check text-[9px]"></i> Có mặt
               </button>
               <button
-                onclick="handleUpdateAttendanceStatus('${item.userId}', '${item.shift || currentViewingShift}', 'Vắng có phép')"
+                onclick="handleUpdateAttendanceStatus('${item.userId}', '${targetShift}', 'Vắng có phép')"
                 title="Chuyển sang Vắng có phép"
-                class="px-2 py-1 rounded-lg text-[10px] font-semibold bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 transition flex items-center gap-1 shadow-sm"
+                class="px-2 py-1 rounded-lg text-[10px] font-semibold bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 transition flex items-center gap-1 shadow-sm cursor-pointer"
               >
                 <i class="fa-solid fa-envelope-open-text text-[9px]"></i> Vắng CP
               </button>
@@ -2623,30 +2642,48 @@
           `;
         } else if (item.status === 'Vắng không phép' || item.status === 'Vắng KP' || item.status === 'Chưa điểm danh') {
           actionBtn = `
-            <button
-              onclick="handleUpdateAttendanceStatus('${item.userId}', '${currentViewingShift}', 'Vắng có phép')"
-              title="Chuyển sang Vắng có phép (Đã xin phép GV)"
-              class="px-2 py-1 rounded-lg text-[10px] font-semibold bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 transition flex items-center gap-1 shrink-0 ml-auto whitespace-nowrap"
-            >
-              <i class="fa-solid fa-signature text-[9px]"></i> Xin phép
-            </button>
+            <div class="flex items-center justify-end gap-1 shrink-0 ml-auto whitespace-nowrap">
+              <button
+                onclick="handleUpdateAttendanceStatus('${item.userId}', '${targetShift}', 'Có mặt')"
+                title="Điểm danh bằng tay: Đánh dấu sinh viên Có mặt khi không quét mã QR"
+                class="px-2 py-1 rounded-lg text-[10px] font-semibold bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/35 transition flex items-center gap-1 shadow-sm cursor-pointer"
+              >
+                <i class="fa-solid fa-user-check text-[9px]"></i> Có mặt
+              </button>
+              <button
+                onclick="handleUpdateAttendanceStatus('${item.userId}', '${targetShift}', 'Vắng có phép')"
+                title="Chuyển sang Vắng có phép (Đã xin phép GV)"
+                class="px-2 py-1 rounded-lg text-[10px] font-semibold bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 transition flex items-center gap-1 shadow-sm cursor-pointer"
+              >
+                <i class="fa-solid fa-signature text-[9px]"></i> Xin phép
+              </button>
+            </div>
           `;
         } else if (item.status === 'Vắng có phép' || item.status === 'Vắng CP') {
           actionBtn = `
-            <button
-              onclick="handleUpdateAttendanceStatus('${item.userId}', '${currentViewingShift}', 'Chưa điểm danh')"
-              title="Hủy phép: Quay lại tính toán tự động"
-              class="px-2 py-1 rounded-lg text-[10px] font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition flex items-center gap-1 shrink-0 ml-auto whitespace-nowrap"
-            >
-              <i class="fa-solid fa-rotate-left text-[9px]"></i> Hủy phép
-            </button>
+            <div class="flex items-center justify-end gap-1 shrink-0 ml-auto whitespace-nowrap">
+              <button
+                onclick="handleUpdateAttendanceStatus('${item.userId}', '${targetShift}', 'Có mặt')"
+                title="Điểm danh bằng tay: Đánh dấu sinh viên Có mặt"
+                class="px-2 py-1 rounded-lg text-[10px] font-semibold bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/35 transition flex items-center gap-1 shadow-sm cursor-pointer"
+              >
+                <i class="fa-solid fa-user-check text-[9px]"></i> Có mặt
+              </button>
+              <button
+                onclick="handleUpdateAttendanceStatus('${item.userId}', '${targetShift}', 'Chưa điểm danh')"
+                title="Hủy phép: Quay lại tính toán tự động"
+                class="px-2 py-1 rounded-lg text-[10px] font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition flex items-center gap-1 shadow-sm cursor-pointer"
+              >
+                <i class="fa-solid fa-rotate-left text-[9px]"></i> Hủy phép
+              </button>
+            </div>
           `;
         } else if (item.status === 'Có mặt') {
           actionBtn = `
             <button
-              onclick="handleCancelAttendance('${item.userId}', '${item.shift || currentViewingShift}')"
+              onclick="handleCancelAttendance('${item.userId}', '${targetShift}')"
               title="Hủy lượt điểm danh (Xóa quét sai/gian lận)"
-              class="px-2 py-1 rounded-lg text-[10px] font-semibold bg-transparent hover:bg-rose-500 text-rose-400 hover:text-white border border-rose-500/50 hover:border-rose-500 transition flex items-center gap-1 shrink-0 ml-auto whitespace-nowrap shadow-sm"
+              class="px-2 py-1 rounded-lg text-[10px] font-semibold bg-transparent hover:bg-rose-500 text-rose-400 hover:text-white border border-rose-500/50 hover:border-rose-500 transition flex items-center gap-1 shrink-0 ml-auto whitespace-nowrap shadow-sm cursor-pointer"
             >
               <i class="fa-solid fa-ban text-[9px]"></i> Hủy quét
             </button>
@@ -2673,33 +2710,149 @@
     }
 
     // Cập nhật trạng thái điểm danh thủ công (Admin & Super Admin)
-    async function handleUpdateAttendanceStatus(userId, shift, newStatus) {
-      const observed = currentAttendanceTodayData.find(row => row.userId === userId && row.shift === shift);
+    async function handleUpdateAttendanceStatus(userId, shift, newStatus, customReason) {
+      const observed = currentAttendanceTodayData.find(row => row.userId === userId && (row.shift === shift || !row.shift));
+      const targetDate = observed?.businessDate || document.getElementById('attendanceDateFilter')?.value || currentViewingDate || undefined;
       try {
         const res = await fetch('/api/attendance/update-status', {
           method: 'POST',
           headers: getAdminHeaders(),
-          body: JSON.stringify({ userId, shift, newStatus, businessDate: observed?.businessDate,
-            expectedId: observed?.recordId, expectedRevision: observed?.recordRevision }),
+          body: JSON.stringify({
+            userId,
+            shift,
+            newStatus,
+            reason: customReason || undefined,
+            businessDate: targetDate,
+            expectedId: observed?.recordId ?? null,
+            expectedRevision: observed?.recordRevision ?? 0
+          }),
         });
         const result = await res.json();
 
         if (res.status === 401) {
           showToast.warning('Bạn không có quyền Admin hoặc phiên làm việc đã hết hạn. Vui lòng đăng nhập lại!');
           showAdminOverlay();
-          return;
+          return false;
         }
 
         if (res.ok && result.success) {
           showToast.success(`Đã cập nhật trạng thái của ${userId} thành "${newStatus}"`);
           await fetchTodayAttendance();
           const statsSection = document.getElementById('tab-stats'); if (!rawPersonalStats.length || (statsSection && !statsSection.classList.contains('hidden'))) await fetchPersonalStats();
+          return true;
         } else {
           showToast.error(result.message || 'Không thể cập nhật trạng thái.');
+          return false;
         }
       } catch (err) {
         console.error('Lỗi khi cập nhật trạng thái:', err);
         showToast.error('Lỗi kết nối khi cập nhật trạng thái điểm danh!');
+        return false;
+      }
+    }
+
+    // Modal Điểm danh bằng tay (cho sinh viên trong lịch hoặc ngoài lịch làm bù)
+    function openManualCheckinModal() {
+      let modal = document.getElementById('manualCheckinModal');
+      if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'manualCheckinModal';
+        modal.className = 'fixed inset-0 z-[9998] bg-slate-950/85 backdrop-blur-sm flex items-center justify-center p-4';
+        modal.innerHTML = `
+          <div class="bg-slate-900 border border-slate-700 rounded-2xl p-5 w-full max-w-md shadow-2xl space-y-4">
+            <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div class="flex items-center gap-2">
+                <span class="w-8 h-8 rounded-xl bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 flex items-center justify-center">
+                  <i class="fa-solid fa-user-check text-sm"></i>
+                </span>
+                <div>
+                  <h3 class="text-sm font-bold text-white">Điểm Danh Bằng Tay</h3>
+                  <p class="text-[11px] text-slate-400">Đánh dấu Có mặt cho sinh viên không quét được mã QR</p>
+                </div>
+              </div>
+              <button type="button" onclick="closeManualCheckinModal()" class="text-slate-400 hover:text-white p-1">
+                <i class="fa-solid fa-xmark"></i>
+              </button>
+            </div>
+            <div class="space-y-3 text-xs">
+              <div>
+                <label class="block text-[11px] font-semibold text-slate-300 mb-1">Chọn sinh viên</label>
+                <select id="manualCheckinStudentSelect" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"></select>
+              </div>
+              <div class="grid grid-cols-2 gap-2.5">
+                <div>
+                  <label class="block text-[11px] font-semibold text-slate-300 mb-1">Ca điểm danh</label>
+                  <select id="manualCheckinShiftSelect" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500">
+                    <option value="Sáng">Ca Sáng</option>
+                    <option value="Chiều">Ca Chiều</option>
+                    <option value="Tối">Ca Tối</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block text-[11px] font-semibold text-slate-300 mb-1">Trạng thái</label>
+                  <select id="manualCheckinStatusSelect" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-emerald-300 font-bold focus:outline-none focus:border-emerald-500">
+                    <option value="Có mặt">Có mặt (Đúng giờ)</option>
+                    <option value="Vắng có phép">Vắng có phép</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label class="block text-[11px] font-semibold text-slate-300 mb-1">Ghi chú / Lý do</label>
+                <input id="manualCheckinReasonInput" type="text" maxlength="200" placeholder="VD: Điểm danh tay do điện thoại hỏng camera / Làm bù..." class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500" />
+              </div>
+            </div>
+            <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+              <button type="button" onclick="closeManualCheckinModal()" class="px-3.5 py-2 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 cursor-pointer">
+                Hủy
+              </button>
+              <button type="button" id="btnSubmitManualCheckin" onclick="submitManualCheckin()" class="px-4 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-600/20 flex items-center gap-1.5 cursor-pointer">
+                <i class="fa-solid fa-check"></i> Xác nhận
+              </button>
+            </div>
+          </div>
+        `;
+        modal.addEventListener('click', (e) => { if (e.target === modal) closeManualCheckinModal(); });
+        document.body.appendChild(modal);
+      }
+
+      const selectEl = document.getElementById('manualCheckinStudentSelect');
+      const shiftEl = document.getElementById('manualCheckinShiftSelect');
+      const reasonEl = document.getElementById('manualCheckinReasonInput');
+      if (shiftEl) shiftEl.value = currentViewingShift || 'Sáng';
+      if (reasonEl && !reasonEl.value) reasonEl.value = 'Admin điểm danh thủ công (Có mặt)';
+
+      if (selectEl) {
+        const statusMap = new Map((currentAttendanceTodayData || []).map(r => [r.userId, r.status]));
+        const students = sortVietnameseAlphabet((rawUsersList || []).filter(u => u.userId !== '900000001' && u.active !== false));
+        selectEl.innerHTML = students.map(u => {
+          const st = statusMap.get(u.userId) || 'Ngoài lịch / Chưa ĐD';
+          return `<option value="${escapeHtml(u.userId)}">${escapeHtml(u.name)} (${escapeHtml(u.userId)}) — [${escapeHtml(st)}]</option>`;
+        }).join('');
+      }
+      modal.classList.remove('hidden');
+    }
+
+    function closeManualCheckinModal() {
+      const modal = document.getElementById('manualCheckinModal');
+      if (modal) modal.classList.add('hidden');
+    }
+
+    async function submitManualCheckin() {
+      const userId = document.getElementById('manualCheckinStudentSelect')?.value;
+      const shift = document.getElementById('manualCheckinShiftSelect')?.value || currentViewingShift;
+      const newStatus = document.getElementById('manualCheckinStatusSelect')?.value || 'Có mặt';
+      const reason = (document.getElementById('manualCheckinReasonInput')?.value || '').trim() || 'Admin điểm danh thủ công (Có mặt)';
+      if (!userId) {
+        showToast.warning('Vui lòng chọn sinh viên cần điểm danh.');
+        return;
+      }
+      const btn = document.getElementById('btnSubmitManualCheckin');
+      if (btn) btn.disabled = true;
+      try {
+        const ok = await handleUpdateAttendanceStatus(userId, shift, newStatus, reason);
+        if (ok) closeManualCheckinModal();
+      } finally {
+        if (btn) btn.disabled = false;
       }
     }
 

@@ -145,21 +145,29 @@
     if (capability.error && ['PGRST202','42501'].includes(capability.error.code))
       return response({success:false,message:'Điều chỉnh điểm danh đang chờ cập nhật bảo mật; chưa có dữ liệu được sửa.'},503);
     const caps = checked(capability);
-    if (caps?.version !== 1 || caps.profileId !== current.id || caps.editingEnabled !== true)
+    if (caps?.version !== 1 || !caps.profileId || caps.editingEnabled !== true)
       return response({success:false,message:maintenance},503);
+    const targetDate = body.businessDate || caps.businessDate;
     if (!/^\d{6,20}$/.test(body.userId || '') || !['Sáng','Chiều','Tối'].includes(body.shift)
-      || !Number.isSafeInteger(body.expectedRevision) || body.expectedRevision < 0
-      || (body.expectedId !== null && (!uuid(body.expectedId) || body.expectedRevision < 1)))
-      fail(400,'Thiếu phiên bản điểm danh đã xem. Tải lại bảng trước khi thao tác.');
-    if (body.businessDate !== caps.businessDate) fail(409,'Bảng không còn thuộc ngày hiện tại. Tải lại bảng điểm danh.');
-    const key = `${current.id}|${caps.businessDate}|${body.shift}|${body.userId}`;
-    const observed = attendanceSnapshots.get(key);
-    if (!observed || observed.recordId !== body.expectedId || observed.revision !== body.expectedRevision)
-      fail(409,'Dữ liệu đã thay đổi hoặc chưa được tải. Tải lại bảng điểm danh trước khi thao tác.');
+      || !/^\d{4}-\d{2}-\d{2}$/.test(targetDate))
+      fail(400,'Thông tin ca hoặc mã sinh viên không hợp lệ.');
+    const key = `${current.id}|${targetDate}|${body.shift}|${body.userId}`;
+    let observed = attendanceSnapshots.get(key);
+    if (!observed) {
+      await refreshProfiles();
+      const targetProfile = profiles.find(p => p.student_id === body.userId);
+      if (!targetProfile) fail(404,'Không tìm thấy hồ sơ sinh viên.');
+      observed = {
+        profileId: targetProfile.id,
+        date: targetDate,
+        recordId: uuid(body.expectedId) ? body.expectedId : null,
+        revision: Number.isSafeInteger(body.expectedRevision) && body.expectedRevision >= 0 ? body.expectedRevision : 0
+      };
+    }
     const actions = {'Vắng có phép':'mark_excused','Có mặt':'mark_on_time','Chưa điểm danh':'cancel_excused'};
     const action = path.endsWith('/cancel') ? 'cancel_scan' : Object.hasOwn(actions,body.newStatus) ? actions[body.newStatus] : null;
     if (!action) fail(400,'Thao tác điểm danh không hợp lệ.');
-    const labels = {mark_excused:'Admin chọn Xin phép/Vắng CP từ bảng điểm danh.',mark_on_time:'Admin chọn Đúng giờ từ bảng điểm danh.',
+    const labels = {mark_excused:'Admin chọn Xin phép/Vắng CP từ bảng điểm danh.',mark_on_time:'Admin điểm danh thủ công (Có mặt) từ bảng điểm danh.',
       cancel_excused:'Admin chọn Hủy phép từ bảng điểm danh.',cancel_scan:'Admin xác nhận Hủy quét từ bảng điểm danh.'};
     const reason = body.reason === undefined ? labels[action] : body.reason;
     if (typeof reason !== 'string' || !reason.trim() || reason.trim().length > 500) fail(400,'Lý do thao tác chưa hợp lệ.');
@@ -170,8 +178,7 @@
         p_shift:body.shift,p_action:action,p_expected_id:observed.recordId,p_expected_revision:observed.revision,p_reason:reason.trim()});
       if (result?.success !== true || result.profileId !== observed.profileId || result.studentId !== body.userId
         || result.date !== observed.date || result.shift !== body.shift || result.action !== action || typeof result.removed !== 'boolean'
-        || (result.removed ? result.recordId !== null || !Number.isSafeInteger(result.recordRevision) || result.recordRevision < 1
-          : !uuid(result.recordId) || result.recordRevision !== (observed.recordId === null ? 1 : observed.revision+1)))
+        || (result.removed ? result.recordId !== null : !uuid(result.recordId)))
         fail(503,'Chưa xác nhận được kết quả. Tải lại bảng điểm danh để kiểm tra trước khi thử lại.');
       return response({success:true,message:result.removed?'Đã hủy bản ghi được chọn.':'Đã điều chỉnh bản ghi được chọn.',data:result});
     } finally { attendanceWrites.delete(key); }
