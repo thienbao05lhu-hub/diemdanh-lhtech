@@ -676,7 +676,7 @@
 
               <span id="cutoffStatusBadge" class="text-[10px] px-2 py-1 rounded-md font-mono flex items-center gap-1 bg-slate-950 text-slate-400 border border-slate-800 shrink-0">
                 <i class="fa-regular fa-clock text-amber-400"></i>
-                <span id="cutoffStatusText">Đúng giờ đến: 08:15</span>
+                <span id="cutoffStatusText">Đúng giờ đến: 08:10</span>
               </span>
               <button
                 id="btnManualCheckin"
@@ -1194,7 +1194,7 @@
                   <span id="finesActiveFilterBadge" class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30">Tất cả (từ 11/11/2026)</span>
                 </h2>
               </div>
-              <p class="text-[11px] text-slate-400 mt-0.5">Tự động tính phạt đi trễ (500đ/phút, tối đa 30.000đ/ca) & vắng không phép (30.000đ/buổi)</p>
+              <p class="text-[11px] text-slate-400 mt-0.5">Tự động tính phạt 500đ/phút theo thời lượng ca làm — Đi trễ: 500đ × số phút trễ (sau 10p cho phép) &bull; Vắng KP: 500đ × tổng số phút ca (Sáng 180p: 90.000đ &bull; Chiều 225p: 112.500đ &bull; Tối 240p: 120.000đ)</p>
             </div>
           </div>
 
@@ -1349,7 +1349,7 @@
           </div>
           <div class="mt-2">
             <p id="kpiTotalUnexcusedFine" class="text-2xl font-bold font-mono text-rose-400">0 đ</p>
-            <p id="kpiUnexcusedSubtext" class="text-[10px] text-slate-400 mt-0.5">0 buổi vắng (30.000đ/buổi)</p>
+            <p id="kpiUnexcusedSubtext" class="text-[10px] text-slate-400 mt-0.5">0 buổi vắng (500đ/phút theo ca)</p>
           </div>
         </div>
 
@@ -1379,7 +1379,7 @@
             </h3>
           </div>
           <div class="text-[11px] text-slate-400">
-            <span>Công thức: Đi trễ = 500đ/phút (max 30k) • Vắng KP = 30.000đ/buổi • Có mặt / Vắng CP = 0đ</span>
+            <span>Công thức: 500đ/phút • Đi trễ = Số phút trễ (sau 10p) × 500đ • Vắng KP = Số phút ca × 500đ (Sáng 90k • Chiều 112.5k • Tối 120k) • Có mặt / Vắng CP = 0đ</span>
           </div>
         </div>
 
@@ -3185,7 +3185,7 @@
       if (kpiLate) kpiLate.innerText = formatVND(summary.totalLateFine);
       if (kpiLateSub) kpiLateSub.innerText = `${summary.totalLateCount || 0} lượt trễ • ${summary.totalLateMinutes || 0} phút trễ`;
       if (kpiUnexcused) kpiUnexcused.innerText = formatVND(summary.totalUnexcusedFine);
-      if (kpiUnexcusedSub) kpiUnexcusedSub.innerText = `${summary.totalUnexcusedCount || 0} buổi vắng (30.000đ/buổi)`;
+      if (kpiUnexcusedSub) kpiUnexcusedSub.innerText = `${summary.totalUnexcusedCount || 0} buổi vắng (500đ/phút theo ca)`;
 
       const totalS = summary.totalStudents || rawFinesData.length || 0;
       const fineS = summary.studentsWithFines || 0;
@@ -3340,7 +3340,7 @@
                 <td class="px-3 py-2 font-semibold text-slate-300">Ca ${escapeHtml(v.shift)}</td>
                 <td class="px-3 py-2 text-center">${statusBadge}</td>
                 <td class="px-3 py-2 text-center font-mono ${v.scannedAt ? 'text-emerald-400' : 'text-slate-600'}">${scanTimeStr}</td>
-                <td class="px-3 py-2 text-center font-mono ${isLate ? 'text-orange-400 font-bold' : 'text-slate-600'}">${isLate ? v.lateMinutes + ' phút' : '-'}</td>
+                <td class="px-3 py-2 text-center font-mono ${isLate ? 'text-orange-400 font-bold' : 'text-rose-400 font-bold'}">${isLate ? v.lateMinutes + ' phút' : (v.shiftMinutes ? v.shiftMinutes + ' phút (cả ca)' : '-')}</td>
                 <td class="px-3 py-2 text-right font-mono font-bold text-amber-400">${formatVND(v.fine)}</td>
                 <td class="px-3 py-2 text-slate-400 text-[11px] truncate max-w-[140px]">${escapeHtml((!v.note || v.note.includes('chưa ghi nhận điểm danh') || v.note.startsWith('Chốt ca:')) ? '-' : v.note)}</td>
               </tr>
@@ -3386,7 +3386,7 @@
           if (v.status === 'Đi trễ') {
             return `${d} Ca ${v.shift} (Trễ ${v.lateMinutes}p: ${v.fine.toLocaleString('vi-VN')}đ)`;
           } else {
-            return `${d} Ca ${v.shift} (Vắng KP: ${v.fine.toLocaleString('vi-VN')}đ)`;
+            return `${d} Ca ${v.shift} (Vắng KP${v.shiftMinutes ? ' ' + v.shiftMinutes + 'p' : ''}: ${v.fine.toLocaleString('vi-VN')}đ)`;
           }
         }).join('; ');
 
@@ -3530,7 +3530,7 @@
             } else if (ev.status === 'Vắng có phép') {
               return `${d} Ca ${ev.shift} (Vắng CP${ev.note ? ': ' + ev.note : ''})`;
             } else {
-              return `${d} Ca ${ev.shift} (Vắng KP: ${Number(ev.fine || 30000).toLocaleString('vi-VN')}đ)`;
+              return `${d} Ca ${ev.shift} (Vắng KP${ev.shiftMinutes ? ' ' + ev.shiftMinutes + 'p' : ''}: ${Number(ev.fine || 0).toLocaleString('vi-VN')}đ)`;
             }
           }).join('; ');
 

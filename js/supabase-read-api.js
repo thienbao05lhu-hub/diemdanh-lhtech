@@ -841,11 +841,11 @@
         const shift = url.searchParams.get('shift') || (clock.minutes < 720 ? 'Sáng' : clock.minutes < 1080 ? 'Chiều' : 'Tối');
         if (!['Sáng','Chiều','Tối'].includes(shift)) fail(400, 'Ca không hợp lệ.');
         const data = shiftRows(shift, targetDate, schedules, records);
-        const [cutoff, closing] = shift === 'Sáng' ? [495,660] : shift === 'Chiều' ? [795,1020] : [1095,1320];
+        const [cutoff, closing] = shift === 'Sáng' ? [490,660] : shift === 'Chiều' ? [805,1020] : [1090,1320];
         const isClosed = targetDate < clock.date ? true : targetDate > clock.date ? false : clock.minutes >= closing;
         const isPastCutoff = targetDate < clock.date ? true : targetDate > clock.date ? false : clock.minutes > cutoff;
         return response({ success: true, date: targetDate, data, shift, isClosed,
-          isPastCutoff, cutoffTimeStr: shift === 'Sáng' ? '08:15' : shift === 'Chiều' ? '13:15' : '18:15',
+          isPastCutoff, cutoffTimeStr: shift === 'Sáng' ? '08:10' : shift === 'Chiều' ? '13:25' : '18:10',
           closingTimeStr: shift === 'Sáng' ? '11:00' : shift === 'Chiều' ? '17:00' : '22:00',
           stats: { total: data.length, present: data.filter(r => r.status === 'Có mặt').length,
             late: data.filter(r => r.status === 'Đi trễ').length,
@@ -942,9 +942,14 @@
       }
 
       const shiftCutoffs = {
-        'Sáng': '08:15:00',
-        'Chiều': '13:15:00',
-        'Tối': '18:15:00'
+        'Sáng': '08:10:00',
+        'Chiều': '13:25:00',
+        'Tối': '18:10:00'
+      };
+      const shiftDurationMinutes = {
+        'Sáng': 180,  // 08:00 - 11:00 = 180 phút (90.000đ)
+        'Chiều': 225, // 13:15 - 17:00 = 225 phút (112.500đ)
+        'Tối': 240    // 18:00 - 22:00 = 240 phút (120.000đ)
       };
 
       const studentDataMap = new Map();
@@ -972,7 +977,7 @@
 
         const st = (record.status || '').trim();
         if (st === 'Đi trễ') {
-          const cutoffTime = shiftCutoffs[record.shift] || '08:15:00';
+          const cutoffTime = shiftCutoffs[record.shift] || '08:10:00';
           const cutoffIso = `${record.business_date}T${cutoffTime}+07:00`;
           const cutoffMs = Date.parse(cutoffIso);
           let lateMinutes = 1;
@@ -983,7 +988,7 @@
               lateMinutes = Math.max(1, diff > 0 ? diff : 1);
             }
           }
-          const fine = Math.min(30000, lateMinutes * 500);
+          const fine = lateMinutes * 500;
 
           s.lateCount += 1;
           s.totalLateMinutes += lateMinutes;
@@ -1000,7 +1005,8 @@
             note: record.note || ''
           });
         } else if (st === 'Vắng không phép' || st === 'Vắng KP') {
-          const fine = 30000;
+          const shiftMinutes = shiftDurationMinutes[record.shift] || 180;
+          const fine = shiftMinutes * 500;
           s.unexcusedCount += 1;
           s.unexcusedFine += fine;
           s.totalFine += fine;
@@ -1011,6 +1017,7 @@
             status: 'Vắng không phép',
             scannedAt: null,
             lateMinutes: 0,
+            shiftMinutes,
             fine,
             note: record.note || ''
           });
