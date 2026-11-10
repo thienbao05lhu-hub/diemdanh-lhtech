@@ -952,8 +952,10 @@
           lateFine: 0,
           unexcusedCount: 0,
           unexcusedFine: 0,
+          excusedCount: 0,
           totalFine: 0,
-          violations: []
+          violations: [],
+          excusedDetails: []
         });
       }
 
@@ -1005,6 +1007,15 @@
             fine,
             note: record.note || ''
           });
+        } else if (st === 'Vắng có phép' || st === 'Vắng CP') {
+          s.excusedCount += 1;
+          s.excusedDetails.push({
+            id: record.id,
+            date: record.business_date,
+            shift: record.shift,
+            status: 'Vắng có phép',
+            note: record.note || ''
+          });
         }
       }
 
@@ -1016,6 +1027,7 @@
         totalLateCount: 0,
         totalUnexcusedFine: 0,
         totalUnexcusedCount: 0,
+        totalExcusedCount: 0,
         studentsWithFines: 0,
         totalStudents: students.length
       };
@@ -1027,6 +1039,7 @@
         summary.totalLateCount += s.lateCount;
         summary.totalUnexcusedFine += s.unexcusedFine;
         summary.totalUnexcusedCount += s.unexcusedCount;
+        summary.totalExcusedCount += s.excusedCount;
         if (s.totalFine > 0) summary.studentsWithFines += 1;
       }
 

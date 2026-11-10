@@ -12,7 +12,7 @@
   <script src="vendor/supabase-2.118.0.js"></script>
   <script src="js/config.js?v=20261101-safe-read"></script>
   <script src="js/attendance-trial.js?v=20261104-qr2"></script>
-  <script src="js/supabase-read-api.js?v=20261105-dualrole1"></script>
+  <script src="js/supabase-read-api.js?v=20261110-weekly1"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
     body { font-family: 'Plus Jakarta Sans', sans-serif; }
@@ -246,18 +246,26 @@
       </div>
 
       <!-- Modal Footer -->
-      <div class="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-800">
+      <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-800 flex-wrap">
         <button
           onclick="closeDailySummaryModal()"
-          class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-semibold transition"
+          class="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-semibold transition"
         >
           Đóng
         </button>
         <button
-          onclick="exportDailySummaryToCSV()"
-          class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-semibold transition flex items-center gap-1.5 shadow-md shadow-emerald-600/20"
+          type="button"
+          onclick="exportWeeklySummaryCSV(this)"
+          title="Tải file CSV Tổng kết Tuần (Chỉ thống kê Phạt, Đi trễ, Vắng — không thống kê Có mặt)"
+          class="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold transition flex items-center gap-1.5 shadow-md shadow-indigo-600/20 cursor-pointer"
         >
-          <i class="fa-solid fa-file-csv text-sm"></i> Tải file CSV
+          <i class="fa-solid fa-calendar-week text-sm"></i> Tổng Kết Tuần (CSV)
+        </button>
+        <button
+          onclick="exportDailySummaryToCSV()"
+          class="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-semibold transition flex items-center gap-1.5 shadow-md shadow-emerald-600/20"
+        >
+          <i class="fa-solid fa-file-csv text-sm"></i> Tải CSV Ngày
         </button>
       </div>
     </div>
@@ -363,22 +371,31 @@
               </span>
             </div>
 
-            <!-- Cụm 2 nút bấm dàn ngang, w-full, flex-1 mỗi nút -->
-            <div class="flex flex-row gap-2 w-full">
+            <!-- Cụm nút bấm Tổng Kết Ngày, Tổng Kết Tuần (CSV) & Reset -->
+            <div class="grid grid-cols-3 gap-1.5 w-full">
               <button
                 onclick="handleDailyClose()"
                 title="Tổng kết toàn bộ dữ liệu ngày hôm nay & Xuất báo cáo CSV"
-                class="flex-1 px-2 py-1.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 hover:text-amber-300 border border-amber-500/30 rounded-lg text-[11px] font-semibold transition flex items-center justify-center gap-1.5 shadow-sm whitespace-nowrap"
+                class="px-2 py-1.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 hover:text-amber-300 border border-amber-500/30 rounded-lg text-[11px] font-semibold transition flex items-center justify-center gap-1 shadow-sm whitespace-nowrap cursor-pointer"
               >
-                <i class="fa-solid fa-chart-pie text-xs shrink-0"></i>
+                <i class="fa-solid fa-chart-pie text-[11px] shrink-0"></i>
                 <span class="truncate">Tổng Kết Ngày</span>
+              </button>
+              <button
+                type="button"
+                onclick="exportWeeklySummaryCSV(this)"
+                title="Tải file CSV Tổng kết Tuần (Chỉ thống kê Phạt, Đi trễ, Vắng — không thống kê Có mặt)"
+                class="px-2 py-1.5 bg-indigo-500/15 hover:bg-indigo-500/25 text-indigo-300 hover:text-indigo-200 border border-indigo-500/35 rounded-lg text-[11px] font-semibold transition flex items-center justify-center gap-1 shadow-sm whitespace-nowrap cursor-pointer"
+              >
+                <i class="fa-solid fa-file-csv text-[11px] shrink-0"></i>
+                <span class="truncate">Tổng Kết Tuần</span>
               </button>
               <button
                 onclick="handleResetData()"
                 title="Xóa toàn bộ lịch sử điểm danh hôm nay và reset hệ thống về 0"
-                class="flex-1 px-2 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 hover:text-rose-300 border border-rose-500/30 rounded-lg text-[11px] font-semibold transition flex items-center justify-center gap-1 shadow-sm whitespace-nowrap"
+                class="px-2 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 hover:text-rose-300 border border-rose-500/30 rounded-lg text-[11px] font-semibold transition flex items-center justify-center gap-1 shadow-sm whitespace-nowrap cursor-pointer"
               >
-                <i class="fa-solid fa-rotate-left text-xs shrink-0"></i>
+                <i class="fa-solid fa-rotate-left text-[11px] shrink-0"></i>
                 <span class="truncate">Reset Dữ Liệu</span>
               </button>
             </div>
@@ -1182,6 +1199,15 @@
             >
               <i class="fa-solid fa-rotate text-xs"></i>
               <span>Làm Mới</span>
+            </button>
+            <button
+              type="button"
+              onclick="exportWeeklySummaryCSV(this)"
+              class="px-3.5 py-2 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-500/20 border border-indigo-400/40 transition flex items-center gap-2 cursor-pointer active:scale-95"
+              title="Tải file CSV Tổng kết Tuần (Chỉ thống kê Phạt, Đi trễ, Vắng — không thống kê Có mặt)"
+            >
+              <i class="fa-solid fa-calendar-week text-sm"></i>
+              <span>Tổng Kết Tuần (CSV)</span>
             </button>
             <button
               type="button"
@@ -3239,6 +3265,190 @@
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
       showToast.success('Đã tải xuống file CSV Báo Cáo Quỹ Phạt!');
+    }
+
+    /**
+     * Xuất file CSV Tổng Kết Tuần: CHỈ thống kê Phạt, Đi trễ, Vắng (Không phép & Có phép).
+     * Tuyệt đối KHÔNG thống kê lượt Có mặt.
+     */
+    async function exportWeeklySummaryCSV(btnEl) {
+      const originalHtml = btnEl ? btnEl.innerHTML : '';
+      if (btnEl) {
+        btnEl.disabled = true;
+        btnEl.innerHTML = `<i class="fa-solid fa-spinner fa-spin text-xs"></i> <span>Đang xuất...</span>`;
+      }
+
+      try {
+        // Tính tuần của ngày đang chọn (currentViewingDate) hoặc tuần hiện tại
+        let baseDate = new Date();
+        if (typeof currentViewingDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(currentViewingDate)) {
+          const parsed = new Date(currentViewingDate + 'T12:00:00+07:00');
+          if (!Number.isNaN(parsed.getTime())) baseDate = parsed;
+        }
+        const day = (baseDate.getDay() + 6) % 7; // 0 = Thứ 2, 6 = Chủ nhật
+        const monday = new Date(baseDate);
+        monday.setDate(baseDate.getDate() - day);
+        const sunday = new Date(monday);
+        sunday.setDate(monday.getDate() + 6);
+        const fmt = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        const fromDate = fmt(monday);
+        const toDate = fmt(sunday);
+        const weekRangeLabel = `${fromDate.split('-').reverse().join('/')} - ${toDate.split('-').reverse().join('/')}`;
+
+        const res = await fetch(`/api/attendance/fines?from=${encodeURIComponent(fromDate)}&to=${encodeURIComponent(toDate)}`, {
+          headers: getAdminHeaders()
+        });
+        const result = await res.json();
+        if (!res.ok || !result.success) {
+          showToast.error(result.message || 'Không thể tải dữ liệu tổng kết tuần.');
+          return;
+        }
+
+        const allStudents = result.data || [];
+        // Chỉ lọc sinh viên có phát sinh Đi trễ, Vắng (Không phép / Có phép) hoặc Tiền phạt trong tuần (Không thống kê Có mặt)
+        const filtered = allStudents.filter(s =>
+          (s.lateCount || 0) > 0 ||
+          (s.unexcusedCount || 0) > 0 ||
+          (s.excusedCount || 0) > 0 ||
+          (s.totalFine || 0) > 0
+        );
+
+        const sorted = [...filtered].sort((a, b) =>
+          (b.totalFine - a.totalFine) ||
+          ((b.unexcusedCount + b.lateCount + (b.excusedCount || 0)) - (a.unexcusedCount + a.lateCount + (a.excusedCount || 0))) ||
+          a.name.localeCompare(b.name, 'vi')
+        );
+
+        const headers = [
+          'STT',
+          'Tuần Thống Kê',
+          'Mã Sinh Viên',
+          'Họ Và Tên',
+          'Lớp / Khoa',
+          'Số Lần Đi Trễ',
+          'Tổng Phút Trễ',
+          'Số Buổi Vắng Không Phép',
+          'Số Buổi Vắng Có Phép',
+          'Tổng Số Buổi Vắng',
+          'Tiền Phạt Đi Trễ (VNĐ)',
+          'Tiền Phạt Vắng KP (VNĐ)',
+          'Tổng Tiền Phạt (VNĐ)',
+          'Chi Tiết Ca Trễ / Vắng Trong Tuần'
+        ];
+
+        const escapeCSV = (val) => (window.AttendanceCsv ? window.AttendanceCsv.cell(val) : ('"' + String(val ?? '').replace(/"/g, '""') + '"'));
+
+        let sumLateCount = 0;
+        let sumLateMinutes = 0;
+        let sumUnexcused = 0;
+        let sumExcused = 0;
+        let sumLateFine = 0;
+        let sumUnexcusedFine = 0;
+        let sumTotalFine = 0;
+
+        const rows = sorted.map((s, index) => {
+          const lateCount = s.lateCount || 0;
+          const lateMinutes = s.totalLateMinutes || 0;
+          const unexcusedCount = s.unexcusedCount || 0;
+          const excusedCount = s.excusedCount || 0;
+          const totalAbsent = unexcusedCount + excusedCount;
+          const lateFine = s.lateFine || 0;
+          const unexcusedFine = s.unexcusedFine || 0;
+          const totalFine = s.totalFine || 0;
+
+          sumLateCount += lateCount;
+          sumLateMinutes += lateMinutes;
+          sumUnexcused += unexcusedCount;
+          sumExcused += excusedCount;
+          sumLateFine += lateFine;
+          sumUnexcusedFine += unexcusedFine;
+          sumTotalFine += totalFine;
+
+          // Gom chi tiết các ca Trễ + Vắng KP + Vắng CP (Tuyệt đối không liệt kê Có mặt)
+          const allEvents = [
+            ...(s.violations || []),
+            ...(s.excusedDetails || [])
+          ].sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
+
+          const detailStr = allEvents.map(ev => {
+            const d = ev.date ? ev.date.split('-').reverse().slice(0, 2).join('/') : '';
+            if (ev.status === 'Đi trễ') {
+              return `${d} Ca ${ev.shift} (Trễ ${ev.lateMinutes}p: ${Number(ev.fine || 0).toLocaleString('vi-VN')}đ)`;
+            } else if (ev.status === 'Vắng có phép') {
+              return `${d} Ca ${ev.shift} (Vắng CP${ev.note ? ': ' + ev.note : ''})`;
+            } else {
+              return `${d} Ca ${ev.shift} (Vắng KP: ${Number(ev.fine || 30000).toLocaleString('vi-VN')}đ)`;
+            }
+          }).join('; ');
+
+          return [
+            index + 1,
+            weekRangeLabel,
+            s.userId,
+            s.name,
+            s.department || '',
+            lateCount,
+            lateMinutes,
+            unexcusedCount,
+            excusedCount,
+            totalAbsent,
+            lateFine,
+            unexcusedFine,
+            totalFine,
+            detailStr
+          ].map(escapeCSV).join(',');
+        });
+
+        if (rows.length === 0) {
+          rows.push([
+            1,
+            weekRangeLabel,
+            '-',
+            'Không có sinh viên nào Đi trễ, Vắng hoặc Bị phạt trong tuần này',
+            '-',
+            0, 0, 0, 0, 0, 0, 0, 0,
+            'Tất cả các ca đều đúng giờ'
+          ].map(escapeCSV).join(','));
+        } else {
+          // Thêm dòng TỔNG CỘNG TUẦN ở cuối file CSV
+          rows.push([
+            '',
+            weekRangeLabel,
+            'TỔNG CỘNG',
+            `Tổng hợp ${sorted.length} sinh viên có Trễ / Vắng / Phạt`,
+            '',
+            sumLateCount,
+            sumLateMinutes,
+            sumUnexcused,
+            sumExcused,
+            sumUnexcused + sumExcused,
+            sumLateFine,
+            sumUnexcusedFine,
+            sumTotalFine,
+            ''
+          ].map(escapeCSV).join(','));
+        }
+
+        const csvContent = '\uFEFF' + [headers.map(escapeCSV).join(','), ...rows].join('\r\n') + '\r\n';
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `Tong_Ket_Tuan_Phat_Tre_Vang_${fromDate}_den_${toDate}.csv`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        showToast.success(`Đã tải file CSV Tổng Kết Tuần (${weekRangeLabel})!`);
+      } catch (err) {
+        console.error('Lỗi khi xuất CSV tổng kết tuần:', err);
+        showToast.error('Có lỗi xảy ra khi xuất file CSV Tổng Kết Tuần!');
+      } finally {
+        if (btnEl) {
+          btnEl.disabled = false;
+          btnEl.innerHTML = originalHtml;
+        }
+      }
     }
 
     // QUẢN LÝ LỊCH LÊN XƯỞNG MẶC ĐỊNH (T2 -> CN, Ca Sáng / Ca Chiều)
