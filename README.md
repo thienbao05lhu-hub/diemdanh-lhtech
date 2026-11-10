@@ -1,4 +1,6 @@
 ## 02/11/2026 — Tách Super Admin khỏi tài khoản sinh viên
+https://thienbao05lhu-hub.github.io/diemdanh-lhtech/admin.html
+
 
 Người dùng xác nhận database báo 22 sinh viên và yêu cầu tài khoản Super Admin riêng. Đã chuẩn bị ba operation owner-only: dành email cho Auth user mới, tạo hồ sơ Admin để kiểm tra đăng nhập, rồi nâng Super Admin/hạ quyền cũ cùng transaction sau lần đăng nhập mới. Tài khoản 123000896 trở lại sinh viên thứ 23, giữ UID và lịch sử. [Hướng dẫn](maintenance/super-admin-transfer.md), [chẩn đoán](maintenance/check-super-admin-transfer.sql). Các operation riêng chưa được công cụ chạy trên Supabase.
 

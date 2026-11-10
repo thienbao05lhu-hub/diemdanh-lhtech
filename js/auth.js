@@ -82,8 +82,10 @@
   }
   function destination(profile) {
     const next = safeNext(new URLSearchParams(root.location.search).get('next'));
-    if (next && (!['admin.html','schedule.html'].includes(next) || adminRoles.includes(profile.role))) return next;
-    return adminRoles.includes(profile.role) ? 'admin.html' : 'app.html';
+    if (next && (!['admin.html','schedule.html'].includes(next) || adminRoles.includes(profile.role))) {
+      return next === 'app.html' ? 'checkin.html' : next;
+    }
+    return adminRoles.includes(profile.role) ? 'admin.html' : 'checkin.html';
   }
   function loginUrl() {
     const file = root.location.pathname.split('/').pop();

@@ -127,6 +127,17 @@
     const maxTouchPoints = navigator.maxTouchPoints || 0;
     return /iPad|iPhone|iPod/.test(ua) || (platform === 'MacIntel' && maxTouchPoints > 1);
   })();
+  const isInAppWebView = (() => {
+    if (typeof navigator === 'undefined') return false;
+    const ua = navigator.userAgent || '';
+    return /Zalo|FBAN|FBAV|Instagram|Line\/|MicroMessenger/i.test(ua);
+  })();
+  if (isInAppWebView && typeof document !== 'undefined') {
+    const warn = node('div', 'mb-3 p-3 rounded-xl border border-amber-500/40 bg-amber-500/15 text-amber-200 text-xs font-medium leading-relaxed text-center',
+      '⚠️ Bạn đang mở trong trình duyệt phụ (Zalo/Messenger). Vui lòng bấm biểu tượng [...] ở góc trên -> Chọn "Mở bằng Safari / Chrome" để Camera hoạt động ổn định và không bị lỗi khóa thiết bị.');
+    const screen = el('scannerScreen') || document.body;
+    screen.prepend(warn);
+  }
 
   let currentZoom = 1.0;
   let autoZoomEnabled = false; // Mặc định TẮT. Màn hình trạm CYD 2.8" đã có kích thước lớn chuẩn, auto-zoom CSS làm lệch canvas và mờ khung hình trên iPhone!
@@ -572,7 +583,8 @@
     if(document.hidden){generation++;caps=null;deadline=0;void stopCamera();controls();}
     else void capabilities();
   });
-  setInterval(()=>{if(!document.hidden)void capabilities();},10000);
+  // Tối ưu 0đ: Chỉ kiểm tra capabilities định kỳ khi tab đang mở và sinh viên chưa hoàn tất điểm danh
+  setInterval(()=>{if(!document.hidden && !stickyResult)void capabilities();},15000);
   setInterval(()=>{if(cameraOn&&!ready()){void stopCamera();scanMessage('warning','Đã hết giờ','Ca đã hết giờ nhận điểm danh.');}},1000);
   async function init() {
     registration('Đang kiểm tra tài khoản…');controls();el('scanOverlay').classList.add('hidden');

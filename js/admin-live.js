@@ -8,6 +8,7 @@
     let channel = null, actorId = null, epoch = 0, timer = null, interval = null;
     let running = false, started = false, stopped = false, nextRun = 0, authSubscription = null;
     let retryTimer = null, retryDelay = 5000, nextConnect = 0;
+    let cachedIdentity = null, cachedIdentityUntil = 0;
     const now = () => env.now ? env.now() : Date.now();
     function available() { return !stopped && !doc.hidden && win.navigator?.onLine !== false && env.authenticated(); }
     function later(delay = 750) {
@@ -26,9 +27,16 @@
       epoch++; if (timer !== null) win.clearTimeout(timer); timer = null;
       if (retryTimer !== null) win.clearTimeout(retryTimer); retryTimer = null;
       retryDelay = 5000; nextConnect = 0;
+      cachedIdentity = null; cachedIdentityUntil = 0;
       pending.clear(); nextRun = 0; disconnect();
     }
     async function authorize() {
+      if (cachedIdentity && now() < cachedIdentityUntil && typeof client.auth?.getSession === 'function') {
+        const localSession = await client.auth.getSession();
+        if (!localSession.error && localSession.data?.session?.user?.id === cachedIdentity.id) {
+          return cachedIdentity;
+        }
+      }
       const verified = await client.auth.getUser();
       if (verified.error) {
         if ([401,403].includes(verified.error.status)) return null;
@@ -44,7 +52,9 @@
           throw profile.error;
         }
         if (profile.data?.id !== uid || !['admin','super_admin'].includes(profile.data.role)) return null;
-        return { id:uid, enabled:false };
+        cachedIdentity = { id:uid, enabled:false };
+        cachedIdentityUntil = now() + 300000;
+        return cachedIdentity;
       }
       if (result.error) {
         if (String(result.error.message).includes('APP_FORBIDDEN')) return null;
@@ -52,7 +62,9 @@
       }
       const cap = result.data;
       if (cap?.version !== 1 || cap.profileId !== uid || !['admin','super_admin'].includes(cap.role) || typeof cap.enabled !== 'boolean') return null;
-      return { id:uid, enabled:cap.enabled };
+      cachedIdentity = { id:uid, enabled:cap.enabled };
+      cachedIdentityUntil = now() + 300000;
+      return cachedIdentity;
     }
     function connect(identity, version) {
       if (!identity.enabled) { disconnect(); return; }
@@ -120,7 +132,8 @@
           },0);
         } else if (event === 'TOKEN_REFRESHED') win.setTimeout(() => { if (!stopped) queue(); },0);
       }).data?.subscription;
-      interval = win.setInterval(() => { if (available()) queue(); },30000);
+      // Tối ưu 0đ: Chu kỳ 30s chỉ làm mới Điểm danh & Đơn nghỉ, các bảng tĩnh được cập nhật qua sự kiện Realtime
+      interval = win.setInterval(() => { if (available()) queue(['attendance', 'leaves']); },30000);
       queue();
     }
     function stop() {
