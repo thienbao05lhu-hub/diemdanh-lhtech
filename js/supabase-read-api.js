@@ -11,7 +11,7 @@
   root.AttendanceTrialRouter?.install(client);
   const networkFetch = root.fetch.bind(root);
   const roles = ['admin', 'super_admin'];
-  const PRODUCTION_START_DATE = '2026-11-05';
+  const PRODUCTION_START_DATE = '2026-11-11';
   const maintenance = 'Hệ thống đang giới hạn ghi để cập nhật bảo mật. Chức năng này tạm dừng; chưa có dữ liệu được ghi.';
   const baseFields = 'id,student_id,display_name,role,active,updated_at';
   let fields = baseFields + ',department';
@@ -812,7 +812,7 @@
       const clock = caps ? today(new Date(caps.serverTime)) : today();
       const rawDate = url.searchParams.get('date');
       let targetDate = rawDate ? (date(rawDate), rawDate) : clock.date;
-      if (targetDate < PRODUCTION_START_DATE) targetDate = PRODUCTION_START_DATE;
+      if (rawDate && targetDate < PRODUCTION_START_DATE) targetDate = PRODUCTION_START_DATE;
       const selected = week(targetDate);
       if (caps?.qrEnabled) {
         const shift = url.searchParams.get('shift') || (clock.minutes < 720 ? 'Sáng' : clock.minutes < 1080 ? 'Chiều' : 'Tối');

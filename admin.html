@@ -1191,7 +1191,7 @@
               <div class="flex items-center gap-2 flex-wrap">
                 <h2 class="text-sm sm:text-base font-bold text-white flex items-center gap-2">
                   Quỹ Phạt & Theo Dõi Đi Trễ
-                  <span id="finesActiveFilterBadge" class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30">Tất cả (từ 05/11/2026)</span>
+                  <span id="finesActiveFilterBadge" class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30">Tất cả (từ 11/11/2026)</span>
                 </h2>
               </div>
               <p class="text-[11px] text-slate-400 mt-0.5">Tự động tính phạt đi trễ (500đ/phút, tối đa 30.000đ/ca) & vắng không phép (30.000đ/buổi)</p>
@@ -1268,7 +1268,7 @@
               <input
                 type="date"
                 id="fromFinesDate"
-                min="2026-11-05"
+                min="2026-11-11"
                 class="bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs text-white [color-scheme:dark] focus:outline-none focus:border-amber-500"
               />
             </div>
@@ -1277,7 +1277,7 @@
               <input
                 type="date"
                 id="toFinesDate"
-                min="2026-11-05"
+                min="2026-11-11"
                 class="bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs text-white [color-scheme:dark] focus:outline-none focus:border-amber-500"
               />
             </div>
@@ -1862,7 +1862,7 @@
       if (cutoffBadge && cutoffBadge.parentElement && !document.getElementById('attendanceDateFilter')) {
         const dateWrap = document.createElement('div');
         dateWrap.className = 'flex items-center gap-1 shrink-0';
-        dateWrap.innerHTML = `<input type="date" id="attendanceDateFilter" min="2026-11-05" onchange="handleChangeAttendanceDate(this.value)" title="Xem lịch sử điểm danh theo ngày" class="bg-slate-950 border border-slate-800 hover:border-slate-700 focus:border-emerald-500 rounded-lg px-2 py-1 text-[11px] font-mono text-slate-200 focus:outline-none transition [color-scheme:dark]" /><button type="button" id="btnResetAttendanceDate" onclick="handleChangeAttendanceDate('')" title="Quay về Hôm nay" class="hidden px-2 py-1 rounded-lg text-[10px] font-bold bg-blue-500/15 text-blue-300 border border-blue-500/30 hover:bg-blue-500/25 transition">Hôm nay</button>`;
+        dateWrap.innerHTML = `<input type="date" id="attendanceDateFilter" min="2026-11-11" onchange="handleChangeAttendanceDate(this.value)" title="Xem lịch sử điểm danh theo ngày" class="bg-slate-950 border border-slate-800 hover:border-slate-700 focus:border-emerald-500 rounded-lg px-2 py-1 text-[11px] font-mono text-slate-200 focus:outline-none transition [color-scheme:dark]" /><button type="button" id="btnResetAttendanceDate" onclick="handleChangeAttendanceDate('')" title="Quay về Hôm nay" class="hidden px-2 py-1 rounded-lg text-[10px] font-bold bg-blue-500/15 text-blue-300 border border-blue-500/30 hover:bg-blue-500/25 transition">Hôm nay</button>`;
         cutoffBadge.parentElement.insertBefore(dateWrap, cutoffBadge);
       }
       const qrCanvasEl = document.getElementById('qrcodeCanvas');
@@ -3077,7 +3077,7 @@
       if (btnMonth) btnMonth.className = type === 'month' ? activeClass : inactiveClass;
 
       if (type === 'all') {
-        if (badge) badge.innerText = 'Tất cả (từ 05/11/2026)';
+        if (badge) badge.innerText = 'Tất cả (từ 11/11/2026)';
         const fromInput = document.getElementById('fromFinesDate');
         const toInput = document.getElementById('toFinesDate');
         if (fromInput) fromInput.value = '';
