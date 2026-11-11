@@ -899,7 +899,48 @@
     if (path === '/api/admin/audit-logs') {
       const page = Number(url.searchParams.get('page') || 1), limit = 20;
       if (!Number.isSafeInteger(page) || page < 1 || page > 10000) fail(400, 'Phân trang không hợp lệ.');
+      const leaveActions = [
+        'leave.submitted',
+        'leave.reviewed',
+        'leave.approved',
+        'leave.rejected',
+        'leave.deleted'
+      ];
+      const adminActions = [
+        'attendance.adjusted',
+        'attendance.update',
+        'attendance.clear',
+        'attendance.cancel',
+        'attendance.reset',
+        'attendance.reset-all',
+        'attendance.session.close',
+        'session.closed',
+        'attendance.qr.paused',
+        'attendance.qr.resumed',
+        'device.reset',
+        'user.device.reset',
+        'schedule.update',
+        'schedule.saved',
+        'schedule.rollback',
+        'schedule.lhu.applied',
+        'profile.provision',
+        'profile.update',
+        'user.create',
+        'user.delete',
+        'admin.grant',
+        'admin.revoke',
+        'admin.password-change'
+      ];
+      const category = url.searchParams.get('category') || 'all';
+      const activeActions = category === 'leave'
+        ? leaveActions
+        : category === 'admin'
+          ? adminActions
+          : [...leaveActions, ...adminActions];
+
       let q = client.from('audit_logs').select('id,actor_id,target_id,action,details,created_at', { count: 'exact' });
+      q = q.in('action', activeActions);
+
       for (const [filter, column] of [['actorId','actor_id'],['targetId','target_id']]) {
         const value = url.searchParams.get(filter)?.trim();
         if (!value) continue;
@@ -913,10 +954,44 @@
       if (to) { date(to); q = q.lte('created_at', `${to}T23:59:59.999999+07:00`); }
       const result = await q.order('created_at', { ascending: false }).order('id', { ascending: false }).range((page-1)*limit, page*limit-1);
       const rows = checked(result) || [], total = result.count || 0;
+      const fmtDate = d => typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d) ? d.split('-').reverse().join('/') : '';
       return response({ success: true, total, page, pages: Math.max(1,Math.ceil(total/limit)),
-        data: rows.map(row => ({ id: row.id, action: row.action, actorId: profileLabel(row.actor_id),
-          targetId: row.target_id ? profileLabel(row.target_id) : 'Hệ thống',
-          reason: row.details?.reason || row.details?.reviewReason || '', createdAt: row.created_at })) });
+        data: rows.map(row => {
+          const d = row.details || {};
+          let effectiveAction = row.action;
+          if (row.action === 'leave.reviewed') {
+            if (d.decision === 'approved') effectiveAction = 'leave.approved';
+            else if (d.decision === 'rejected') effectiveAction = 'leave.rejected';
+            else if (d.decision === 'pending') effectiveAction = 'leave.revoked';
+          }
+          const shiftDate = d.shift && d.date
+            ? `Ca ${d.shift} · ${fmtDate(d.date)}`
+            : d.date
+              ? `Ngày ${fmtDate(d.date)}`
+              : d.weekStart
+                ? `Tuần từ ${fmtDate(d.weekStart)}`
+                : '';
+          let transition = '';
+          if (row.action === 'attendance.adjusted') {
+            const beforeSt = d.before?.status || 'Chưa điểm danh';
+            const afterSt = d.after?.status || 'Hủy điểm danh';
+            transition = `${beforeSt} → ${afterSt}`;
+          }
+          return {
+            id: row.id,
+            action: effectiveAction,
+            rawAction: row.action,
+            isLeaveAction: leaveActions.includes(row.action),
+            isStudentSubmit: row.action === 'leave.submitted',
+            actorId: profileLabel(row.actor_id),
+            targetId: row.target_id ? profileLabel(row.target_id) : 'Hệ thống',
+            shiftDate,
+            transition,
+            leaveReason: d.leaveReason || '',
+            reason: d.reason || d.reviewReason || '',
+            createdAt: row.created_at
+          };
+        }) });
     }
     if (path === '/api/attendance/fines') {
       const students = profiles.filter(isStudentUser);

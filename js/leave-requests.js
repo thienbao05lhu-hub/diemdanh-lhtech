@@ -173,8 +173,7 @@
   async function review(request, decision, input, actions) {
     if (deciding || !authenticated()) return;
     const reason = input.value.trim();
-    if (['pending','rejected'].includes(decision) && !reason) { toast('warning', 'Cần nhập lý do khi từ chối hoặc hủy duyệt.'); input.focus(); return; }
-    if (decision === 'pending' && !root.confirm('Hủy duyệt đơn này? Hệ thống sẽ đối chiếu trước khi hoàn tác bản ghi nghỉ có phép.')) return;
+    if (['pending','rejected'].includes(decision) && !reason) { toast('warning', 'Cần nhập lý do khi từ chối hoặc hủy duyệt.'); input.focus?.(); return; }
     deciding = true; const buttons = [...actions.querySelectorAll('button')];
     const version = generation;
     buttons.forEach(button => { button.disabled = true; }); input.disabled = true;
@@ -188,6 +187,7 @@
       toast('success', result.message);
       if (typeof root.fetchTodayAttendance === 'function') void root.fetchTodayAttendance();
       if (typeof root.fetchPersonalStats === 'function') void root.fetchPersonalStats();
+      if (root.AdminTools?.loadAudit) void root.AdminTools.loadAudit();
     } catch (error) { toast('warning', error.message || 'Chưa nhận được phản hồi. Đối chiếu danh sách trước khi thử lại.'); }
     finally {
       deciding = false; input.disabled = false; buttons.forEach(button => { button.disabled = false; });
