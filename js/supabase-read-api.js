@@ -164,10 +164,11 @@
         revision: Number.isSafeInteger(body.expectedRevision) && body.expectedRevision >= 0 ? body.expectedRevision : 0
       };
     }
-    const actions = {'Vắng có phép':'mark_excused','Có mặt':'mark_on_time','Chưa điểm danh':'cancel_excused'};
+    const actions = {'Vắng có phép':'mark_excused','Có mặt':'mark_on_time','Đi trễ':'mark_late','Chưa điểm danh':'cancel_excused'};
     const action = path.endsWith('/cancel') ? 'cancel_scan' : Object.hasOwn(actions,body.newStatus) ? actions[body.newStatus] : null;
     if (!action) fail(400,'Thao tác điểm danh không hợp lệ.');
     const labels = {mark_excused:'Admin chọn Xin phép/Vắng CP từ bảng điểm danh.',mark_on_time:'Admin điểm danh thủ công (Có mặt) từ bảng điểm danh.',
+      mark_late:'Admin điểm danh thủ công (Đi trễ) từ bảng điểm danh.',
       cancel_excused:'Admin chọn Hủy phép từ bảng điểm danh.',cancel_scan:'Admin xác nhận Hủy quét từ bảng điểm danh.'};
     const reason = body.reason === undefined ? labels[action] : body.reason;
     if (typeof reason !== 'string' || !reason.trim() || reason.trim().length > 500) fail(400,'Lý do thao tác chưa hợp lệ.');
@@ -980,12 +981,16 @@
           const cutoffTime = shiftCutoffs[record.shift] || '08:10:00';
           const cutoffIso = `${record.business_date}T${cutoffTime}+07:00`;
           const cutoffMs = Date.parse(cutoffIso);
+          const maxShiftMins = shiftDurationMinutes[record.shift] || 180;
           let lateMinutes = 1;
-          if (record.scanned_at) {
+          const explicitMinMatch = /\[Trễ\s+(\d+)\s*phút\]/i.exec(record.note || '');
+          if (explicitMinMatch) {
+            lateMinutes = Math.min(maxShiftMins, Math.max(1, parseInt(explicitMinMatch[1], 10)));
+          } else if (record.scanned_at) {
             const scanMs = Date.parse(record.scanned_at);
             if (!Number.isNaN(scanMs) && !Number.isNaN(cutoffMs)) {
               const diff = Math.floor((scanMs - cutoffMs) / 60000);
-              lateMinutes = Math.max(1, diff > 0 ? diff : 1);
+              lateMinutes = Math.min(maxShiftMins, Math.max(1, diff > 0 ? diff : 1));
             }
           }
           const fine = lateMinutes * 500;

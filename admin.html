@@ -10,11 +10,11 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'self' https: data: blob: 'unsafe-inline' 'unsafe-eval'; connect-src https://oalnswbnjhkkovxjxtlz.supabase.co wss://oalnswbnjhkkovxjxtlz.supabase.co https:; font-src https: data:; style-src 'self' 'unsafe-inline' https:; img-src 'self' data: blob: https:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https:;">
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
-  <script src="vendor/qrcode.min.js?v=20261111-v2"></script>
-  <script src="js/attendance-csv.js?v=20261111-v2"></script>
+  <script src="vendor/qrcode.min.js?v=20261111-v3"></script>
+  <script src="js/attendance-csv.js?v=20261111-v3"></script>
   <script src="vendor/supabase-2.118.0.js"></script>
-  <script src="js/config.js?v=20261111-v2"></script>
-  <script src="js/supabase-read-api.js?v=20261111-v2"></script>
+  <script src="js/config.js?v=20261111-v3"></script>
+  <script src="js/supabase-read-api.js?v=20261111-v3"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
     body { font-family: 'Plus Jakarta Sans', sans-serif; }
@@ -2613,6 +2613,14 @@
               >
                 <i class="fa-solid fa-user-check text-[9px]"></i> Có mặt
               </button>` : ''}
+              ${item.status !== 'Đi trễ' ? `
+              <button
+                onclick="handleUpdateAttendanceStatus('${item.userId}', '${targetShift}', 'Đi trễ')"
+                title="Điểm danh bằng tay: Đánh dấu sinh viên Đi trễ"
+                class="px-2 py-1 rounded-lg text-[10px] font-semibold bg-orange-500/15 hover:bg-orange-500/25 text-orange-300 border border-orange-500/35 transition flex items-center gap-1 shadow-sm cursor-pointer"
+              >
+                <i class="fa-solid fa-clock-rotate-left text-[9px]"></i> Đi trễ
+              </button>` : ''}
               ${item.status !== 'Vắng có phép' && item.status !== 'Vắng CP' ? `
               <button
                 onclick="handleUpdateAttendanceStatus('${item.userId}', '${targetShift}', 'Vắng có phép')"
@@ -2640,6 +2648,13 @@
               >
                 <i class="fa-solid fa-envelope-open-text text-[9px]"></i> Vắng CP
               </button>
+              <button
+                onclick="handleCancelAttendance('${item.userId}', '${targetShift}')"
+                title="Hủy lượt điểm danh"
+                class="px-2 py-1 rounded-lg text-[10px] font-semibold bg-transparent hover:bg-rose-500 text-rose-400 hover:text-white border border-rose-500/50 hover:border-rose-500 transition flex items-center gap-1 shadow-sm cursor-pointer"
+              >
+                <i class="fa-solid fa-ban text-[9px]"></i> Hủy
+              </button>
             </div>
           `;
         } else if (item.status === 'Vắng không phép' || item.status === 'Vắng KP' || item.status === 'Chưa điểm danh') {
@@ -2651,6 +2666,13 @@
                 class="px-2 py-1 rounded-lg text-[10px] font-semibold bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/35 transition flex items-center gap-1 shadow-sm cursor-pointer"
               >
                 <i class="fa-solid fa-user-check text-[9px]"></i> Có mặt
+              </button>
+              <button
+                onclick="handleUpdateAttendanceStatus('${item.userId}', '${targetShift}', 'Đi trễ')"
+                title="Điểm danh bằng tay: Đánh dấu sinh viên Đi trễ"
+                class="px-2 py-1 rounded-lg text-[10px] font-semibold bg-orange-500/15 hover:bg-orange-500/25 text-orange-300 border border-orange-500/35 transition flex items-center gap-1 shadow-sm cursor-pointer"
+              >
+                <i class="fa-solid fa-clock-rotate-left text-[9px]"></i> Đi trễ
               </button>
               <button
                 onclick="handleUpdateAttendanceStatus('${item.userId}', '${targetShift}', 'Vắng có phép')"
@@ -2672,6 +2694,13 @@
                 <i class="fa-solid fa-user-check text-[9px]"></i> Có mặt
               </button>
               <button
+                onclick="handleUpdateAttendanceStatus('${item.userId}', '${targetShift}', 'Đi trễ')"
+                title="Điểm danh bằng tay: Đánh dấu sinh viên Đi trễ"
+                class="px-2 py-1 rounded-lg text-[10px] font-semibold bg-orange-500/15 hover:bg-orange-500/25 text-orange-300 border border-orange-500/35 transition flex items-center gap-1 shadow-sm cursor-pointer"
+              >
+                <i class="fa-solid fa-clock-rotate-left text-[9px]"></i> Đi trễ
+              </button>
+              <button
                 onclick="handleUpdateAttendanceStatus('${item.userId}', '${targetShift}', 'Chưa điểm danh')"
                 title="Hủy phép: Quay lại tính toán tự động"
                 class="px-2 py-1 rounded-lg text-[10px] font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition flex items-center gap-1 shadow-sm cursor-pointer"
@@ -2682,13 +2711,22 @@
           `;
         } else if (item.status === 'Có mặt') {
           actionBtn = `
-            <button
-              onclick="handleCancelAttendance('${item.userId}', '${targetShift}')"
-              title="Hủy lượt điểm danh (Xóa quét sai/gian lận)"
-              class="px-2 py-1 rounded-lg text-[10px] font-semibold bg-transparent hover:bg-rose-500 text-rose-400 hover:text-white border border-rose-500/50 hover:border-rose-500 transition flex items-center gap-1 shrink-0 ml-auto whitespace-nowrap shadow-sm cursor-pointer"
-            >
-              <i class="fa-solid fa-ban text-[9px]"></i> Hủy quét
-            </button>
+            <div class="flex items-center justify-end gap-1 shrink-0 ml-auto whitespace-nowrap">
+              <button
+                onclick="handleUpdateAttendanceStatus('${item.userId}', '${targetShift}', 'Đi trễ')"
+                title="Chuyển từ Có mặt sang Đi trễ"
+                class="px-2 py-1 rounded-lg text-[10px] font-semibold bg-orange-500/15 hover:bg-orange-500/25 text-orange-300 border border-orange-500/35 transition flex items-center gap-1 shadow-sm cursor-pointer"
+              >
+                <i class="fa-solid fa-clock-rotate-left text-[9px]"></i> Đi trễ
+              </button>
+              <button
+                onclick="handleCancelAttendance('${item.userId}', '${targetShift}')"
+                title="Hủy lượt điểm danh (Xóa quét sai/gian lận)"
+                class="px-2 py-1 rounded-lg text-[10px] font-semibold bg-transparent hover:bg-rose-500 text-rose-400 hover:text-white border border-rose-500/50 hover:border-rose-500 transition flex items-center gap-1 shadow-sm cursor-pointer"
+              >
+                <i class="fa-solid fa-ban text-[9px]"></i> Hủy quét
+              </button>
+            </div>
           `;
         }
 
@@ -2769,7 +2807,7 @@
                 </span>
                 <div>
                   <h3 class="text-sm font-bold text-white">Điểm Danh Bằng Tay</h3>
-                  <p class="text-[11px] text-slate-400">Đánh dấu Có mặt cho sinh viên không quét được mã QR</p>
+                  <p class="text-[11px] text-slate-400">Đánh dấu Có mặt / Đi trễ / Vắng có phép cho sinh viên</p>
                 </div>
               </div>
               <button type="button" onclick="closeManualCheckinModal()" class="text-slate-400 hover:text-white p-1">
@@ -2792,11 +2830,16 @@
                 </div>
                 <div>
                   <label class="block text-[11px] font-semibold text-slate-300 mb-1">Trạng thái</label>
-                  <select id="manualCheckinStatusSelect" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-emerald-300 font-bold focus:outline-none focus:border-emerald-500">
+                  <select id="manualCheckinStatusSelect" onchange="handleManualCheckinStatusChange()" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-emerald-300 font-bold focus:outline-none focus:border-emerald-500">
                     <option value="Có mặt">Có mặt (Đúng giờ)</option>
+                    <option value="Đi trễ">Đi trễ</option>
                     <option value="Vắng có phép">Vắng có phép</option>
                   </select>
                 </div>
+              </div>
+              <div id="manualCheckinLateMinutesWrap" class="hidden">
+                <label class="block text-[11px] font-semibold text-orange-300 mb-1">Số phút đi trễ (Tùy chọn — để trống sẽ tự tính theo giờ hiện tại)</label>
+                <input id="manualCheckinLateMinutesInput" type="number" min="1" max="240" placeholder="VD: 15 (nếu để trống hệ thống tự trừ mốc cho phép trễ 10p)" class="w-full bg-slate-950 border border-orange-500/40 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-orange-500" />
               </div>
               <div>
                 <label class="block text-[11px] font-semibold text-slate-300 mb-1">Ghi chú / Lý do</label>
@@ -2831,7 +2874,26 @@
           return `<option value="${escapeHtml(u.userId)}">${escapeHtml(u.name)} (${escapeHtml(u.userId)}) — [${escapeHtml(st)}]</option>`;
         }).join('');
       }
+      handleManualCheckinStatusChange();
       modal.classList.remove('hidden');
+    }
+
+    function handleManualCheckinStatusChange() {
+      const statusEl = document.getElementById('manualCheckinStatusSelect');
+      const lateWrap = document.getElementById('manualCheckinLateMinutesWrap');
+      const reasonEl = document.getElementById('manualCheckinReasonInput');
+      const val = statusEl?.value || 'Có mặt';
+      if (lateWrap) lateWrap.classList.toggle('hidden', val !== 'Đi trễ');
+      if (statusEl) {
+        statusEl.className = val === 'Đi trễ'
+          ? 'w-full bg-slate-950 border border-orange-500/50 rounded-xl px-3 py-2 text-xs text-orange-300 font-bold focus:outline-none focus:border-orange-500'
+          : val === 'Vắng có phép'
+            ? 'w-full bg-slate-950 border border-amber-500/50 rounded-xl px-3 py-2 text-xs text-amber-300 font-bold focus:outline-none focus:border-amber-500'
+            : 'w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-emerald-300 font-bold focus:outline-none focus:border-emerald-500';
+      }
+      if (reasonEl && (!reasonEl.value || reasonEl.value.startsWith('Admin điểm danh thủ công'))) {
+        reasonEl.value = `Admin điểm danh thủ công (${val})`;
+      }
     }
 
     function closeManualCheckinModal() {
@@ -2843,7 +2905,11 @@
       const userId = document.getElementById('manualCheckinStudentSelect')?.value;
       const shift = document.getElementById('manualCheckinShiftSelect')?.value || currentViewingShift;
       const newStatus = document.getElementById('manualCheckinStatusSelect')?.value || 'Có mặt';
-      const reason = (document.getElementById('manualCheckinReasonInput')?.value || '').trim() || 'Admin điểm danh thủ công (Có mặt)';
+      const lateMinsRaw = parseInt(document.getElementById('manualCheckinLateMinutesInput')?.value || '', 10);
+      let reason = (document.getElementById('manualCheckinReasonInput')?.value || '').trim() || `Admin điểm danh thủ công (${newStatus})`;
+      if (newStatus === 'Đi trễ' && Number.isFinite(lateMinsRaw) && lateMinsRaw > 0 && !/\[Trễ\s+\d+\s*phút\]/i.test(reason)) {
+        reason = `[Trễ ${lateMinsRaw} phút] ${reason}`;
+      }
       if (!userId) {
         showToast.warning('Vui lòng chọn sinh viên cần điểm danh.');
         return;
