@@ -83,7 +83,13 @@
       await capability(generation);
       if (generation !== requestGeneration) return;
       await history(generation);
-    } catch (error) { caps = null; status(message(error), true); }
+    } catch (error) {
+      caps = null;
+      status(message(error), true);
+      if (error?.code === 'NETWORK_ERROR' || error?.name === 'TypeError' || error?.status === 0 || String(error?.message).includes('network')) {
+        setTimeout(() => { if (!document.hidden && current) void load(); }, 2500);
+      }
+    }
     finally { loading = false; el('btnRefreshMyLeaves').disabled = false; controls(); }
   }
   root.handleSendLeaveRequest = async event => {
@@ -126,7 +132,9 @@
   });
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) { caps = null; controls(); }
-    else void load();
+    else {
+      setTimeout(() => { if (!document.hidden && current) void load(); }, 400);
+    }
   });
   setInterval(() => {
     if (!document.hidden && !el('leaveForm').contains(document.activeElement)) void load();

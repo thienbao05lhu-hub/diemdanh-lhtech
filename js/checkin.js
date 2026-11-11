@@ -393,12 +393,22 @@
   async function stopCamera() {
     clearAutoZoomTimers();
     stopAutoTracker();
-    if (cameraOn && scanner) {
-      cameraOn = false;
-      try { await scanner.stop(); scanner.clear(); } catch (_) {}
+    cameraStarting = false;
+    if (scanner) {
+      try {
+        if (cameraOn) await scanner.stop();
+      } catch (_) {}
+      try { scanner.clear(); } catch (_) {}
+      scanner = null;
     }
+    cameraOn = false;
     el('scanOverlay')?.classList.add('hidden');
     el('zoomControls')?.classList.add('hidden');
+    el('cameraStandbyPrompt')?.classList.remove('hidden');
+    const standbyTitle = el('cameraStandbyTitle');
+    if (standbyTitle) standbyTitle.innerText = 'Chạm để mở Camera';
+    const standbyIcon = el('cameraStandbyIcon');
+    if (standbyIcon) standbyIcon.className = 'fa-solid fa-camera';
     hideReticle();
     currentZoom = 1.0;
     updateZoomButtons(1.0);
@@ -409,7 +419,7 @@
     const hint = el('cameraHintText');
     if (hint) {
       hint.innerText = isIOS
-        ? 'Giữ camera cách màn hình 15 - 25 cm để bắt nét rõ'
+        ? 'Chạm vào khung để mở camera quét mã QR'
         : 'Hướng camera vào mã QR để tự động quét';
     }
   }
@@ -486,26 +496,89 @@
     }finally { busy=false; controls(); }
   }
   root.onScanSuccess=value=>submit(value);
-  root.resumeScanner=async()=>{
-    if(busy || cameraStarting || !verified) return;
-    await capabilities(); if(!ready()) return;
-    stickyResult=false;
-    if(pendingToken){const value=pendingToken;pendingToken=null;await submit(value);return;}
-    const version=generation; cameraStarting=true; controls();
-    try {
-      if (!scanner) {
-        scanner = new root.Html5Qrcode('reader', {
-          verbose: false,
-          formatsToSupport: [0], // 0: QR_CODE
-          experimentalFeatures: {
-            useBarCodeDetectorIfSupported: !isIOS
+  function observeReaderVideo() {
+    const readerEl = el('reader');
+    if (!readerEl || !('MutationObserver' in root)) return;
+    const observer = new MutationObserver(() => {
+      const v = readerEl.querySelector('video');
+      if (v && !v.dataset.iosPatched) {
+        v.dataset.iosPatched = 'true';
+        v.setAttribute('playsinline', 'true');
+        v.setAttribute('webkit-playsinline', 'true');
+        v.setAttribute('muted', 'true');
+        v.setAttribute('autoplay', 'true');
+        v.playsInline = true;
+        v.muted = true;
+        v.autoplay = true;
+        v.addEventListener('pause', () => {
+          if (cameraOn && !busy && !document.hidden) {
+            v.play().catch(() => {});
           }
         });
+        v.addEventListener('suspend', () => {
+          if (cameraOn && !busy && !document.hidden && v.paused) {
+            v.play().catch(() => {});
+          }
+        });
+        v.play().catch(() => {});
+      }
+    });
+    observer.observe(readerEl, { childList: true, subtree: true });
+  }
+
+  root.resumeScanner = async () => {
+    if (busy || cameraStarting || !verified) return;
+    await capabilities();
+    if (!ready()) {
+      await stopCamera();
+      return;
+    }
+    stickyResult = false;
+    if (pendingToken) {
+      const value = pendingToken;
+      pendingToken = null;
+      await submit(value);
+      return;
+    }
+    const version = generation;
+    cameraStarting = true;
+    controls();
+
+    const standbyTitle = el('cameraStandbyTitle');
+    if (standbyTitle) standbyTitle.innerText = 'Đang kết nối Camera...';
+    const standbyIcon = el('cameraStandbyIcon');
+    if (standbyIcon) standbyIcon.className = 'fa-solid fa-spinner fa-spin text-emerald-400';
+
+    const startTimeout = setTimeout(() => {
+      if (cameraStarting) {
+        cameraStarting = false;
+        controls();
+        if (standbyTitle) standbyTitle.innerText = 'Chạm để thử lại Camera';
+        if (standbyIcon) standbyIcon.className = 'fa-solid fa-camera-rotate text-amber-400';
+      }
+    }, 8000);
+
+    try {
+      if (scanner) {
+        try { await scanner.stop(); } catch (_) {}
+        try { scanner.clear(); } catch (_) {}
+        scanner = null;
       }
 
+      scanner = new root.Html5Qrcode('reader', {
+        verbose: false,
+        formatsToSupport: [0], // 0: QR_CODE
+        experimentalFeatures: {
+          useBarCodeDetectorIfSupported: !isIOS
+        }
+      });
+
+      // Trên iOS Safari: Không ép cứng min width/height để tránh OverconstrainedError ở chế độ dọc
       const scanConfig = {
         fps: isIOS ? 15 : 20,
-        videoConstraints: {
+        videoConstraints: isIOS ? {
+          facingMode: { ideal: 'environment' }
+        } : {
           facingMode: { ideal: 'environment' },
           width: { min: 640, ideal: 1280, max: 1920 },
           height: { min: 480, ideal: 720, max: 1080 }
@@ -516,39 +589,50 @@
         await scanner.start(
           { facingMode: 'environment' },
           scanConfig,
-          (text, decodedResult) => {
-            handleBarcodeSuccess(text, decodedResult);
-          },
+          (text, decodedResult) => handleBarcodeSuccess(text, decodedResult),
           () => {}
         );
       } catch (errConstraints) {
         console.warn('Fallback sang cau hinh camera co ban:', errConstraints);
+        if (scanner) {
+          try { await scanner.stop(); } catch (_) {}
+          try { scanner.clear(); } catch (_) {}
+          scanner = new root.Html5Qrcode('reader', {
+            verbose: false,
+            formatsToSupport: [0],
+            experimentalFeatures: { useBarCodeDetectorIfSupported: false }
+          });
+        }
         await scanner.start(
           { facingMode: 'environment' },
-          { fps: isIOS ? 15 : 20 },
-          (text, decodedResult) => {
-            handleBarcodeSuccess(text, decodedResult);
-          },
+          { fps: 15 },
+          (text, decodedResult) => handleBarcodeSuccess(text, decodedResult),
           () => {}
         );
       }
 
-      cameraOn=true;
-      if(version!==generation || document.hidden || !ready()){await stopCamera();return;}
+      clearTimeout(startTimeout);
+      cameraOn = true;
+      if (version !== generation || document.hidden || !ready()) {
+        await stopCamera();
+        return;
+      }
 
-      const videoEl = (typeof document !== 'undefined' && typeof document.querySelector === 'function')
-        ? document.querySelector('#reader video')
-        : null;
+      const videoEl = document.querySelector('#reader video');
       if (videoEl) {
         videoEl.setAttribute('playsinline', 'true');
         videoEl.setAttribute('webkit-playsinline', 'true');
         videoEl.setAttribute('muted', 'true');
+        videoEl.setAttribute('autoplay', 'true');
+        videoEl.playsInline = true;
         videoEl.muted = true;
+        videoEl.play().catch(() => {});
       }
 
-      el('scanAlert').classList.add('hidden');
-      el('btnResumeScan').classList.add('hidden');
-      el('scanOverlay').classList.remove('hidden');
+      el('cameraStandbyPrompt')?.classList.add('hidden');
+      el('scanAlert')?.classList.add('hidden');
+      el('btnResumeScan')?.classList.add('hidden');
+      el('scanOverlay')?.classList.remove('hidden');
       el('zoomControls')?.classList.remove('hidden');
       setupPinchZoom();
       startAutoTracker();
@@ -560,47 +644,148 @@
           ? 'Giữ camera cách màn hình 15 - 25 cm để bắt nét rõ'
           : 'Hướng camera vào mã QR để tự động quét';
       }
-    }catch(_) {scanMessage(false,'Không mở được camera','Kiểm tra quyền camera của trình duyệt rồi bấm Tiếp Tục Quét Lại.');}
-    finally {cameraStarting=false;controls();}
-  };
-  root.handleSwitchAccount=async()=>{
-    const choice=root.prompt('Chọn thao tác:\n1 - Đổi mật khẩu\n2 - Đăng xuất / Đổi tài khoản\nBấm Hủy để giữ nguyên.','1');
-    if(choice===null || !String(choice).trim())return;
-    if(String(choice).trim()==='1'){
-      generation++;caps=null;deadline=0;controls();await stopCamera();
-      root.location.assign('reset-password.html');return;
+    } catch (err) {
+      clearTimeout(startTimeout);
+      console.error('Lỗi mở camera:', err);
+      cameraOn = false;
+      el('cameraStandbyPrompt')?.classList.remove('hidden');
+      if (standbyTitle) standbyTitle.innerText = 'Chạm để mở lại Camera';
+      if (standbyIcon) standbyIcon.className = 'fa-solid fa-camera text-rose-400';
+      scanMessage(false, 'Không mở được camera', 'Kiểm tra quyền Camera của Safari trong Cài đặt iPhone rồi chạm để thử lại.');
+    } finally {
+      cameraStarting = false;
+      controls();
     }
-    if(String(choice).trim()!=='2')return;
-    generation++; verified=false; caps=null; deadline=0; controls();await stopCamera();
-    try { const result=await api.client.auth.signOut({scope:'local'});if(result.error)throw result.error;root.location.replace('index.html'); }
-    catch(error){registration(errorText(error),true);}
   };
-  api.client.auth.onAuthStateChange((event,session)=>{
-    if(event==='SIGNED_OUT'){generation++;verified=false;caps=null;deadline=0;void stopCamera();root.location.replace('index.html');}
-    if(event==='SIGNED_IN' && current && session?.user?.id && session.user.id!==current.profile.id){generation++;verified=false;caps=null;deadline=0;void stopCamera();setTimeout(()=>void init(),0);}
-  });
-  document.addEventListener('visibilitychange',()=>{
-    if(document.hidden){generation++;caps=null;deadline=0;void stopCamera();controls();}
-    else void capabilities();
-  });
-  // Tối ưu 0đ: Chỉ kiểm tra capabilities định kỳ khi tab đang mở và sinh viên chưa hoàn tất điểm danh
-  setInterval(()=>{if(!document.hidden && !stickyResult)void capabilities();},15000);
-  setInterval(()=>{if(cameraOn&&!ready()){void stopCamera();scanMessage('warning','Đã hết giờ','Ca đã hết giờ nhận điểm danh.');}},1000);
-  async function init() {
-    registration('Đang kiểm tra tài khoản…');controls();el('scanOverlay').classList.add('hidden');
+
+  root.handleSwitchAccount = async () => {
+    const choice = root.prompt('Chọn thao tác:\n1 - Đổi mật khẩu\n2 - Đăng xuất / Đổi tài khoản\nBấm Hủy để giữ nguyên.', '1');
+    if (choice === null || !String(choice).trim()) return;
+    if (String(choice).trim() === '1') {
+      generation++; caps = null; deadline = 0; controls(); await stopCamera();
+      root.location.assign('reset-password.html'); return;
+    }
+    if (String(choice).trim() !== '2') return;
+    generation++; verified = false; caps = null; deadline = 0; controls(); await stopCamera();
     try {
-      current=await api.requireIdentity();if(!current)return;
-      el('inputUserId').value=current.profile.studentId;el('inputUserId').readOnly=true;
-      const params=new URLSearchParams(root.location.search);pendingToken=params.get('t')||params.get('token')||pendingToken;
-      if(params.has('t')||params.has('token'))root.history.replaceState(null,'',root.location.pathname);
+      const result = await api.client.auth.signOut({ scope: 'local' });
+      if (result.error) throw result.error;
+      root.location.replace('index.html');
+    } catch (error) {
+      registration(errorText(error), true);
+    }
+  };
+
+  api.client.auth.onAuthStateChange((event, session) => {
+    if (event === 'SIGNED_OUT') {
+      generation++; verified = false; caps = null; deadline = 0; void stopCamera(); root.location.replace('index.html');
+    }
+    if (event === 'SIGNED_IN' && current && session?.user?.id && session.user.id !== current.profile.id) {
+      generation++; verified = false; caps = null; deadline = 0; void stopCamera(); setTimeout(() => void init(), 0);
+    }
+  });
+
+  // Tự động khôi phục camera khi ứng dụng quay trở lại màn hình chính (iOS Wakeup / Tab Switch)
+  async function handleAppWakeup() {
+    if (document.hidden) return;
+    await capabilities();
+    if (verified && ready() && !cameraOn && !cameraStarting && !stickyResult) {
+      void root.resumeScanner();
+    }
+  }
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      generation++; caps = null; deadline = 0; void stopCamera(); controls();
+    } else {
+      setTimeout(() => void handleAppWakeup(), 350);
+    }
+  });
+
+  root.addEventListener('pageshow', () => {
+    if (!document.hidden) {
+      setTimeout(() => void handleAppWakeup(), 350);
+    }
+  });
+
+  root.addEventListener('focus', () => {
+    if (!document.hidden && (!cameraOn || !scanner)) {
+      setTimeout(() => void handleAppWakeup(), 300);
+    }
+  });
+
+  // 1. Tối ưu 0đ: Kiểm tra capabilities và mở lại camera nếu tab đang mở mà camera bị tắt
+  setInterval(async () => {
+    if (!document.hidden && !stickyResult) {
       await capabilities();
-      if(caps?.qrEnabled&&caps.deviceBound) {try{await verifyDevice();}catch(error){registration(errorText(error),true);}}
-      else if(caps?.qrEnabled)registration('Xác nhận để gắn trình duyệt này với tài khoản đang đăng nhập.');
-      await capabilities();
-      if(verified && ready() && !cameraOn && !cameraStarting) {
+      if (verified && ready() && !cameraOn && !cameraStarting && !stickyResult) {
         void root.resumeScanner();
       }
-    }catch(error){registration(errorText(error),true);}
+    }
+  }, 10000);
+
+  // 2. Watchdog kiểm tra luồng video thực tế của iOS (chống đứng hình do Low Power Mode)
+  setInterval(() => {
+    if (cameraOn && !busy && !document.hidden) {
+      const v = document.querySelector('#reader video');
+      if (v) {
+        if (v.paused) {
+          v.play().catch(() => {});
+        }
+      } else if (!cameraStarting) {
+        cameraOn = false;
+        if (verified && ready() && !stickyResult) {
+          void root.resumeScanner();
+        }
+      }
+    }
+  }, 2500);
+
+  setInterval(() => {
+    if (cameraOn && !ready()) {
+      void stopCamera();
+      scanMessage('warning', 'Đã hết giờ', 'Ca đã hết giờ nhận điểm danh.');
+    }
+  }, 1000);
+
+  async function init() {
+    registration('Đang kiểm tra tài khoản…'); controls(); el('scanOverlay').classList.add('hidden');
+    observeReaderVideo();
+
+    // Hỗ trợ chạm vào khung camera để mở lại ngay lập tức (phục vụ người dùng iOS khi camera bị pause)
+    const camContainer = el('cameraContainer') || el('reader');
+    if (camContainer && !camContainer.dataset.tapBound) {
+      camContainer.dataset.tapBound = 'true';
+      camContainer.addEventListener('click', (e) => {
+        if (e.target.closest('#zoomControls') || e.target.closest('button')) return;
+        if (!cameraOn && !cameraStarting && verified) {
+          void root.resumeScanner();
+        } else {
+          const v = document.querySelector('#reader video');
+          if (v && v.paused) v.play().catch(() => {});
+        }
+      });
+    }
+
+    try {
+      current = await api.requireIdentity(); if (!current) return;
+      el('inputUserId').value = current.profile.studentId; el('inputUserId').readOnly = true;
+      const params = new URLSearchParams(root.location.search);
+      pendingToken = params.get('t') || params.get('token') || pendingToken;
+      if (params.has('t') || params.has('token')) root.history.replaceState(null, '', root.location.pathname);
+      await capabilities();
+      if (caps?.qrEnabled && caps.deviceBound) {
+        try { await verifyDevice(); } catch (error) { registration(errorText(error), true); }
+      } else if (caps?.qrEnabled) {
+        registration('Xác nhận để gắn trình duyệt này với tài khoản đang đăng nhập.');
+      }
+      await capabilities();
+      if (verified && ready() && !cameraOn && !cameraStarting) {
+        void root.resumeScanner();
+      }
+    } catch (error) {
+      registration(errorText(error), true);
+    }
     controls();
   }
   void init();

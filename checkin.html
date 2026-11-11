@@ -27,8 +27,8 @@
   <script defer src="js/attendance-trial.js?v=20261104-qr2"></script>
   <script defer src="js/auth.js?v=20261110-opt2"></script>
   <script defer src="js/app-ui.js?v=20261102-vibrate1"></script>
-  <script defer src="js/checkin.js?v=20261110-opt2"></script>
-  <script defer src="js/student-leaves.js?v=20261101-original-ui1"></script>
+  <script defer src="js/checkin.js?v=20261111-ios-fix"></script>
+  <script defer src="js/student-leaves.js?v=20261111-ios-fix"></script>
   <script defer src="js/pwa-install.js?v=20261102-pwa1"></script>
 
   <style>
@@ -170,11 +170,20 @@
     </div>
 
     <!-- Khung ngắm Camera quét QR -->
-    <div class="relative bg-slate-900 border border-slate-800 rounded-2xl p-3 shadow-2xl flex-1 flex flex-col justify-center items-center overflow-hidden min-h-[340px]">
+    <div id="cameraContainer" class="relative bg-slate-900 border border-slate-800 rounded-2xl p-3 shadow-2xl flex-1 flex flex-col justify-center items-center overflow-hidden min-h-[340px] cursor-pointer">
       <div id="reader" class="w-full rounded-xl overflow-hidden"></div>
 
+      <!-- Nút / Trạng thái Mở lại Camera khi bị ngắt (Đặc biệt trên iOS/Safari khi khóa màn hình hoặc pin yếu) -->
+      <div id="cameraStandbyPrompt" class="flex flex-col items-center justify-center p-6 text-center select-none">
+        <div class="w-16 h-16 rounded-2xl bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 flex items-center justify-center text-2xl mb-3 shadow-lg shadow-emerald-500/20 active:scale-95 transition">
+          <i id="cameraStandbyIcon" class="fa-solid fa-camera"></i>
+        </div>
+        <p id="cameraStandbyTitle" class="text-sm font-bold text-white">Chạm để mở Camera</p>
+        <p id="cameraStandbySub" class="text-[11px] text-slate-400 mt-1 max-w-[240px]">Camera tự động tiết kiệm pin khi ẩn ứng dụng. Chạm vào đây để tiếp tục quét.</p>
+      </div>
+
       <!-- Khung viền ngắm & Tia laser ảo chỉ hiển thị khi camera đang chạy -->
-      <div id="scanOverlay" class="pointer-events-none absolute inset-6 flex items-center justify-center">
+      <div id="scanOverlay" class="pointer-events-none absolute inset-6 flex items-center justify-center hidden">
         <div id="scanTargetBox" class="relative w-64 h-64 border-2 border-dashed border-emerald-500/60 rounded-2xl transition-all duration-300">
           <!-- 4 Góc ngắm -->
           <span class="absolute -top-1 -left-1 w-6 h-6 border-t-4 border-l-4 border-emerald-400 rounded-tl-lg"></span>
