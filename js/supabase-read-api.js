@@ -340,7 +340,9 @@
       department: row.department || '', date: row.date, shift: row.shift, reason: row.reason,
       status: row.status, reviewedBy: row.reviewed_by, reviewedByName: row.reviewed_by_name,
       reviewedAt: row.reviewed_at, reviewReason: row.review_reason, createdAt: row.created_at,
-      profileId: row.profile_id, revision: Number.isSafeInteger(row.revision) ? row.revision : null };
+      profileId: row.profile_id, revision: Number.isSafeInteger(row.revision) ? row.revision : null,
+      requestType: row.request_type || 'leave', lateMinutes: row.late_minutes || null,
+      expectedArrival: row.expected_arrival || null };
   }
   function shiftRows(shift, stamp, schedules, records) {
     const dayKey = ['cn','t2','t3','t4','t5','t6','t7'][date(stamp).getUTCDay()];
@@ -906,8 +908,11 @@
       q = q.gte('date', PRODUCTION_START_DATE);
       const status = url.searchParams.get('status');
       if (status && !['pending','reviewing','approved','rejected','all'].includes(status)) fail(400,'Trạng thái lọc không hợp lệ.');
+      const reqType = url.searchParams.get('type');
+      if (reqType && !['leave','late','all'].includes(reqType)) fail(400,'Loại đơn không hợp lệ.');
       const caps = await leaveCapabilities();
       if (status && status !== 'all') q = q.eq('status', status);
+      if (reqType && reqType !== 'all') q = q.eq('request_type', reqType);
       const result = await q.order('created_at', { ascending: false }).order('id', { ascending: false }).range((page-1)*limit, page*limit-1);
       const rows = checked(result) || [], total = result.count || 0;
       return response({ success: true, data: rows.map(publicLeave), total, page, pages: Math.max(1,Math.ceil(total/limit)),

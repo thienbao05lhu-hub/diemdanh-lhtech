@@ -34,12 +34,19 @@
 
   function card(request, canReview, actor) {
     const admin = true;
+    const isLate = (request.requestType || request.request_type) === 'late';
     const allowActions = canReview && request.profileId && Number.isSafeInteger(request.revision) && request.profileId !== actor;
     const card = node('article', 'rounded-xl border border-slate-700/70 bg-slate-950/50 p-3 space-y-2');
     const heading = node('div', 'flex items-start justify-between gap-3');
     const title = node('div', 'min-w-0');
     if (admin) title.append(node('p', 'font-semibold text-xs text-white break-words', `${request.userName} · ${request.userId}`));
     title.append(node('p', 'text-xs text-slate-300', `${request.date.split('-').reverse().join('/')} · Ca ${request.shift}`));
+    const typeBadge = isLate
+      ? node('span', 'inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-md bg-orange-500/15 text-orange-400 border border-orange-500/30', `⏰ Xin đi trễ (${request.lateMinutes || request.late_minutes || 15}p)`)
+      : node('span', 'inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-400 border border-amber-500/30', '📝 Nghỉ phép');
+    const badgeRow = node('div', 'flex items-center gap-1.5 mt-1');
+    badgeRow.append(typeBadge);
+    title.append(badgeRow);
     heading.append(title, node('span', `text-[11px] font-semibold shrink-0 ${colors[request.status] || 'text-slate-300'}`, labels[request.status] || request.status));
     card.append(heading, node('p', 'text-xs text-slate-300 whitespace-pre-wrap break-words', `Lý do: ${request.reason}`));
     if (request.reviewReason) card.append(node('p', 'text-[11px] text-slate-400 whitespace-pre-wrap break-words', `Phản hồi: ${request.reviewReason}`));
@@ -59,7 +66,8 @@
       input.id = `leaveReviewReason_${request.id}`;
       label.htmlFor = input.id;
       const actions = node('div', 'flex items-center gap-2 flex-wrap');
-      const approve = node('button', 'rounded-lg bg-emerald-600 hover:bg-emerald-500 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50 cursor-pointer', 'Chấp thuận');
+      const approveText = isLate ? 'Chấp thuận (Miễn phạt trễ)' : 'Chấp thuận';
+      const approve = node('button', 'rounded-lg bg-emerald-600 hover:bg-emerald-500 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50 cursor-pointer', approveText);
       const reject = node('button', 'rounded-lg bg-rose-600/20 hover:bg-rose-600/30 border border-rose-500/30 px-3 py-2 text-xs font-semibold text-rose-300 disabled:opacity-50 cursor-pointer', 'Từ chối');
       approve.type = reject.type = 'button';
       approve.addEventListener('click', () => review(request, 'approved', input, actions));
@@ -71,7 +79,10 @@
       const revoke = node('button', 'rounded-lg bg-slate-800 hover:bg-rose-950/40 border border-slate-700 hover:border-rose-500/40 text-slate-300 hover:text-rose-300 px-3 py-1.5 text-xs font-semibold transition disabled:opacity-50 cursor-pointer', 'Hủy duyệt (Đưa về Chờ duyệt)');
       revoke.type = 'button';
       revoke.addEventListener('click', async () => {
-        if (!confirm('Bạn có chắc muốn hủy duyệt đơn này? Trạng thái điểm danh Vắng có phép sẽ bị hủy bỏ.')) return;
+        const revokePrompt = isLate
+          ? 'Bạn có chắc muốn hủy duyệt đơn xin đi trễ này? Nếu sinh viên đã quét mã trễ, tiền phạt trễ sẽ được tính lại theo quy định.'
+          : 'Bạn có chắc muốn hủy duyệt đơn này? Trạng thái điểm danh Vắng có phép sẽ bị hủy bỏ.';
+        if (!confirm(revokePrompt)) return;
         await review(request, 'pending', { value: 'Hủy chấp thuận bởi Admin' }, actions);
       });
       actions.append(revoke, createDeleteButton(request, () => actions));
@@ -109,7 +120,8 @@
     loading = true; const version = ++generation;
     try {
       const filter = el('leaveRequestStatus').value || 'pending';
-      const response = await root.fetch(`/api/leaves?status=${encodeURIComponent(filter)}&page=${page}&limit=25`,
+      const typeFilter = el('leaveRequestType')?.value || 'all';
+      const response = await root.fetch(`/api/leaves?status=${encodeURIComponent(filter)}&type=${encodeURIComponent(typeFilter)}&page=${page}&limit=25`,
         { headers: root.getAdminHeaders(), cache: 'no-store', signal: AbortSignal.timeout(15000) });
       const result = await response.json();
       if (version !== generation || !authenticated()) return;
@@ -128,18 +140,20 @@
 
   async function removeLeave(request, actions) {
     if (deciding || !authenticated()) return;
+    const isLate = (request.requestType || request.request_type) === 'late';
+    const actionTypeName = isLate ? 'đơn xin đi trễ' : 'đơn xin nghỉ';
     const dateLabel = request.date ? request.date.split('-').reverse().join('/') : '';
     let confirmed = false;
     if (typeof root.showConfirmDialog === 'function') {
       confirmed = await root.showConfirmDialog({
-        title: 'Xóa Đơn Xin Nghỉ',
-        message: `Bạn có chắc chắn muốn xóa đơn xin nghỉ của <strong class="text-white">${request.userName} (${request.userId})</strong> — Ca ${request.shift} ngày ${dateLabel} khỏi hệ thống?`,
+        title: isLate ? 'Xóa Đơn Xin Đi Trễ' : 'Xóa Đơn Xin Nghỉ',
+        message: `Bạn có chắc chắn muốn xóa ${actionTypeName} của <strong class="text-white">${request.userName} (${request.userId})</strong> — Ca ${request.shift} ngày ${dateLabel} khỏi hệ thống?`,
         confirmText: 'Xóa đơn',
         cancelText: 'Hủy',
         isDanger: true,
       });
     } else {
-      confirmed = root.confirm(`Bạn có chắc chắn muốn xóa đơn xin nghỉ của ${request.userName} (${request.userId}) - Ca ${request.shift} ngày ${dateLabel}?`);
+      confirmed = root.confirm(`Bạn có chắc chắn muốn xóa ${actionTypeName} của ${request.userName} (${request.userId}) - Ca ${request.shift} ngày ${dateLabel}?`);
     }
     if (!confirmed) return;
 
@@ -155,14 +169,14 @@
       });
       const result = await response.json();
       if (version !== generation || !authenticated()) return;
-      if (!response.ok || result.success !== true) throw new Error(result.message || 'Chưa xóa được đơn xin nghỉ.');
+      if (!response.ok || result.success !== true) throw new Error(result.message || `Chưa xóa được ${actionTypeName}.`);
       draftReasons.delete(request.id);
-      toast('success', result.message || 'Đã xóa đơn xin nghỉ thành công.');
+      toast('success', result.message || `Đã xóa ${actionTypeName} thành công.`);
       if (typeof root.fetchTodayAttendance === 'function') void root.fetchTodayAttendance();
       if (typeof root.fetchPersonalStats === 'function') void root.fetchPersonalStats();
       if (root.AdminTools?.loadAudit) void root.AdminTools.loadAudit();
     } catch (error) {
-      toast('warning', error.message || 'Chưa xóa được đơn xin nghỉ. Vui lòng thử lại.');
+      toast('warning', error.message || `Chưa xóa được ${actionTypeName}. Vui lòng thử lại.`);
     } finally {
       deciding = false;
       buttons.forEach(button => { button.disabled = false; });
@@ -195,7 +209,8 @@
     }
   }
   el('btnRefreshLeaveRequests')?.addEventListener('click', () => void load());
-  el('leaveRequestStatus').addEventListener('change', () => void load(true));
+  el('leaveRequestStatus')?.addEventListener('change', () => void load(true));
+  el('leaveRequestType')?.addEventListener('change', () => void load(true));
   el('leaveRequestsPrev').addEventListener('click', () => { if (!loading && page > 1) { page--; void load(); } });
   el('leaveRequestsNext').addEventListener('click', () => { if (!loading && page * 25 < total) { page++; void load(); } });
   document.addEventListener('admin-auth-changed', event => {
