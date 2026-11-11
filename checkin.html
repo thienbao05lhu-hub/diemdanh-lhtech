@@ -27,7 +27,7 @@
   <script defer src="js/attendance-trial.js?v=20261104-qr2"></script>
   <script defer src="js/auth.js?v=20261110-opt2"></script>
   <script defer src="js/app-ui.js?v=20261102-vibrate1"></script>
-  <script defer src="js/checkin.js?v=20261111-ios-fix"></script>
+  <script defer src="js/checkin.js?v=20261111-single-cam"></script>
   <script defer src="js/student-leaves.js?v=20261111-ios-fix"></script>
   <script defer src="js/pwa-install.js?v=20261102-pwa1"></script>
 
@@ -46,10 +46,27 @@
     .scanner-laser {
       animation: laser 2.2s infinite ease-in-out;
     }
+    #reader {
+      position: relative;
+      width: 100%;
+      border-radius: 1rem;
+      overflow: hidden;
+    }
     #reader video {
+      display: block;
+      width: 100% !important;
+      max-height: 420px;
       border-radius: 1rem;
       object-fit: cover !important;
       transition: transform 0.2s cubic-bezier(0.2, 0, 0, 1);
+    }
+    /* Chống lỗi phân thân: Tuyệt đối không hiển thị 2 khung video cùng lúc trên giao diện */
+    #reader video:not(:last-of-type) {
+      display: none !important;
+      height: 0 !important;
+      position: absolute !important;
+      opacity: 0 !important;
+      pointer-events: none !important;
     }
     /* Hiệu ứng khung bắt dính mã QR thông minh */
     #qrReticle {

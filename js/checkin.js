@@ -204,7 +204,7 @@
 
     // 1. Luôn áp dụng visual CSS Transform trên video để người dùng nhìn thấy camera phóng to ngay lập tức
     const videoEl = (typeof document !== 'undefined' && typeof document.querySelector === 'function')
-      ? document.querySelector('#reader video')
+      ? (document.querySelector('#reader video:last-of-type') || document.querySelector('#reader video'))
       : null;
     if (videoEl) {
       videoEl.style.transform = `scale(${zoomLevel})`;
@@ -302,9 +302,8 @@
 
     trackerInterval = setInterval(async () => {
       if (!cameraOn || busy) return;
-      const videoEl = (typeof document !== 'undefined' && typeof document.querySelector === 'function')
-      ? document.querySelector('#reader video')
-      : null;
+      const videos = document.querySelectorAll('#reader video');
+      const videoEl = videos.length > 0 ? videos[videos.length - 1] : null;
       if (!videoEl || videoEl.readyState < 2) return;
 
       try {
@@ -369,9 +368,8 @@
     if (!cameraOn || busy) return;
     clearAutoZoomTimers();
     const points = decodedResult?.result?.points;
-    const videoEl = (typeof document !== 'undefined' && typeof document.querySelector === 'function')
-      ? document.querySelector('#reader video')
-      : null;
+    const videos = document.querySelectorAll('#reader video');
+    const videoEl = videos.length > 0 ? videos[videos.length - 1] : null;
     if (points && points.length >= 2 && videoEl) {
       let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
       for (const pt of points) {
@@ -390,18 +388,40 @@
     void submit(text);
   }
 
+  function cleanReaderDOM() {
+    const readerEl = el('reader');
+    if (!readerEl) return;
+    const videos = readerEl.querySelectorAll('video');
+    videos.forEach(v => {
+      try {
+        if (v.srcObject && typeof v.srcObject.getTracks === 'function') {
+          v.srcObject.getTracks().forEach(t => {
+            try { t.stop(); } catch (_) {}
+          });
+        }
+        v.srcObject = null;
+        v.pause();
+        v.removeAttribute('src');
+      } catch (_) {}
+      try { v.remove(); } catch (_) {}
+    });
+    readerEl.replaceChildren();
+  }
+
   async function stopCamera() {
     clearAutoZoomTimers();
     stopAutoTracker();
     cameraStarting = false;
     if (scanner) {
-      try {
-        if (cameraOn) await scanner.stop();
-      } catch (_) {}
-      try { scanner.clear(); } catch (_) {}
+      const s = scanner;
       scanner = null;
+      try {
+        if (cameraOn) await s.stop();
+      } catch (_) {}
+      try { s.clear(); } catch (_) {}
     }
     cameraOn = false;
+    cleanReaderDOM();
     el('scanOverlay')?.classList.add('hidden');
     el('zoomControls')?.classList.add('hidden');
     el('cameraStandbyPrompt')?.classList.remove('hidden');
@@ -412,10 +432,6 @@
     hideReticle();
     currentZoom = 1.0;
     updateZoomButtons(1.0);
-    const videoEl = (typeof document !== 'undefined' && typeof document.querySelector === 'function')
-      ? document.querySelector('#reader video')
-      : null;
-    if (videoEl) videoEl.style.transform = 'scale(1.0)';
     const hint = el('cameraHintText');
     if (hint) {
       hint.innerText = isIOS
@@ -500,7 +516,21 @@
     const readerEl = el('reader');
     if (!readerEl || !('MutationObserver' in root)) return;
     const observer = new MutationObserver(() => {
-      const v = readerEl.querySelector('video');
+      const videos = readerEl.querySelectorAll('video');
+      if (videos.length > 1) {
+        // Tự động triệt tiêu các video cũ bị kẹt / phân thân, chỉ giữ lại video mới nhất đang quét
+        for (let i = 0; i < videos.length - 1; i++) {
+          try {
+            if (videos[i].srcObject?.getTracks) {
+              videos[i].srcObject.getTracks().forEach(t => { try { t.stop(); } catch (_) {} });
+            }
+            videos[i].srcObject = null;
+            videos[i].pause();
+            videos[i].remove();
+          } catch (_) {}
+        }
+      }
+      const v = readerEl.querySelector('video:last-of-type') || readerEl.querySelector('video');
       if (v && !v.dataset.iosPatched) {
         v.dataset.iosPatched = 'true';
         v.setAttribute('playsinline', 'true');
@@ -560,10 +590,12 @@
 
     try {
       if (scanner) {
-        try { await scanner.stop(); } catch (_) {}
-        try { scanner.clear(); } catch (_) {}
+        const s = scanner;
         scanner = null;
+        try { await s.stop(); } catch (_) {}
+        try { s.clear(); } catch (_) {}
       }
+      cleanReaderDOM();
 
       scanner = new root.Html5Qrcode('reader', {
         verbose: false,
@@ -573,15 +605,11 @@
         }
       });
 
-      // Trên iOS Safari: Không ép cứng min width/height để tránh OverconstrainedError ở chế độ dọc
+      // Tối ưu videoConstraints cho cả iOS và Android (tránh OverconstrainedError khi quay dọc)
       const scanConfig = {
         fps: isIOS ? 15 : 20,
-        videoConstraints: isIOS ? {
+        videoConstraints: {
           facingMode: { ideal: 'environment' }
-        } : {
-          facingMode: { ideal: 'environment' },
-          width: { min: 640, ideal: 1280, max: 1920 },
-          height: { min: 480, ideal: 720, max: 1080 }
         }
       };
 
@@ -595,14 +623,17 @@
       } catch (errConstraints) {
         console.warn('Fallback sang cau hinh camera co ban:', errConstraints);
         if (scanner) {
-          try { await scanner.stop(); } catch (_) {}
-          try { scanner.clear(); } catch (_) {}
-          scanner = new root.Html5Qrcode('reader', {
-            verbose: false,
-            formatsToSupport: [0],
-            experimentalFeatures: { useBarCodeDetectorIfSupported: false }
-          });
+          const s = scanner;
+          scanner = null;
+          try { await s.stop(); } catch (_) {}
+          try { s.clear(); } catch (_) {}
         }
+        cleanReaderDOM();
+        scanner = new root.Html5Qrcode('reader', {
+          verbose: false,
+          formatsToSupport: [0],
+          experimentalFeatures: { useBarCodeDetectorIfSupported: false }
+        });
         await scanner.start(
           { facingMode: 'environment' },
           { fps: 15 },
@@ -618,7 +649,8 @@
         return;
       }
 
-      const videoEl = document.querySelector('#reader video');
+      const videos = document.querySelectorAll('#reader video');
+      const videoEl = videos.length > 0 ? videos[videos.length - 1] : null;
       if (videoEl) {
         videoEl.setAttribute('playsinline', 'true');
         videoEl.setAttribute('webkit-playsinline', 'true');
@@ -651,7 +683,7 @@
       el('cameraStandbyPrompt')?.classList.remove('hidden');
       if (standbyTitle) standbyTitle.innerText = 'Chạm để mở lại Camera';
       if (standbyIcon) standbyIcon.className = 'fa-solid fa-camera text-rose-400';
-      scanMessage(false, 'Không mở được camera', 'Kiểm tra quyền Camera của Safari trong Cài đặt iPhone rồi chạm để thử lại.');
+      scanMessage(false, 'Không mở được camera', 'Kiểm tra quyền Camera trong Cài đặt trình duyệt rồi chạm để thử lại.');
     } finally {
       cameraStarting = false;
       controls();
@@ -724,10 +756,23 @@
     }
   }, 10000);
 
-  // 2. Watchdog kiểm tra luồng video thực tế của iOS (chống đứng hình do Low Power Mode)
+  // 2. Watchdog kiểm tra luồng video thực tế của iOS & Android (chống đứng hình hoặc phân thân video)
   setInterval(() => {
     if (cameraOn && !busy && !document.hidden) {
-      const v = document.querySelector('#reader video');
+      const videos = document.querySelectorAll('#reader video');
+      if (videos.length > 1) {
+        for (let i = 0; i < videos.length - 1; i++) {
+          try {
+            if (videos[i].srcObject?.getTracks) {
+              videos[i].srcObject.getTracks().forEach(t => { try { t.stop(); } catch (_) {} });
+            }
+            videos[i].srcObject = null;
+            videos[i].pause();
+            videos[i].remove();
+          } catch (_) {}
+        }
+      }
+      const v = videos.length > 0 ? videos[videos.length - 1] : null;
       if (v) {
         if (v.paused) {
           v.play().catch(() => {});
@@ -750,6 +795,7 @@
 
   async function init() {
     registration('Đang kiểm tra tài khoản…'); controls(); el('scanOverlay').classList.add('hidden');
+    cleanReaderDOM();
     observeReaderVideo();
 
     // Hỗ trợ chạm vào khung camera để mở lại ngay lập tức (phục vụ người dùng iOS khi camera bị pause)
