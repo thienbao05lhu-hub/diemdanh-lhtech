@@ -175,8 +175,25 @@
     if (attendanceWrites.has(key)) fail(409,'Thao tác đang xử lý. Chờ kết quả rồi tải lại bảng.');
     attendanceWrites.add(key); attendanceSnapshots.delete(key);
     try {
-      const result = await qrRpc('admin_adjust_attendance',{p_profile_id:observed.profileId,p_date:observed.date,
-        p_shift:body.shift,p_action:action,p_expected_id:observed.recordId,p_expected_revision:observed.revision,p_reason:reason.trim()});
+      const args = {
+        p_profile_id: observed.profileId,
+        p_date: observed.date,
+        p_shift: body.shift,
+        p_action: action,
+        p_expected_id: observed.recordId,
+        p_expected_revision: observed.revision,
+        p_reason: reason.trim()
+      };
+      if (body.customTime) {
+        let customTimeIso = String(body.customTime).trim();
+        if (/^\d{2}:\d{2}(:\d{2})?$/.test(customTimeIso)) {
+          const t = customTimeIso.length === 5 ? `${customTimeIso}:00` : customTimeIso;
+          customTimeIso = `${targetDate}T${t}+07:00`;
+        }
+        if (Number.isNaN(Date.parse(customTimeIso))) fail(400, 'Thời gian chỉnh sửa không hợp lệ.');
+        args.p_custom_time = customTimeIso;
+      }
+      const result = await qrRpc('admin_adjust_attendance', args);
       if (result?.success !== true || result.profileId !== observed.profileId || result.studentId !== body.userId
         || result.date !== observed.date || result.shift !== body.shift || result.action !== action || typeof result.removed !== 'boolean'
         || (result.removed ? result.recordId !== null : !uuid(result.recordId)))

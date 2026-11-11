@@ -14,7 +14,7 @@
   <script src="js/attendance-csv.js?v=20261111-v3"></script>
   <script src="vendor/supabase-2.118.0.js"></script>
   <script src="js/config.js?v=20261111-v3"></script>
-  <script src="js/supabase-read-api.js?v=20261111-v4"></script>
+  <script src="js/supabase-read-api.js?v=20261111-v5"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
     body { font-family: 'Plus Jakarta Sans', sans-serif; }
@@ -2562,12 +2562,28 @@
       }
 
       tbody.innerHTML = filteredList.map(item => {
-        let timeStr = '<span class="text-slate-600 font-mono">--:--:--</span>';
+        let timeCell = '<span class="text-slate-600 font-mono">--:--:--</span>';
+        const targetShift = item.shift || currentViewingShift;
         if (item.timestamp) {
-          timeStr = new Date(item.timestamp).toLocaleTimeString('vi-VN', {
+          const formattedTime = new Date(item.timestamp).toLocaleTimeString('vi-VN', {
             timeZone: 'Asia/Ho_Chi_Minh',
             hour: '2-digit', minute: '2-digit', second: '2-digit'
           });
+          if (item.status === 'Đi trễ') {
+            timeCell = `
+              <button
+                type="button"
+                onclick="openEditLateTimeModal('${item.userId}', '${targetShift}')"
+                title="Nhấn để chỉnh sửa thời gian đi trễ"
+                class="inline-flex items-center gap-1 font-mono font-bold text-orange-400 hover:text-orange-300 hover:underline px-1 py-0.5 rounded hover:bg-orange-500/10 transition cursor-pointer"
+              >
+                <span>${formattedTime}</span>
+                <i class="fa-solid fa-pen text-[9px] text-orange-400/70"></i>
+              </button>
+            `;
+          } else {
+            timeCell = `<span class="font-mono text-slate-300">${formattedTime}</span>`;
+          }
         }
 
         // Badge trạng thái:
@@ -2594,18 +2610,25 @@
 
         // Nút Thao tác:
         // - Nếu bản ghi đã bị khóa (isLocked: true): thay bằng dòng chữ mờ "Đã khóa", vô hiệu hóa thao tác
-        // - Đi trễ: nút "Đúng giờ" (sửa thành Có mặt) & nút "Vắng CP" (sửa thành Vắng có phép)
+        // - Đi trễ: nút "Sửa giờ" & nút "Đúng giờ" (sửa thành Có mặt) & nút "Vắng CP" (sửa thành Vắng có phép)
         // - Vắng không phép hoặc Chưa điểm danh: nút "Xin phép" (màu Vàng) -> gọi API update-status đổi thành 'Vắng có phép'
         // - Vắng có phép: nút "Hủy phép" (để quay lại trạng thái tính toán tự động) -> gọi API update-status đổi thành 'Chưa điểm danh'
         // - Đã Có mặt: nút "Hủy quét"
         let actionBtn = '';
-        const targetShift = item.shift || currentViewingShift;
         if (item.isLocked) {
           actionBtn = `
             <div class="flex items-center justify-end gap-1 shrink-0 ml-auto whitespace-nowrap">
               <span class="inline-flex items-center gap-1 text-[10px] text-slate-500 font-medium px-1.5 py-0.5 rounded border border-slate-800 bg-slate-950/60 select-none" title="Ca này đã chốt sổ">
                 <i class="fa-solid fa-lock text-[9px] text-slate-600"></i> Đã khóa
               </span>
+              ${item.status === 'Đi trễ' ? `
+              <button
+                onclick="openEditLateTimeModal('${item.userId}', '${targetShift}')"
+                title="Chỉnh sửa giờ quét / thời gian đi trễ trong ca đã khóa"
+                class="px-2 py-1 rounded-lg text-[10px] font-semibold bg-orange-500/20 hover:bg-orange-500/30 text-orange-300 border border-orange-500/40 transition flex items-center gap-1 shadow-sm cursor-pointer"
+              >
+                <i class="fa-solid fa-clock-rotate-left text-[9px]"></i> Sửa giờ
+              </button>` : ''}
               ${item.status !== 'Có mặt' ? `
               <button
                 onclick="handleUpdateAttendanceStatus('${item.userId}', '${targetShift}', 'Có mặt')"
@@ -2616,7 +2639,7 @@
               </button>` : ''}
               ${item.status !== 'Đi trễ' ? `
               <button
-                onclick="handleUpdateAttendanceStatus('${item.userId}', '${targetShift}', 'Đi trễ')"
+                onclick="openEditLateTimeModal('${item.userId}', '${targetShift}')"
                 title="Điểm danh bằng tay: Đánh dấu sinh viên Đi trễ"
                 class="px-2 py-1 rounded-lg text-[10px] font-semibold bg-orange-500/15 hover:bg-orange-500/25 text-orange-300 border border-orange-500/35 transition flex items-center gap-1 shadow-sm cursor-pointer"
               >
@@ -2635,6 +2658,13 @@
         } else if (item.status === 'Đi trễ') {
           actionBtn = `
             <div class="flex items-center justify-end gap-1 shrink-0 ml-auto whitespace-nowrap">
+              <button
+                onclick="openEditLateTimeModal('${item.userId}', '${targetShift}')"
+                title="Chỉnh sửa giờ quét / thời gian đi trễ"
+                class="px-2 py-1 rounded-lg text-[10px] font-semibold bg-orange-500/20 hover:bg-orange-500/30 text-orange-300 border border-orange-500/40 transition flex items-center gap-1 shadow-sm cursor-pointer"
+              >
+                <i class="fa-solid fa-clock-rotate-left text-[9px]"></i> Sửa giờ
+              </button>
               <button
                 onclick="handleUpdateAttendanceStatus('${item.userId}', '${targetShift}', 'Có mặt')"
                 title="Duyệt Đúng Giờ: Chuyển thành Có mặt"
@@ -2669,8 +2699,8 @@
                 <i class="fa-solid fa-user-check text-[9px]"></i> Có mặt
               </button>
               <button
-                onclick="handleUpdateAttendanceStatus('${item.userId}', '${targetShift}', 'Đi trễ')"
-                title="Điểm danh bằng tay: Đánh dấu sinh viên Đi trễ"
+                onclick="openEditLateTimeModal('${item.userId}', '${targetShift}')"
+                title="Điểm danh bằng tay: Đánh dấu sinh viên Đi trễ (chỉnh số phút hoặc giờ quét)"
                 class="px-2 py-1 rounded-lg text-[10px] font-semibold bg-orange-500/15 hover:bg-orange-500/25 text-orange-300 border border-orange-500/35 transition flex items-center gap-1 shadow-sm cursor-pointer"
               >
                 <i class="fa-solid fa-clock-rotate-left text-[9px]"></i> Đi trễ
@@ -2695,8 +2725,8 @@
                 <i class="fa-solid fa-user-check text-[9px]"></i> Có mặt
               </button>
               <button
-                onclick="handleUpdateAttendanceStatus('${item.userId}', '${targetShift}', 'Đi trễ')"
-                title="Điểm danh bằng tay: Đánh dấu sinh viên Đi trễ"
+                onclick="openEditLateTimeModal('${item.userId}', '${targetShift}')"
+                title="Điểm danh bằng tay: Đánh dấu sinh viên Đi trễ (chỉnh số phút hoặc giờ quét)"
                 class="px-2 py-1 rounded-lg text-[10px] font-semibold bg-orange-500/15 hover:bg-orange-500/25 text-orange-300 border border-orange-500/35 transition flex items-center gap-1 shadow-sm cursor-pointer"
               >
                 <i class="fa-solid fa-clock-rotate-left text-[9px]"></i> Đi trễ
@@ -2714,8 +2744,8 @@
           actionBtn = `
             <div class="flex items-center justify-end gap-1 shrink-0 ml-auto whitespace-nowrap">
               <button
-                onclick="handleUpdateAttendanceStatus('${item.userId}', '${targetShift}', 'Đi trễ')"
-                title="Chuyển từ Có mặt sang Đi trễ"
+                onclick="openEditLateTimeModal('${item.userId}', '${targetShift}')"
+                title="Chuyển từ Có mặt sang Đi trễ (chỉnh số phút hoặc giờ quét)"
                 class="px-2 py-1 rounded-lg text-[10px] font-semibold bg-orange-500/15 hover:bg-orange-500/25 text-orange-300 border border-orange-500/35 transition flex items-center gap-1 shadow-sm cursor-pointer"
               >
                 <i class="fa-solid fa-clock-rotate-left text-[9px]"></i> Đi trễ
@@ -2742,7 +2772,7 @@
               <p class="leading-tight">${escapeHtml(item.userName || 'N/A')}</p>
               ${reasonTag}
             </td>
-            <td class="px-3 py-2 text-slate-400">${timeStr}</td>
+            <td class="px-3 py-2 text-slate-400">${timeCell}</td>
             <td class="px-3 py-2 text-center">${statusBadge}</td>
             <td class="px-4 py-2 text-right">${actionBtn}</td>
           </tr>
@@ -2751,7 +2781,7 @@
     }
 
     // Cập nhật trạng thái điểm danh thủ công (Admin & Super Admin)
-    async function handleUpdateAttendanceStatus(userId, shift, newStatus, customReason) {
+    async function handleUpdateAttendanceStatus(userId, shift, newStatus, customReason, customTime) {
       const observed = currentAttendanceTodayData.find(row => row.userId === userId && (row.shift === shift || !row.shift));
       const targetDate = observed?.businessDate || document.getElementById('attendanceDateFilter')?.value || currentViewingDate || undefined;
       try {
@@ -2763,6 +2793,7 @@
             shift,
             newStatus,
             reason: customReason || undefined,
+            customTime: customTime || undefined,
             businessDate: targetDate,
             expectedId: observed?.recordId ?? null,
             expectedRevision: observed?.recordRevision ?? 0
@@ -2789,6 +2820,358 @@
         console.error('Lỗi khi cập nhật trạng thái:', err);
         showToast.error('Lỗi kết nối khi cập nhật trạng thái điểm danh!');
         return false;
+      }
+    }
+
+    // ==========================================
+    // MODAL CHỈNH SỬA THỜI GIAN ĐI TRỄ
+    // ==========================================
+    let currentEditLateTarget = null;
+
+    function ensureEditLateTimeModal() {
+      let modal = document.getElementById('editLateTimeModal');
+      if (modal) return modal;
+
+      modal = document.createElement('div');
+      modal.id = 'editLateTimeModal';
+      modal.className = 'fixed inset-0 z-[9999] bg-slate-950/85 backdrop-blur-sm flex items-center justify-center p-4';
+      modal.innerHTML = `
+        <div class="bg-slate-900 border border-slate-700 rounded-2xl p-5 w-full max-w-md shadow-2xl space-y-4">
+          <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+            <div class="flex items-center gap-2.5">
+              <span class="w-8 h-8 rounded-xl bg-orange-500/15 text-orange-400 border border-orange-500/30 flex items-center justify-center shrink-0">
+                <i class="fa-solid fa-clock-rotate-left text-sm"></i>
+              </span>
+              <div>
+                <h3 class="text-sm font-bold text-white">Chỉnh Sửa Thời Gian Đi Trễ</h3>
+                <p class="text-[11px] text-slate-400">Điều chỉnh giờ quét & tiền phạt đi trễ của sinh viên</p>
+              </div>
+            </div>
+            <button type="button" onclick="closeEditLateTimeModal()" class="text-slate-400 hover:text-white p-1 cursor-pointer">
+              <i class="fa-solid fa-xmark text-sm"></i>
+            </button>
+          </div>
+
+          <!-- Thông tin sinh viên & ca -->
+          <div class="bg-slate-950/80 border border-slate-800 rounded-xl p-3 flex items-center justify-between gap-3 text-xs">
+            <div>
+              <p id="editLateStudentName" class="font-bold text-white text-sm">--</p>
+              <p class="text-[11px] text-slate-400 mt-0.5">
+                MSSV: <span id="editLateStudentId" class="font-mono text-emerald-400 font-bold">--</span> &bull; 
+                <span id="editLateShiftBadge" class="font-semibold text-orange-300">Ca Sáng</span>
+              </p>
+            </div>
+            <div class="text-right shrink-0">
+              <span id="editLateCurrentStatusBadge" class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-orange-500/15 text-orange-400 border border-orange-500/30">
+                Đi trễ
+              </span>
+            </div>
+          </div>
+
+          <!-- Form chỉnh sửa giờ -->
+          <div class="space-y-3.5 text-xs">
+            <div>
+              <div class="flex items-center justify-between mb-1">
+                <label class="block text-[11px] font-semibold text-slate-300">
+                  <i class="fa-regular fa-clock text-orange-400 mr-1"></i> Giờ ghi nhận điểm danh (Giờ : Phút : Giây)
+                </label>
+                <span id="editLateCutoffHint" class="text-[10px] text-slate-500 font-mono">Mốc đúng giờ: 08:10</span>
+              </div>
+              <input
+                type="time"
+                step="1"
+                id="editLateTimeInput"
+                oninput="handleEditLateTimeChange('time')"
+                class="w-full bg-slate-950 border border-slate-700 focus:border-orange-500 rounded-xl px-3 py-2 text-sm font-mono text-white focus:outline-none transition"
+              />
+              <!-- Gợi ý nhanh -->
+              <div class="flex items-center gap-1.5 mt-2 flex-wrap text-[10px]">
+                <span class="text-slate-500">Mốc nhanh:</span>
+                <button type="button" onclick="setEditLateQuickPreset('cutoff')" class="px-2 py-0.5 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 font-mono transition cursor-pointer">
+                  Mốc 10p
+                </button>
+                <button type="button" onclick="setEditLateQuickPreset('+5')" class="px-2 py-0.5 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 font-mono transition cursor-pointer">
+                  +5 phút
+                </button>
+                <button type="button" onclick="setEditLateQuickPreset('+15')" class="px-2 py-0.5 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 font-mono transition cursor-pointer">
+                  +15 phút
+                </button>
+                <button type="button" onclick="setEditLateQuickPreset('+30')" class="px-2 py-0.5 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 font-mono transition cursor-pointer">
+                  +30 phút
+                </button>
+                <button type="button" onclick="setEditLateQuickPreset('now')" class="px-2 py-0.5 rounded-md bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 border border-orange-500/30 font-semibold transition cursor-pointer">
+                  Bây giờ
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-[11px] font-semibold text-slate-300 mb-1">
+                <i class="fa-solid fa-hourglass-half text-amber-400 mr-1"></i> Số phút tính trễ
+              </label>
+              <div class="relative">
+                <input
+                  type="number"
+                  min="1"
+                  max="240"
+                  id="editLateMinutesInput"
+                  oninput="handleEditLateTimeChange('minutes')"
+                  placeholder="VD: 10"
+                  class="w-full bg-slate-950 border border-slate-700 focus:border-orange-500 rounded-xl px-3 py-2 text-xs font-mono text-white focus:outline-none transition pr-14"
+                />
+                <span class="absolute inset-y-0 right-0 pr-3 flex items-center text-[11px] text-slate-500 pointer-events-none">phút</span>
+              </div>
+            </div>
+
+            <!-- Thẻ tổng kết phạt dự tính -->
+            <div id="editLatePreviewCard" class="p-3 rounded-xl bg-orange-500/10 border border-orange-500/25 flex items-center justify-between gap-3 text-xs">
+              <div>
+                <p class="text-[11px] text-slate-400">Dự tính phạt đi trễ (500đ / phút):</p>
+                <p id="editLatePreviewText" class="font-bold text-orange-300 text-sm mt-0.5">Trễ 0 phút &bull; 0 đ</p>
+              </div>
+              <div class="text-right">
+                <span id="editLatePreviewBadge" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-orange-500/20 text-orange-300 border border-orange-500/40">
+                  <i class="fa-solid fa-coins text-[9px]"></i> Phạt
+                </span>
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-[11px] font-semibold text-slate-300 mb-1">Ghi chú / Lý do điều chỉnh</label>
+              <input
+                type="text"
+                id="editLateReasonInput"
+                maxlength="200"
+                class="w-full bg-slate-950 border border-slate-700 focus:border-emerald-500 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none transition"
+                placeholder="VD: Admin điều chỉnh thời gian quét / Kẹt xe..."
+              />
+            </div>
+          </div>
+
+          <!-- Footer buttons -->
+          <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+            <button
+              type="button"
+              onclick="closeEditLateTimeModal()"
+              class="px-3.5 py-2 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 transition cursor-pointer"
+            >
+              Hủy
+            </button>
+            <button
+              type="button"
+              id="btnSubmitEditLateTime"
+              onclick="submitEditLateTime()"
+              class="px-4 py-2 rounded-xl text-xs font-bold bg-orange-600 hover:bg-orange-500 text-white shadow-lg shadow-orange-600/20 flex items-center gap-1.5 transition cursor-pointer"
+            >
+              <i class="fa-solid fa-check"></i> Lưu thay đổi
+            </button>
+          </div>
+        </div>
+      `;
+      modal.addEventListener('click', (e) => { if (e.target === modal) closeEditLateTimeModal(); });
+      document.body.appendChild(modal);
+      return modal;
+    }
+
+    function openEditLateTimeModal(userId, shift) {
+      const observed = (currentAttendanceTodayData || []).find(row => row.userId === userId && (row.shift === shift || !row.shift));
+      const targetShift = shift || observed?.shift || currentViewingShift || 'Sáng';
+      const targetUser = (rawUsersList || []).find(u => u.userId === userId) || {};
+      const studentName = observed?.userName || targetUser.name || userId;
+
+      currentEditLateTarget = {
+        userId,
+        shift: targetShift,
+        observed
+      };
+
+      const modal = ensureEditLateTimeModal();
+
+      document.getElementById('editLateStudentName').innerText = studentName;
+      document.getElementById('editLateStudentId').innerText = userId;
+      document.getElementById('editLateShiftBadge').innerText = `Ca ${targetShift}`;
+
+      const statusBadge = document.getElementById('editLateCurrentStatusBadge');
+      if (statusBadge) {
+        statusBadge.innerText = observed?.status || 'Chưa điểm danh';
+      }
+
+      const shiftCutoffTimes = { 'Sáng': '08:10:00', 'Chiều': '13:25:00', 'Tối': '18:10:00' };
+      const cutoffTimeStr = shiftCutoffTimes[targetShift] || '08:10:00';
+      const cutoffHint = document.getElementById('editLateCutoffHint');
+      if (cutoffHint) cutoffHint.innerText = `Mốc đúng giờ: ${cutoffTimeStr.slice(0, 5)}`;
+
+      const timeInput = document.getElementById('editLateTimeInput');
+      const minutesInput = document.getElementById('editLateMinutesInput');
+      const reasonInput = document.getElementById('editLateReasonInput');
+
+      let initialTime = '';
+      if (observed?.timestamp) {
+        const d = new Date(observed.timestamp);
+        const hh = String(d.getHours()).padStart(2, '0');
+        const mm = String(d.getMinutes()).padStart(2, '0');
+        const ss = String(d.getSeconds()).padStart(2, '0');
+        initialTime = `${hh}:${mm}:${ss}`;
+      } else {
+        const [ch, cm] = cutoffTimeStr.split(':').map(Number);
+        const defMin = cm + 10;
+        const hh = String(ch + Math.floor(defMin / 60)).padStart(2, '0');
+        const mm = String(defMin % 60).padStart(2, '0');
+        initialTime = `${hh}:${mm}:00`;
+      }
+
+      if (timeInput) timeInput.value = initialTime;
+
+      const note = observed?.note || '';
+      const explicitMinMatch = /\[Trễ\s+(\d+)\s*phút\]/i.exec(note);
+      if (explicitMinMatch && minutesInput) {
+        minutesInput.value = explicitMinMatch[1];
+        handleEditLateTimeChange('minutes');
+      } else {
+        handleEditLateTimeChange('time');
+      }
+
+      if (reasonInput) {
+        const cleanNote = note.replace(/\[Trễ\s+\d+\s*phút\]\s*/gi, '').trim();
+        reasonInput.value = cleanNote || 'Admin điều chỉnh thời gian đi trễ';
+      }
+
+      modal.classList.remove('hidden');
+    }
+
+    function handleEditLateTimeChange(source) {
+      if (!currentEditLateTarget) return;
+      const targetShift = currentEditLateTarget.shift || 'Sáng';
+      const shiftCutoffTimes = { 'Sáng': '08:10:00', 'Chiều': '13:25:00', 'Tối': '18:10:00' };
+      const shiftDurationMinutes = { 'Sáng': 180, 'Chiều': 225, 'Tối': 240 };
+      const maxShiftMins = shiftDurationMinutes[targetShift] || 180;
+      const cutoffTimeStr = shiftCutoffTimes[targetShift] || '08:10:00';
+      const [ch, cm, cs] = cutoffTimeStr.split(':').map(Number);
+      const cutoffTotalSec = ch * 3600 + cm * 60 + cs;
+
+      const timeInput = document.getElementById('editLateTimeInput');
+      const minutesInput = document.getElementById('editLateMinutesInput');
+      const previewText = document.getElementById('editLatePreviewText');
+      const previewBadge = document.getElementById('editLatePreviewBadge');
+      const previewCard = document.getElementById('editLatePreviewCard');
+
+      if (source === 'minutes') {
+        let mins = parseInt(minutesInput?.value || '', 10);
+        if (Number.isFinite(mins) && mins >= 1) {
+          mins = Math.min(maxShiftMins, mins);
+          const targetTotalSec = cutoffTotalSec + mins * 60;
+          const th = Math.floor(targetTotalSec / 3600) % 24;
+          const tm = Math.floor((targetTotalSec % 3600) / 60);
+          const ts = targetTotalSec % 60;
+          if (timeInput) {
+            timeInput.value = `${String(th).padStart(2, '0')}:${String(tm).padStart(2, '0')}:${String(ts).padStart(2, '0')}`;
+          }
+          const fine = mins * 500;
+          if (previewText) previewText.innerHTML = `Trễ <span class="text-orange-400 font-bold">${mins} phút</span> &bull; Phạt <span class="text-rose-400 font-bold">${fine.toLocaleString('vi-VN')} đ</span>`;
+          if (previewBadge) previewBadge.className = 'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-orange-500/20 text-orange-300 border border-orange-500/40';
+          if (previewCard) previewCard.className = 'p-3 rounded-xl bg-orange-500/10 border border-orange-500/25 flex items-center justify-between gap-3 text-xs';
+        } else {
+          if (previewText) previewText.innerText = 'Nhập số phút hoặc giờ quét...';
+        }
+      } else {
+        const timeVal = timeInput?.value || '';
+        if (timeVal) {
+          const parts = timeVal.split(':').map(Number);
+          const th = parts[0] || 0;
+          const tm = parts[1] || 0;
+          const ts = parts[2] || 0;
+          const scanTotalSec = th * 3600 + tm * 60 + ts;
+          const diffSec = scanTotalSec - cutoffTotalSec;
+          let mins = Math.ceil(diffSec / 60);
+          if (mins <= 0) {
+            if (minutesInput) minutesInput.value = '1';
+            if (previewText) previewText.innerHTML = `<span class="text-emerald-400 font-semibold"><i class="fa-solid fa-check mr-1"></i>Giờ này trước mốc ${cutoffTimeStr.slice(0, 5)} (Đúng giờ).</span> Nếu lưu, hệ thống sẽ tính trễ tối thiểu 1 phút (500đ).`;
+            if (previewBadge) previewBadge.className = 'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40';
+            if (previewCard) previewCard.className = 'p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/25 flex items-center justify-between gap-3 text-xs';
+          } else {
+            mins = Math.min(maxShiftMins, mins);
+            if (minutesInput) minutesInput.value = mins;
+            const fine = mins * 500;
+            if (previewText) previewText.innerHTML = `Trễ <span class="text-orange-400 font-bold">${mins} phút</span> &bull; Phạt <span class="text-rose-400 font-bold">${fine.toLocaleString('vi-VN')} đ</span>`;
+            if (previewBadge) previewBadge.className = 'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-orange-500/20 text-orange-300 border border-orange-500/40';
+            if (previewCard) previewCard.className = 'p-3 rounded-xl bg-orange-500/10 border border-orange-500/25 flex items-center justify-between gap-3 text-xs';
+          }
+        }
+      }
+    }
+
+    function setEditLateQuickPreset(preset) {
+      if (!currentEditLateTarget) return;
+      const targetShift = currentEditLateTarget.shift || 'Sáng';
+      const shiftCutoffTimes = { 'Sáng': '08:10:00', 'Chiều': '13:25:00', 'Tối': '18:10:00' };
+      const cutoffTimeStr = shiftCutoffTimes[targetShift] || '08:10:00';
+      const [ch, cm, cs] = cutoffTimeStr.split(':').map(Number);
+      const timeInput = document.getElementById('editLateTimeInput');
+      const minutesInput = document.getElementById('editLateMinutesInput');
+
+      if (preset === 'now') {
+        const now = new Date();
+        const hh = String(now.getHours()).padStart(2, '0');
+        const mm = String(now.getMinutes()).padStart(2, '0');
+        const ss = String(now.getSeconds()).padStart(2, '0');
+        if (timeInput) timeInput.value = `${hh}:${mm}:${ss}`;
+        handleEditLateTimeChange('time');
+      } else if (preset === 'cutoff') {
+        if (timeInput) timeInput.value = `${String(ch).padStart(2, '0')}:${String(cm + 1).padStart(2, '0')}:00`;
+        if (minutesInput) minutesInput.value = '1';
+        handleEditLateTimeChange('minutes');
+      } else if (preset === '+5') {
+        if (minutesInput) minutesInput.value = '5';
+        handleEditLateTimeChange('minutes');
+      } else if (preset === '+15') {
+        if (minutesInput) minutesInput.value = '15';
+        handleEditLateTimeChange('minutes');
+      } else if (preset === '+30') {
+        if (minutesInput) minutesInput.value = '30';
+        handleEditLateTimeChange('minutes');
+      }
+    }
+
+    function closeEditLateTimeModal() {
+      const modal = document.getElementById('editLateTimeModal');
+      if (modal) modal.classList.add('hidden');
+      currentEditLateTarget = null;
+    }
+
+    async function submitEditLateTime() {
+      if (!currentEditLateTarget) return;
+      const { userId, shift } = currentEditLateTarget;
+      const timeVal = document.getElementById('editLateTimeInput')?.value;
+      const minutesVal = parseInt(document.getElementById('editLateMinutesInput')?.value || '', 10);
+      const userReason = (document.getElementById('editLateReasonInput')?.value || '').trim();
+
+      if (!timeVal) {
+        showToast.warning('Vui lòng nhập giờ ghi nhận điểm danh.');
+        return;
+      }
+
+      const observed = (currentAttendanceTodayData || []).find(row => row.userId === userId && (row.shift === shift || !row.shift));
+      const targetDate = observed?.businessDate || document.getElementById('attendanceDateFilter')?.value || currentViewingDate || new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' });
+
+      const timeParts = timeVal.split(':');
+      const formattedTime = timeParts.length === 2 ? `${timeVal}:00` : timeVal;
+      const customTimeIso = `${targetDate}T${formattedTime}+07:00`;
+
+      let reason = userReason || 'Admin điều chỉnh thời gian đi trễ';
+      if (Number.isFinite(minutesVal) && minutesVal > 0) {
+        const cleanReason = reason.replace(/\[Trễ\s+\d+\s*phút\]\s*/gi, '').trim();
+        reason = `[Trễ ${minutesVal} phút] ${cleanReason || 'Admin điều chỉnh thời gian đi trễ'}`;
+      }
+
+      const btn = document.getElementById('btnSubmitEditLateTime');
+      if (btn) btn.disabled = true;
+      try {
+        const ok = await handleUpdateAttendanceStatus(userId, shift, 'Đi trễ', reason, customTimeIso);
+        if (ok) {
+          closeEditLateTimeModal();
+        }
+      } finally {
+        if (btn) btn.disabled = false;
       }
     }
 
@@ -2838,9 +3221,18 @@
                   </select>
                 </div>
               </div>
-              <div id="manualCheckinLateMinutesWrap" class="hidden">
-                <label class="block text-[11px] font-semibold text-orange-300 mb-1">Số phút đi trễ (Tùy chọn — để trống sẽ tự tính theo giờ hiện tại)</label>
-                <input id="manualCheckinLateMinutesInput" type="number" min="1" max="240" placeholder="VD: 15 (nếu để trống hệ thống tự trừ mốc cho phép trễ 10p)" class="w-full bg-slate-950 border border-orange-500/40 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-orange-500" />
+              <div id="manualCheckinLateMinutesWrap" class="hidden space-y-2">
+                <div class="grid grid-cols-2 gap-2">
+                  <div>
+                    <label class="block text-[11px] font-semibold text-orange-300 mb-1">Giờ quét (Tùy chọn)</label>
+                    <input id="manualCheckinTimeInput" type="time" step="1" class="w-full bg-slate-950 border border-orange-500/40 rounded-xl px-2.5 py-2 text-xs font-mono text-white placeholder-slate-500 focus:outline-none focus:border-orange-500" />
+                  </div>
+                  <div>
+                    <label class="block text-[11px] font-semibold text-orange-300 mb-1">Số phút đi trễ</label>
+                    <input id="manualCheckinLateMinutesInput" type="number" min="1" max="240" placeholder="VD: 15" class="w-full bg-slate-950 border border-orange-500/40 rounded-xl px-2.5 py-2 text-xs font-mono text-white placeholder-slate-500 focus:outline-none focus:border-orange-500" />
+                  </div>
+                </div>
+                <p class="text-[10px] text-slate-400 italic">Để trống giờ/phút sẽ tự động tính theo thời gian hiện tại.</p>
               </div>
               <div>
                 <label class="block text-[11px] font-semibold text-slate-300 mb-1">Ghi chú / Lý do</label>
@@ -2907,6 +3299,16 @@
       const shift = document.getElementById('manualCheckinShiftSelect')?.value || currentViewingShift;
       const newStatus = document.getElementById('manualCheckinStatusSelect')?.value || 'Có mặt';
       const lateMinsRaw = parseInt(document.getElementById('manualCheckinLateMinutesInput')?.value || '', 10);
+      const timeVal = document.getElementById('manualCheckinTimeInput')?.value;
+      const targetDate = document.getElementById('attendanceDateFilter')?.value || currentViewingDate || new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' });
+      let customTimeIso = undefined;
+
+      if (newStatus === 'Đi trễ' && timeVal) {
+        const timeParts = timeVal.split(':');
+        const formattedTime = timeParts.length === 2 ? `${timeVal}:00` : timeVal;
+        customTimeIso = `${targetDate}T${formattedTime}+07:00`;
+      }
+
       let reason = (document.getElementById('manualCheckinReasonInput')?.value || '').trim() || `Admin điểm danh thủ công (${newStatus})`;
       if (newStatus === 'Đi trễ' && Number.isFinite(lateMinsRaw) && lateMinsRaw > 0 && !/\[Trễ\s+\d+\s*phút\]/i.test(reason)) {
         reason = `[Trễ ${lateMinsRaw} phút] ${reason}`;
@@ -2918,7 +3320,7 @@
       const btn = document.getElementById('btnSubmitManualCheckin');
       if (btn) btn.disabled = true;
       try {
-        const ok = await handleUpdateAttendanceStatus(userId, shift, newStatus, reason);
+        const ok = await handleUpdateAttendanceStatus(userId, shift, newStatus, reason, customTimeIso);
         if (ok) closeManualCheckinModal();
       } finally {
         if (btn) btn.disabled = false;
