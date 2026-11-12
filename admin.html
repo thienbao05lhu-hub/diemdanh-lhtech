@@ -174,10 +174,10 @@
   </div>
 
   <!-- ============================================================== -->
-  <!-- MODAL: BÁO CÁO TỔNG KẾT NGÀY & XUẤT CSV (Ca Sáng + Ca Chiều) -->
+  <!-- MODAL: BÁO CÁO TỔNG KẾT NGÀY & XUẤT CSV (Ca Sáng + Ca Chiều + Ca Tối) -->
   <!-- ============================================================== -->
   <div id="dailySummaryModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm transition-all duration-200">
-    <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg p-5 sm:p-6 shadow-2xl relative space-y-5">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg p-5 sm:p-6 shadow-2xl relative space-y-4">
       <!-- Modal Header -->
       <div class="flex items-center justify-between border-b border-slate-800 pb-3">
         <div class="flex items-center gap-2.5">
@@ -189,10 +189,10 @@
               Báo Cáo Tổng Kết Ngày
               <span id="modalDateBadge" class="text-[10px] font-mono px-2 py-0.5 rounded-full bg-slate-800 text-amber-300 border border-slate-700">Hôm nay</span>
             </h3>
-            <p class="text-[11px] text-slate-400 mt-0.5">Tổng hợp đối chiếu Ca Sáng & Ca Chiều với Lịch lên xưởng mặc định</p>
+            <p class="text-[11px] text-slate-400 mt-0.5">Tổng hợp đối chiếu cả 3 ca: Ca Sáng, Ca Chiều &amp; Ca Tối</p>
           </div>
         </div>
-        <button onclick="closeDailySummaryModal()" class="text-slate-400 hover:text-white transition p-1.5 rounded-lg hover:bg-slate-800">
+        <button onclick="closeDailySummaryModal()" class="text-slate-400 hover:text-white transition p-1.5 rounded-lg hover:bg-slate-800 cursor-pointer">
           <i class="fa-solid fa-xmark text-sm"></i>
         </button>
       </div>
@@ -228,15 +228,40 @@
         </div>
       </div>
 
+      <!-- Bảng chi tiết từng ca: Ca Sáng, Ca Chiều, Ca Tối -->
+      <div class="space-y-1.5">
+        <div class="flex items-center justify-between text-xs font-semibold text-slate-300">
+          <span class="uppercase tracking-wider text-[11px] text-slate-400">Thống Kê Chi Tiết Từng Ca</span>
+          <span class="text-[10px] text-slate-500 font-mono">Ca Sáng • Chiều • Tối</span>
+        </div>
+        <div class="overflow-x-auto rounded-xl border border-slate-800 bg-slate-950/70">
+          <table class="w-full text-left text-xs text-slate-300 border-collapse">
+            <thead class="bg-slate-900/90 text-[10px] uppercase text-slate-400 border-b border-slate-800">
+              <tr>
+                <th class="px-3 py-2 font-semibold">Ca Học</th>
+                <th class="px-2 py-2 text-center text-emerald-400 font-semibold">Có Mặt</th>
+                <th class="px-2 py-2 text-center text-orange-400 font-semibold">Đi Trễ</th>
+                <th class="px-2 py-2 text-center text-rose-400 font-semibold">Vắng KP</th>
+                <th class="px-2 py-2 text-center text-amber-400 font-semibold">Vắng CP</th>
+                <th class="px-3 py-2 text-right font-semibold">Tổng SV</th>
+              </tr>
+            </thead>
+            <tbody id="dailyShiftBreakdownBody" class="divide-y divide-slate-800/60 font-mono text-xs">
+              <!-- Render động cho Ca Sáng, Ca Chiều, Ca Tối -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       <!-- Ghi chú giải thích -->
       <div class="bg-slate-950/60 border border-slate-800 rounded-xl p-3 text-[11px] text-slate-400 space-y-1">
         <p class="flex items-center gap-2">
           <i class="fa-solid fa-circle-info text-amber-400 text-xs shrink-0"></i>
-          <span>Thống kê tổng hợp số liệu điểm danh của cả <b>Ca Sáng & Ca Chiều</b> trong ngày.</span>
+          <span>Thống kê tổng hợp số liệu điểm danh của cả <b>3 ca (Ca Sáng, Ca Chiều &amp; Ca Tối)</b> trong ngày.</span>
         </p>
         <p class="flex items-center gap-2">
           <i class="fa-solid fa-file-csv text-emerald-400 text-xs shrink-0"></i>
-          <span>Bấm <b>Tải CSV Ngày</b> hoặc <b>Tổng Kết Tuần (CSV)</b> để xuất toàn bộ danh sách chi tiết.</span>
+          <span>Bấm <b>Tải CSV Ngày</b> để xuất toàn bộ danh sách cả 3 ca hoặc <b>Tổng Kết Tuần (CSV)</b>.</span>
         </p>
       </div>
 
@@ -5055,6 +5080,46 @@
           document.getElementById('summaryTotalExcused').innerText = totalExcused;
         }
 
+        // Điền chi tiết từng ca: Ca Sáng, Ca Chiều, Ca Tối
+        const shiftTbody = document.getElementById('dailyShiftBreakdownBody');
+        if (shiftTbody) {
+          const shiftIcons = {
+            'Sáng': '<i class="fa-solid fa-sun text-amber-400 mr-1.5"></i>',
+            'Chiều': '<i class="fa-solid fa-cloud-sun text-orange-400 mr-1.5"></i>',
+            'Tối': '<i class="fa-solid fa-moon text-indigo-400 mr-1.5"></i>'
+          };
+          const shiftTimes = {
+            'Sáng': '08:00 - 11:00',
+            'Chiều': '13:15 - 17:00',
+            'Tối': '18:00 - 22:00'
+          };
+          const shifts = ['Sáng', 'Chiều', 'Tối'];
+          const details = result.details || result.data?.details || [];
+
+          shiftTbody.innerHTML = shifts.map(s => {
+            const shiftRows = details.filter(r => r.shift === s);
+            const present = shiftRows.filter(r => r.status === 'Có mặt').length;
+            const late = shiftRows.filter(r => r.status === 'Đi trễ').length;
+            const unexcused = shiftRows.filter(r => r.status === 'Vắng không phép' || r.status === 'Vắng KP').length;
+            const excused = shiftRows.filter(r => r.status === 'Vắng có phép' || r.status === 'Vắng CP').length;
+            const total = shiftRows.length;
+
+            return `
+              <tr class="hover:bg-slate-900/50 transition">
+                <td class="px-3 py-2 font-sans font-semibold text-white whitespace-nowrap">
+                  ${shiftIcons[s] || ''}Ca ${s}
+                  <span class="text-[10px] text-slate-500 font-normal font-mono block">${shiftTimes[s] || ''}</span>
+                </td>
+                <td class="px-2 py-2 text-center text-emerald-400 font-bold">${present}</td>
+                <td class="px-2 py-2 text-center text-orange-400 font-bold">${late}</td>
+                <td class="px-2 py-2 text-center text-rose-400 font-bold">${unexcused}</td>
+                <td class="px-2 py-2 text-center text-amber-400 font-bold">${excused}</td>
+                <td class="px-3 py-2 text-right font-bold text-slate-300">${total}</td>
+              </tr>
+            `;
+          }).join('');
+        }
+
         // Mở Modal
         const modal = document.getElementById('dailySummaryModal');
         if (modal) modal.classList.remove('hidden');
@@ -5070,7 +5135,7 @@
       if (modal) modal.classList.add('hidden');
     }
 
-    // Xuất file CSV toàn bộ dữ liệu cả 2 ca trong ngày
+    // Xuất file CSV toàn bộ dữ liệu cả 3 ca (Sáng, Chiều, Tối) trong ngày
     function exportDailySummaryToCSV() {
       const details = dailySummaryData?.details || dailySummaryData?.data?.details;
       if (!details || details.length === 0) {

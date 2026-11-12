@@ -873,9 +873,9 @@
             absentWithoutLeave: data.filter(r => r.status === 'Vắng không phép').length,
             waiting: data.filter(r => r.status === 'Chưa điểm danh').length } });
       }
-      const details = ['Sáng','Chiều','Tối'].flatMap(shift => shiftRows(shift, clock.date, schedules, records));
-      return response({ success: true, dateStr: clock.date.split('-').reverse().join('/'),
-        dayName: new Intl.DateTimeFormat('vi-VN',{weekday:'long',timeZone:'Asia/Ho_Chi_Minh'}).format(new Date()),
+      const details = ['Sáng','Chiều','Tối'].flatMap(shift => shiftRows(shift, targetDate, schedules, records));
+      return response({ success: true, dateStr: targetDate.split('-').reverse().join('/'),
+        dayName: new Intl.DateTimeFormat('vi-VN',{weekday:'long',timeZone:'Asia/Ho_Chi_Minh'}).format(new Date(targetDate === clock.date ? (caps?.serverTime || Date.now()) : `${targetDate}T12:00:00+07:00`)),
         totalExpected: details.filter(r => r.inSchedule).length,
         totalPresent: details.filter(r => r.status === 'Có mặt').length,
         totalLate: details.filter(r => r.status === 'Đi trễ').length,
