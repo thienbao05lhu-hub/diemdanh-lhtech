@@ -2622,7 +2622,12 @@
           statusBadge = `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-rose-500/15 text-rose-300 border border-rose-500/30 whitespace-nowrap"><i class="fa-solid fa-circle-xmark text-[9px] mr-1"></i> Vắng không phép</span>`;
         } else {
           // 'Chưa điểm danh'
-          statusBadge = `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-800 text-slate-400 border border-slate-700 whitespace-nowrap"><i class="fa-regular fa-clock text-[9px] mr-1"></i> Chưa điểm danh</span>`;
+          const isLateExcusedPending = item.note && item.note.includes('Đã duyệt xin trễ');
+          if (isLateExcusedPending) {
+            statusBadge = `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-orange-500/15 text-orange-400 border border-orange-500/30 whitespace-nowrap" title="${escapeHtml(item.note)}"><i class="fa-regular fa-clock text-[9px] mr-1"></i> Chưa điểm danh (Xin trễ)</span>`;
+          } else {
+            statusBadge = `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-800 text-slate-400 border border-slate-700 whitespace-nowrap"><i class="fa-regular fa-clock text-[9px] mr-1"></i> Chưa điểm danh</span>`;
+          }
         }
 
         // Tinh gọn thao tác: gom các nút bấm vào 1 ô dropdown select tiện lợi, tối ưu giao diện
