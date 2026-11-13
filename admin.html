@@ -2940,9 +2940,47 @@
       }
 
       const shiftCutoffTimes = { 'Sáng': '08:10:00', 'Chiều': '13:25:00', 'Tối': '18:10:00' };
-      const cutoffTimeStr = shiftCutoffTimes[targetShift] || '08:10:00';
+      const shiftStartTimes = { 'Sáng': '08:00:00', 'Chiều': '13:15:00', 'Tối': '18:00:00' };
+      let cutoffTimeStr = shiftCutoffTimes[targetShift] || '08:10:00';
+      const [ch, cm, cs] = cutoffTimeStr.split(':').map(Number);
+      let cutoffTotalSec = ch * 3600 + cm * 60 + (cs || 0);
+      let isApprovedLate = false;
+      let approvedLateMins = 0;
+
+      const note = observed?.note || '';
+      const overLateMatch = /\[Quá hạn xin trễ\s+(\d+)\s*p/i.exec(note);
+      if (overLateMatch) {
+        approvedLateMins = parseInt(overLateMatch[1], 10);
+        const startTimeStr = shiftStartTimes[targetShift] || '08:00:00';
+        const [sh, sm, ss] = startTimeStr.split(':').map(Number);
+        const approvedDeadlineSec = sh * 3600 + (sm + approvedLateMins) * 60 + (ss || 0);
+        if (approvedDeadlineSec > cutoffTotalSec) {
+          cutoffTotalSec = approvedDeadlineSec;
+          const eh = Math.floor(cutoffTotalSec / 3600) % 24;
+          const em = Math.floor((cutoffTotalSec % 3600) / 60);
+          cutoffTimeStr = `${String(eh).padStart(2, '0')}:${String(em).padStart(2, '0')}:00`;
+        }
+        isApprovedLate = true;
+      }
+
+      currentEditLateTarget = {
+        userId,
+        shift: targetShift,
+        observed,
+        cutoffTotalSec,
+        cutoffTimeStr,
+        isApprovedLate,
+        approvedLateMins
+      };
+
       const cutoffHint = document.getElementById('editLateCutoffHint');
-      if (cutoffHint) cutoffHint.innerText = `Mốc đúng giờ: ${cutoffTimeStr.slice(0, 5)}`;
+      if (cutoffHint) {
+        if (isApprovedLate) {
+          cutoffHint.innerHTML = `<span class="text-amber-400 font-semibold"><i class="fa-solid fa-clock mr-1"></i>Hạn duyệt trễ: ${cutoffTimeStr.slice(0, 5)}</span> (Đã duyệt ${approvedLateMins}p)`;
+        } else {
+          cutoffHint.innerText = `Mốc đúng giờ: ${cutoffTimeStr.slice(0, 5)}`;
+        }
+      }
 
       const timeInput = document.getElementById('editLateTimeInput');
       const minutesInput = document.getElementById('editLateMinutesInput');
@@ -2956,10 +2994,9 @@
         const ss = String(d.getSeconds()).padStart(2, '0');
         initialTime = `${hh}:${mm}:${ss}`;
       } else {
-        const [ch, cm] = cutoffTimeStr.split(':').map(Number);
-        const defMin = cm + 10;
-        const hh = String(ch + Math.floor(defMin / 60)).padStart(2, '0');
-        const mm = String(defMin % 60).padStart(2, '0');
+        const defSec = cutoffTotalSec + 10 * 60;
+        const hh = String(Math.floor(defSec / 3600) % 24).padStart(2, '0');
+        const mm = String(Math.floor((defSec % 3600) / 60)).padStart(2, '0');
         initialTime = `${hh}:${mm}:00`;
       }
 
@@ -2988,9 +3025,9 @@
       const shiftCutoffTimes = { 'Sáng': '08:10:00', 'Chiều': '13:25:00', 'Tối': '18:10:00' };
       const shiftDurationMinutes = { 'Sáng': 180, 'Chiều': 225, 'Tối': 240 };
       const maxShiftMins = shiftDurationMinutes[targetShift] || 180;
-      const cutoffTimeStr = shiftCutoffTimes[targetShift] || '08:10:00';
+      const cutoffTimeStr = currentEditLateTarget.cutoffTimeStr || (shiftCutoffTimes[targetShift] || '08:10:00');
       const [ch, cm, cs] = cutoffTimeStr.split(':').map(Number);
-      const cutoffTotalSec = ch * 3600 + cm * 60 + cs;
+      const cutoffTotalSec = currentEditLateTarget.cutoffTotalSec ?? (ch * 3600 + cm * 60 + (cs || 0));
 
       const timeInput = document.getElementById('editLateTimeInput');
       const minutesInput = document.getElementById('editLateMinutesInput');
@@ -3028,7 +3065,8 @@
           let mins = Math.ceil(diffSec / 60);
           if (mins <= 0) {
             if (minutesInput) minutesInput.value = '1';
-            if (previewText) previewText.innerHTML = `<span class="text-emerald-400 font-semibold"><i class="fa-solid fa-check mr-1"></i>Giờ này trước mốc ${cutoffTimeStr.slice(0, 5)} (Đúng giờ).</span> Nếu lưu, hệ thống sẽ tính trễ tối thiểu 1 phút (500đ).`;
+            const labelMoc = currentEditLateTarget.isApprovedLate ? 'hạn duyệt' : 'mốc';
+            if (previewText) previewText.innerHTML = `<span class="text-emerald-400 font-semibold"><i class="fa-solid fa-check mr-1"></i>Giờ này trước ${labelMoc} ${cutoffTimeStr.slice(0, 5)} (Đúng giờ).</span> Nếu lưu, hệ thống sẽ tính trễ tối thiểu 1 phút (500đ).`;
             if (previewBadge) previewBadge.className = 'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40';
             if (previewCard) previewCard.className = 'p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/25 flex items-center justify-between gap-3 text-xs';
           } else {
@@ -3047,8 +3085,9 @@
       if (!currentEditLateTarget) return;
       const targetShift = currentEditLateTarget.shift || 'Sáng';
       const shiftCutoffTimes = { 'Sáng': '08:10:00', 'Chiều': '13:25:00', 'Tối': '18:10:00' };
-      const cutoffTimeStr = shiftCutoffTimes[targetShift] || '08:10:00';
+      const cutoffTimeStr = currentEditLateTarget.cutoffTimeStr || (shiftCutoffTimes[targetShift] || '08:10:00');
       const [ch, cm, cs] = cutoffTimeStr.split(':').map(Number);
+      const cutoffTotalSec = currentEditLateTarget.cutoffTotalSec ?? (ch * 3600 + cm * 60 + (cs || 0));
       const timeInput = document.getElementById('editLateTimeInput');
       const minutesInput = document.getElementById('editLateMinutesInput');
 
@@ -3060,7 +3099,10 @@
         if (timeInput) timeInput.value = `${hh}:${mm}:${ss}`;
         handleEditLateTimeChange('time');
       } else if (preset === 'cutoff') {
-        if (timeInput) timeInput.value = `${String(ch).padStart(2, '0')}:${String(cm + 1).padStart(2, '0')}:00`;
+        const targetSec = cutoffTotalSec + 60;
+        const th = Math.floor(targetSec / 3600) % 24;
+        const tm = Math.floor((targetSec % 3600) / 60);
+        if (timeInput) timeInput.value = `${String(th).padStart(2, '0')}:${String(tm).padStart(2, '0')}:00`;
         if (minutesInput) minutesInput.value = '1';
         handleEditLateTimeChange('minutes');
       } else if (preset === '+5') {

@@ -1044,6 +1044,11 @@
         'Chiều': '13:25:00',
         'Tối': '18:10:00'
       };
+      const shiftStartTimes = {
+        'Sáng': '08:00:00',
+        'Chiều': '13:15:00',
+        'Tối': '18:00:00'
+      };
       const shiftDurationMinutes = {
         'Sáng': 180,  // 08:00 - 11:00 = 180 phút (90.000đ)
         'Chiều': 225, // 13:15 - 17:00 = 225 phút (112.500đ)
@@ -1081,8 +1086,21 @@
           const maxShiftMins = shiftDurationMinutes[record.shift] || 180;
           let lateMinutes = 1;
           const explicitMinMatch = /\[Trễ\s+(\d+)\s*phút\]/i.exec(record.note || '');
+          const overLateMatch = /\[Quá hạn xin trễ\s+(\d+)\s*p/i.exec(record.note || '');
           if (explicitMinMatch) {
             lateMinutes = Math.min(maxShiftMins, Math.max(1, parseInt(explicitMinMatch[1], 10)));
+          } else if (overLateMatch && record.scanned_at) {
+            // Sinh viên có đơn xin đi trễ đã duyệt nhưng đến muộn hơn hạn đã xin:
+            // Chỉ tính phạt từ mốc giờ đã duyệt (VD xin 15p -> mốc 08:15, quét 08:30 -> phạt 15p)
+            const approvedLateMins = parseInt(overLateMatch[1], 10);
+            const startTime = shiftStartTimes[record.shift] || '08:00:00';
+            const approvedDeadlineMs = Date.parse(`${record.business_date}T${startTime}+07:00`) + approvedLateMins * 60000;
+            const effectiveCutoffMs = Math.max(cutoffMs, approvedDeadlineMs);
+            const scanMs = Date.parse(record.scanned_at);
+            if (!Number.isNaN(scanMs) && !Number.isNaN(effectiveCutoffMs)) {
+              const diff = Math.floor((scanMs - effectiveCutoffMs) / 60000);
+              lateMinutes = Math.min(maxShiftMins, Math.max(1, diff > 0 ? diff : 1));
+            }
           } else if (record.scanned_at) {
             const scanMs = Date.parse(record.scanned_at);
             if (!Number.isNaN(scanMs) && !Number.isNaN(cutoffMs)) {
