@@ -3002,7 +3002,6 @@
 
       if (timeInput) timeInput.value = initialTime;
 
-      const note = observed?.note || '';
       const explicitMinMatch = /\[Trễ\s+(\d+)\s*phút\]/i.exec(note);
       if (explicitMinMatch && minutesInput) {
         minutesInput.value = explicitMinMatch[1];
