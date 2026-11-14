@@ -214,15 +214,30 @@
   let currentStudentIdentity = null;
 
   async function resolveStudentIdentity() {
-    if (currentStudentIdentity?.profile?.student_id) return currentStudentIdentity;
-    if (!root.Attendance?.identity) return null;
-    try {
-      const id = await root.Attendance.identity();
-      if (id?.profile?.student_id) {
-        currentStudentIdentity = id;
-        return id;
-      }
-    } catch (e) {}
+    if (currentStudentIdentity?.studentId) return currentStudentIdentity;
+    if (root.Attendance?.identity) {
+      try {
+        const id = await root.Attendance.identity();
+        const studentId = id?.profile?.studentId || id?.profile?.student_id;
+        if (studentId) {
+          currentStudentIdentity = {
+            profileId: id.profile.id,
+            studentId
+          };
+          return currentStudentIdentity;
+        }
+      } catch (e) {}
+    }
+    // Dự phòng: đọc trực tiếp từ thẻ MSV đã hiển thị trên giao diện điểm danh
+    const msvText = document.getElementById('displayUserId')?.textContent || '';
+    const msvMatch = /MSV:\s*(\S+)/i.exec(msvText);
+    if (msvMatch && msvMatch[1] && msvMatch[1] !== '---') {
+      currentStudentIdentity = {
+        profileId: null,
+        studentId: msvMatch[1].trim()
+      };
+      return currentStudentIdentity;
+    }
     return null;
   }
 
@@ -239,12 +254,7 @@
       return { subscribed: false };
     }
 
-    const identity = await resolveStudentIdentity();
-    if (!identity?.profile?.student_id) {
-      if (interactive) root.showToast?.warning('Vui lòng đăng nhập tài khoản sinh viên trước khi bật thông báo.');
-      return { subscribed: false };
-    }
-
+    // Gọi xin quyền Notification NGAY LẬP TỨC từ thao tác chạm của người dùng (trước các lệnh await mạng)
     let permission = Notification.permission;
     if (permission !== 'granted') {
       if (!interactive) return { subscribed: false, permission };
@@ -278,19 +288,40 @@
       const auth = subJson.keys?.auth;
 
       if (endpoint && p256dh && auth && root.Attendance?.client) {
-        const { error } = await root.Attendance.client
-          .from('push_subscriptions')
-          .upsert({
-            endpoint,
-            profile_id: identity.profile.id,
-            student_id: identity.profile.student_id,
-            p256dh,
-            auth,
-            user_agent: navigator.userAgent.slice(0, 250),
-            updated_at: new Date().toISOString()
-          }, { onConflict: 'endpoint' });
+        // Ưu tiên gọi RPC save_my_push_subscription (tự động lấy profile từ auth.uid() trên server)
+        const { data: rpcData, error: rpcErr } = await root.Attendance.client.rpc('save_my_push_subscription', {
+          p_endpoint: endpoint,
+          p_p256dh: p256dh,
+          p_auth: auth,
+          p_user_agent: navigator.userAgent.slice(0, 250)
+        });
 
-        if (error) throw error;
+        if (!rpcErr && rpcData?.studentId) {
+          currentStudentIdentity = {
+            profileId: rpcData.profileId,
+            studentId: rpcData.studentId
+          };
+        } else {
+          // Dự phòng upsert trực tiếp nếu cần
+          const identity = await resolveStudentIdentity();
+          if (!identity?.studentId) {
+            if (interactive) root.showToast?.warning('Đang tải hồ sơ sinh viên, vui lòng thử lại sau 2 giây.');
+            return { subscribed: false };
+          }
+          const { error: upsertErr } = await root.Attendance.client
+            .from('push_subscriptions')
+            .upsert({
+              endpoint,
+              profile_id: identity.profileId,
+              student_id: identity.studentId,
+              p256dh,
+              auth,
+              user_agent: navigator.userAgent.slice(0, 250),
+              updated_at: new Date().toISOString()
+            }, { onConflict: 'endpoint' });
+
+          if (upsertErr) throw upsertErr;
+        }
       }
 
       updatePushCardUI(true, 'granted');
@@ -309,24 +340,24 @@
 
   async function handleTestPushNotification() {
     const btn = document.getElementById('btnTestWebPush');
-    const identity = await resolveStudentIdentity();
-    if (!identity?.profile?.student_id) {
-      root.showToast?.warning('Chưa xác định được tài khoản sinh viên.');
-      return;
-    }
     if (btn) {
       btn.disabled = true;
       btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin text-[10px]"></i> Đang gửi...';
     }
     try {
       await syncPushSubscription(false);
+      const identity = await resolveStudentIdentity();
+      if (!identity?.studentId) {
+        root.showToast?.warning('Chưa xác định được mã sinh viên. Vui lòng tải lại trang.');
+        return;
+      }
       const supabaseUrl = root.ATTENDANCE_CONFIG?.supabaseUrl;
       const res = await fetch(`${supabaseUrl}/functions/v1/web-push-worker`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'test_push',
-          student_id: identity.profile.student_id
+          student_id: identity.studentId
         })
       });
       const data = await res.json();
@@ -423,8 +454,11 @@
 
     const perm = Notification.permission;
     if (perm === 'granted') {
+      updatePushCardUI(true, perm);
       const res = await syncPushSubscription(false);
-      updatePushCardUI(res.subscribed, perm);
+      if (!res.subscribed) {
+        setTimeout(() => void syncPushSubscription(false), 2000);
+      }
     } else {
       updatePushCardUI(false, perm);
     }
