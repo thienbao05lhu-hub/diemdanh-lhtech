@@ -368,17 +368,8 @@
     } else if (permission === 'denied') {
       statusBadge.className = 'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/15 text-rose-400 border border-rose-500/30';
       statusBadge.innerHTML = '<i class="fa-solid fa-bell-slash text-[9px]"></i> Đã chặn';
-      descText.textContent = 'Quyền thông báo đang bị tắt trên thiết bị. Nhấn "Cấp lại quyền" để mở khóa nhận thông báo duyệt đơn & nhắc ca.';
-      actionWrap.innerHTML = `
-        <button
-          type="button"
-          id="btnUnblockWebPush"
-          class="px-3 py-1.5 rounded-xl text-[11px] font-bold bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 transition flex items-center gap-1.5 active:scale-95 cursor-pointer shrink-0"
-        >
-          <i class="fa-solid fa-unlock-keyhole text-[10px]"></i> Cấp lại quyền
-        </button>
-      `;
-      document.getElementById('btnUnblockWebPush')?.addEventListener('click', () => void handleUnblockPushPermission());
+      descText.textContent = 'Quyền thông báo đang bị chặn trên trình duyệt. Hãy mở cài đặt trình duyệt và cho phép Thông báo để nhận tin duyệt đơn.';
+      actionWrap.innerHTML = '';
     } else {
       statusBadge.className = 'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-400 border border-amber-500/30';
       statusBadge.innerHTML = '<i class="fa-solid fa-bell text-[9px]"></i> Chưa bật';
@@ -396,158 +387,6 @@
       `;
       document.getElementById('btnEnableWebPush')?.addEventListener('click', () => void syncPushSubscription(true));
     }
-  }
-
-  // Xử lý khi người dùng bấm "Cấp lại quyền" lúc đang ở trạng thái Đã chặn (denied)
-  async function handleUnblockPushPermission() {
-    if (isPushSupported()) {
-      try {
-        const perm = await Notification.requestPermission();
-        if (perm === 'granted') {
-          await syncPushSubscription(true);
-          return;
-        }
-      } catch (e) {}
-    }
-    showUnblockPermissionModal();
-  }
-
-  // Modal hướng dẫn mở khóa quyền thông báo nhanh khi trình duyệt đã chặn
-  function showUnblockPermissionModal() {
-    let modal = document.getElementById('pwaUnblockPushModal');
-    if (modal) {
-      modal.classList.remove('hidden');
-      return;
-    }
-
-    modal = document.createElement('div');
-    modal.id = 'pwaUnblockPushModal';
-    modal.className = 'fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md transition-all duration-200';
-    modal.innerHTML = `
-      <div class="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-sm p-5 shadow-2xl relative space-y-4">
-        <div class="flex items-center justify-between border-b border-slate-800 pb-3">
-          <div class="flex items-center gap-3">
-            <div class="w-10 h-10 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
-              <i class="fa-solid fa-bell text-lg"></i>
-            </div>
-            <div>
-              <h3 class="text-sm font-bold text-white leading-snug">Mở Khóa Quyền Thông Báo</h3>
-              <p class="text-[11px] text-slate-400">Chỉ mất 5 giây để bật lại trên điện thoại</p>
-            </div>
-          </div>
-          <button type="button" onclick="document.getElementById('pwaUnblockPushModal').classList.add('hidden')" class="text-slate-400 hover:text-white p-1.5 rounded-lg cursor-pointer">
-            <i class="fa-solid fa-xmark text-base"></i>
-          </button>
-        </div>
-
-        <div class="space-y-2.5 text-xs text-slate-300">
-          <div class="bg-slate-950/70 p-3 rounded-2xl border border-slate-800 space-y-1.5">
-            <p class="font-bold text-emerald-400 flex items-center gap-1.5">
-              <i class="fa-solid fa-mobile-screen-button"></i> Cách 1: Nếu đang mở từ App ngoài Màn hình chính
-            </p>
-            <p class="text-[11px] text-slate-300 leading-relaxed">
-              1. Ra màn hình chính điện thoại, <strong>nhấn giữ biểu tượng App Điểm Danh QR</strong>.<br>
-              2. Chọn <strong>Thông tin ứng dụng ( biểu tượng <i class="fa-solid fa-circle-info text-blue-400"></i> )</strong> &rarr; <strong>Thông báo</strong>.<br>
-              3. Gạt bật <strong>"Cho phép thông báo"</strong>.
-            </p>
-          </div>
-
-          <div class="bg-slate-950/70 p-3 rounded-2xl border border-slate-800 space-y-1.5">
-            <p class="font-bold text-amber-400 flex items-center gap-1.5">
-              <i class="fa-brands fa-chrome"></i> Cách 2: Nếu đang mở trên trình duyệt Chrome / Safari
-            </p>
-            <p class="text-[11px] text-slate-300 leading-relaxed">
-              1. Bấm vào biểu tượng <strong>Cài đặt / Ổ khóa (<i class="fa-solid fa-sliders text-amber-400 mx-0.5"></i>)</strong> bên trái thanh địa chỉ web.<br>
-              2. Chọn <strong>Quyền (Permissions)</strong> &rarr; <strong>Thông báo</strong>.<br>
-              3. Chọn <strong>"Cho phép" (Allow)</strong> hoặc bấm <strong>Đặt lại quyền</strong>.
-            </p>
-          </div>
-        </div>
-
-        <div class="flex items-center gap-2 pt-1">
-          <button
-            type="button"
-            onclick="document.getElementById('pwaUnblockPushModal').classList.add('hidden')"
-            class="py-2.5 px-3 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-semibold transition cursor-pointer"
-          >
-            Đóng
-          </button>
-          <button
-            type="button"
-            id="btnRecheckPushPermission"
-            class="flex-1 py-2.5 px-3 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-white rounded-xl text-xs font-bold transition shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-1.5 cursor-pointer"
-          >
-            <i class="fa-solid fa-rotate text-xs"></i>
-            <span>Đã bật xong • Kiểm tra ngay</span>
-          </button>
-        </div>
-      </div>
-    `;
-    document.body.appendChild(modal);
-
-    document.getElementById('btnRecheckPushPermission')?.addEventListener('click', async () => {
-      modal.classList.add('hidden');
-      if (Notification.permission === 'granted') {
-        await syncPushSubscription(true);
-      } else if (Notification.permission === 'default') {
-        await syncPushSubscription(true);
-      } else {
-        window.location.reload();
-      }
-    });
-  }
-
-  // Modal tự động mời bật thông báo khi sinh viên vào App (nếu trạng thái là 'default')
-  function showAutoPushPromptModal() {
-    if (!isPushSupported()) return;
-    if (Notification.permission !== 'default') return;
-    if (sessionStorage.getItem('pwa_push_prompt_shown') === 'true') return;
-    if (document.getElementById('pwaAutoPushPromptModal')) return;
-
-    sessionStorage.setItem('pwa_push_prompt_shown', 'true');
-
-    const modal = document.createElement('div');
-    modal.id = 'pwaAutoPushPromptModal';
-    modal.className = 'fixed inset-0 z-[99998] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md transition-all duration-200';
-    modal.innerHTML = `
-      <div class="bg-slate-900 border border-amber-500/30 rounded-3xl w-full max-w-sm p-5 shadow-2xl relative space-y-4 text-center">
-        <div class="w-14 h-14 rounded-2xl bg-gradient-to-tr from-amber-500 to-orange-400 mx-auto flex items-center justify-center text-white shadow-xl shadow-amber-500/25">
-          <i class="fa-solid fa-bell text-2xl animate-bounce"></i>
-        </div>
-        <div class="space-y-1.5">
-          <h3 class="text-base font-extrabold text-white">Bật Thông Báo Điểm Danh</h3>
-          <p class="text-xs text-slate-300 leading-relaxed">
-            Cho phép ứng dụng gửi thông báo để nhận ngay kết quả khi <strong>Admin duyệt đơn xin trễ / nghỉ phép</strong> và <strong>nhắc nhở 15 phút trước giờ vào ca</strong>.
-          </p>
-        </div>
-        <div class="flex items-center gap-2 pt-1">
-          <button
-            type="button"
-            id="btnSkipAutoPushPrompt"
-            class="py-2.5 px-3.5 bg-slate-800 hover:bg-slate-700 text-slate-400 rounded-xl text-xs font-semibold transition cursor-pointer"
-          >
-            Để sau
-          </button>
-          <button
-            type="button"
-            id="btnAcceptAutoPushPrompt"
-            class="flex-1 py-2.5 px-4 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-white rounded-xl text-xs font-bold transition shadow-lg shadow-amber-500/25 flex items-center justify-center gap-1.5 cursor-pointer"
-          >
-            <i class="fa-solid fa-circle-check text-xs"></i>
-            <span>Cho Phép Thông Báo</span>
-          </button>
-        </div>
-      </div>
-    `;
-    document.body.appendChild(modal);
-
-    document.getElementById('btnSkipAutoPushPrompt')?.addEventListener('click', () => {
-      modal.remove();
-    });
-    document.getElementById('btnAcceptAutoPushPrompt')?.addEventListener('click', async () => {
-      modal.remove();
-      await syncPushSubscription(true);
-    });
   }
 
   async function injectPushNotificationCard() {
@@ -588,40 +427,7 @@
       updatePushCardUI(res.subscribed, perm);
     } else {
       updatePushCardUI(false, perm);
-      if (perm === 'default') {
-        setTimeout(showAutoPushPromptModal, 800);
-      }
     }
-
-    // Tự động nhận diện ngay khi người dùng vừa bật quyền từ Cài đặt điện thoại quay lại App
-    if (navigator.permissions && typeof navigator.permissions.query === 'function') {
-      navigator.permissions.query({ name: 'notifications' }).then((permStatus) => {
-        permStatus.onchange = async () => {
-          const currentPerm = Notification.permission;
-          const unblockModal = document.getElementById('pwaUnblockPushModal');
-          if (currentPerm === 'granted') {
-            if (unblockModal) unblockModal.classList.add('hidden');
-            await syncPushSubscription(true);
-          } else {
-            updatePushCardUI(false, currentPerm);
-          }
-        };
-      }).catch(() => {});
-    }
-
-    document.addEventListener('visibilitychange', async () => {
-      if (!document.hidden && isPushSupported()) {
-        const currentPerm = Notification.permission;
-        if (currentPerm === 'granted') {
-          const unblockModal = document.getElementById('pwaUnblockPushModal');
-          if (unblockModal) unblockModal.classList.add('hidden');
-          const res = await syncPushSubscription(false);
-          updatePushCardUI(res.subscribed, currentPerm);
-        } else {
-          updatePushCardUI(false, currentPerm);
-        }
-      }
-    });
   }
 
   // 11. Khởi tạo
