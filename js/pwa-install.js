@@ -338,44 +338,6 @@
     }
   }
 
-  async function handleTestPushNotification() {
-    const btn = document.getElementById('btnTestWebPush');
-    if (btn) {
-      btn.disabled = true;
-      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin text-[10px]"></i> Đang gửi...';
-    }
-    try {
-      await syncPushSubscription(false);
-      const identity = await resolveStudentIdentity();
-      if (!identity?.studentId) {
-        root.showToast?.warning('Chưa xác định được mã sinh viên. Vui lòng tải lại trang.');
-        return;
-      }
-      const supabaseUrl = root.ATTENDANCE_CONFIG?.supabaseUrl;
-      const res = await fetch(`${supabaseUrl}/functions/v1/web-push-worker`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'test_push',
-          student_id: identity.studentId
-        })
-      });
-      const data = await res.json();
-      if (data.success && data.sent_count > 0) {
-        root.showToast?.success('🔔 Đã gửi thông báo thử! Hãy kiểm tra thanh thông báo điện thoại.');
-      } else {
-        root.showToast?.warning(data.message || 'Chưa gửi được thông báo thử. Hãy bấm Bật lại thông báo.');
-      }
-    } catch (err) {
-      root.showToast?.error('Lỗi khi gửi thông báo thử.');
-    } finally {
-      if (btn) {
-        btn.disabled = false;
-        btn.innerHTML = '<i class="fa-solid fa-paper-plane text-[10px]"></i> Gửi thử';
-      }
-    }
-  }
-
   function updatePushCardUI(isSubscribed, permission) {
     const statusBadge = document.getElementById('pwaPushStatusBadge');
     const descText = document.getElementById('pwaPushDescText');
@@ -386,16 +348,7 @@
       statusBadge.className = 'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30';
       statusBadge.innerHTML = '<i class="fa-solid fa-circle-check text-[9px]"></i> Đã bật';
       descText.textContent = 'Điện thoại sẽ tự động nhận thông báo kết quả duyệt đơn xin trễ/nghỉ và nhắc nhở 15 phút trước giờ vào ca.';
-      actionWrap.innerHTML = `
-        <button
-          type="button"
-          id="btnTestWebPush"
-          class="px-2.5 py-1.5 rounded-xl text-[11px] font-semibold bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 transition flex items-center gap-1.5 active:scale-95 cursor-pointer shrink-0"
-        >
-          <i class="fa-solid fa-paper-plane text-[10px]"></i> Gửi thử
-        </button>
-      `;
-      document.getElementById('btnTestWebPush')?.addEventListener('click', handleTestPushNotification);
+      actionWrap.innerHTML = '';
     } else if (permission === 'denied') {
       statusBadge.className = 'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/15 text-rose-400 border border-rose-500/30';
       statusBadge.innerHTML = '<i class="fa-solid fa-bell-slash text-[9px]"></i> Đã chặn';

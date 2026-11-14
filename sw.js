@@ -1,11 +1,11 @@
 // Service Worker cho PWA Điểm Danh LH-TECH
-const CACHE_NAME = 'lhtech-pwa-v5';
+const CACHE_NAME = 'lhtech-pwa-v6';
 const STATIC_ASSETS = [
   './',
   './index.html',
   './checkin.html',
   './manifest.json',
-  './icons/icon-192.png',
+  './icons/icon-192.png', 
   './icons/icon-512.png',
   './icons/logo.png'
 ];
