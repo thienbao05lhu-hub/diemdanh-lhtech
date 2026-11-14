@@ -184,6 +184,54 @@
     }
   }
 
+  function notifyStudentLeaveDecision(request, decision, reviewReason) {
+    try {
+      const supabaseUrl = root.ATTENDANCE_CONFIG?.supabaseUrl;
+      if (!supabaseUrl || !request?.userId) return;
+      const isLate = (request.requestType || request.request_type) === 'late';
+      const lateMins = request.lateMinutes || request.late_minutes || 15;
+      const dateStr = request.date ? request.date.split('-').reverse().join('/') : '';
+      let title = '';
+      let body = '';
+
+      if (decision === 'approved') {
+        if (isLate) {
+          const shiftStarts = { 'Sáng': [8, 0], 'Chiều': [13, 15], 'Tối': [18, 0] };
+          const [sh, sm] = shiftStarts[request.shift] || [8, 0];
+          const totalMins = sh * 60 + sm + Number(lateMins);
+          const dh = String(Math.floor(totalMins / 60) % 24).padStart(2, '0');
+          const dm = String(totalMins % 60).padStart(2, '0');
+          title = '✅ Đơn xin đi trễ đã được DUYỆT';
+          body = `Đơn xin trễ ${lateMins}p (Ca ${request.shift} - ${dateStr}) đã được duyệt. Hạn quét mã đúng giờ: trước ${dh}:${dm}.`;
+        } else {
+          title = '✅ Đơn xin nghỉ phép đã được DUYỆT';
+          body = `Đơn xin nghỉ phép Ca ${request.shift} ngày ${dateStr} của bạn đã được Admin chấp thuận.`;
+        }
+      } else if (decision === 'rejected') {
+        title = isLate ? '❌ Đơn xin đi trễ bị TỪ CHỐI' : '❌ Đơn xin nghỉ phép bị TỪ CHỐI';
+        body = `Đơn Ca ${request.shift} (${dateStr}) không được duyệt.${reviewReason ? ' Lý do: ' + reviewReason : ''} Vui lòng có mặt đúng giờ quy định.`;
+      } else if (decision === 'pending') {
+        title = '⚠️ Đơn xin phép đã hủy duyệt';
+        body = `Đơn Ca ${request.shift} (${dateStr}) đã chuyển về trạng thái Chờ duyệt.${reviewReason ? ' Ghi chú: ' + reviewReason : ''}`;
+      } else {
+        return;
+      }
+
+      void root.fetch(`${supabaseUrl}/functions/v1/web-push-worker`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'send_to_user',
+          student_id: request.userId,
+          type: decision === 'approved' ? 'leave_approved' : 'leave_rejected',
+          title,
+          body,
+          data: { url: './checkin.html', leaveId: request.id, shift: request.shift, date: request.date }
+        })
+      }).catch(() => {});
+    } catch (e) {}
+  }
+
   async function review(request, decision, input, actions) {
     if (deciding || !authenticated()) return;
     const reason = input.value.trim();
@@ -199,6 +247,7 @@
       if (!response.ok || result.success !== true) throw new Error(result.message || 'Chưa nhận được kết quả. Tải lại danh sách trước khi thử lại.');
       draftReasons.delete(request.id);
       toast('success', result.message);
+      notifyStudentLeaveDecision(request, decision, reason);
       if (typeof root.fetchTodayAttendance === 'function') void root.fetchTodayAttendance();
       if (typeof root.fetchPersonalStats === 'function') void root.fetchPersonalStats();
       if (root.AdminTools?.loadAudit) void root.AdminTools.loadAudit();

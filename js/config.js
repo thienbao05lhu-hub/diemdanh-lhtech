@@ -5,6 +5,7 @@
   const config = Object.freeze({
     supabaseUrl: 'https://oalnswbnjhkkovxjxtlz.supabase.co',
     supabasePublishableKey: 'sb_publishable_Sz6k8E5HKwtxXbmu1T0HLw_4sXzTjo7',
+    vapidPublicKey: 'BCakluTHKte-_ukURylUHsgYVzpvQkXODeS3Znkc0MS_bm8CbXGUEaYd_Qnb68b96_GtJCDJlvxCenGUZTXFx24',
   });
 
   if (typeof module === 'object' && module.exports) {

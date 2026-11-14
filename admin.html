@@ -13,8 +13,8 @@
   <script src="vendor/qrcode.min.js?v=20261111-v3"></script>
   <script src="js/attendance-csv.js?v=20261111-v3"></script>
   <script src="vendor/supabase-2.118.0.js"></script>
-  <script src="js/config.js?v=20261111-v3"></script>
-  <script src="js/supabase-read-api.js?v=20261111-v6"></script>
+  <script src="js/config.js?v=20261114-push1"></script>
+  <script src="js/supabase-read-api.js?v=20261114-push1"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
     body { font-family: 'Plus Jakarta Sans', sans-serif; }
@@ -5294,6 +5294,73 @@
       }
     }
 
+    // Gửi Thông Báo Nhắc Nhở Điểm Danh (Web Push PWA) tới điện thoại sinh viên chưa quét mã
+    async function handleSendShiftPushReminder() {
+      const shift = typeof currentViewingShift !== 'undefined' ? currentViewingShift : 'Sáng';
+      const dateInput = document.getElementById('attendanceDateFilter')?.value || currentViewingDate || new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' });
+
+      const confirmed = await showConfirmDialog({
+        title: 'Gửi Nhắc Nhở Điểm Danh (Web Push)',
+        message: `Hệ thống sẽ gửi thông báo đẩy về điện thoại của các sinh viên có lịch <strong>Ca ${shift}</strong> (${dateInput.split('-').reverse().join('/')}) nhưng chưa quét mã và chưa có đơn xin nghỉ phép.<br><br>Bạn muốn gửi ngay bây giờ?`,
+        confirmText: 'Gửi Thông Báo',
+        cancelText: 'Hủy',
+        isDanger: false,
+      });
+      if (!confirmed) return;
+
+      const btn = document.getElementById('btnSendPushReminder');
+      const textSpan = document.getElementById('btnSendPushReminderText');
+      const originalText = textSpan ? textSpan.innerText : 'Nhắc Nhở Điểm Danh (App)';
+
+      try {
+        if (btn) btn.disabled = true;
+        if (textSpan) textSpan.innerText = 'Đang gửi thông báo...';
+
+        const supabaseUrl = window.ATTENDANCE_CONFIG?.supabaseUrl || 'https://oalnswbnjhkkovxjxtlz.supabase.co';
+        const res = await window.fetch(`${supabaseUrl}/functions/v1/web-push-worker`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'send_shift_reminders',
+            shift,
+            date: dateInput
+          })
+        });
+        const data = await res.json();
+        if (data.success) {
+          if (data.notifications_sent > 0) {
+            showToast.success(`🔔 Đã gửi nhắc nhở tới ${data.notifications_sent} thiết bị (${data.candidates_count} sinh viên chưa điểm danh)!`);
+          } else {
+            showToast.info(data.message || `Không có sinh viên nào (đã bật thông báo) cần nhắc nhở trong Ca ${shift}.`);
+          }
+        } else {
+          showToast.error(data.error || 'Không thể gửi thông báo nhắc nhở.');
+        }
+      } catch (err) {
+        showToast.error('Lỗi kết nối tới dịch vụ Web Push: ' + (err.message || ''));
+      } finally {
+        if (btn) btn.disabled = false;
+        if (textSpan) textSpan.innerText = originalText;
+      }
+    }
+
+    function injectAdminPushReminderButton() {
+      const zaloBtn = document.getElementById('btnForceZaloReport');
+      if (!zaloBtn || document.getElementById('btnSendPushReminder')) return;
+      const pushBtn = document.createElement('button');
+      pushBtn.id = 'btnSendPushReminder';
+      pushBtn.type = 'button';
+      pushBtn.onclick = handleSendShiftPushReminder;
+      pushBtn.title = 'Gửi thông báo nhắc nhở điểm danh tới điện thoại sinh viên chưa quét mã';
+      pushBtn.className = 'w-full mt-2 py-2 px-3 bg-slate-800/90 hover:bg-indigo-600/25 text-indigo-300 hover:text-indigo-200 rounded-xl text-xs font-semibold transition flex items-center justify-center gap-2 border border-indigo-500/30 active:scale-[0.98] disabled:opacity-50 cursor-pointer';
+      pushBtn.innerHTML = `
+        <i class="fa-solid fa-mobile-screen-button text-xs text-indigo-400"></i>
+        <span id="btnSendPushReminderText">Nhắc Nhở Điểm Danh (Điện Thoại)</span>
+      `;
+      zaloBtn.insertAdjacentElement('afterend', pushBtn);
+    }
+    injectAdminPushReminderButton();
+
     // Khởi động
     updateDynamicQR();
     startCountdown();
@@ -5316,7 +5383,7 @@
   <script src="js/weekly-schedule.js?v=20261101-live1"></script>
   <script src="js/schedule-sync.js?v=20261101-live1"></script>
   <script src="js/admin-tools.js?v=20261111-audit-clean"></script>
-  <script src="js/leave-requests.js?v=20261111-v6"></script>
+  <script src="js/leave-requests.js?v=20261114-push1"></script>
   <script defer src="js/admin-live.js?v=20261110-opt2"></script>
 </body>
 </html>

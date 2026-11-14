@@ -1,0 +1,37 @@
+name: Shift Attendance Push Reminders
+
+on:
+  schedule:
+    # Nhắc nhở trước giờ vào ca 15 phút (Thứ 2 -> Thứ 7)
+    # Ca Sáng: 07:45 VN (00:45 UTC)
+    - cron: '45 0 * * 1-6'
+    # Ca Chiều: 13:00 VN (06:00 UTC)
+    - cron: '0 6 * * 1-6'
+    # Ca Tối: 17:45 VN (10:45 UTC)
+    - cron: '45 10 * * 1-6'
+  workflow_dispatch:
+    inputs:
+      shift:
+        description: 'Ca nhắc nhở (Sáng / Chiều / Tối - Để trống sẽ tự động theo giờ)'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  send-reminders:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Supabase Web Push Worker
+        run: |
+          SHIFT="${{ github.event.inputs.shift }}"
+          if [ -n "$SHIFT" ]; then
+            PAYLOAD="{\"action\":\"send_shift_reminders\",\"shift\":\"$SHIFT\"}"
+          else
+            PAYLOAD="{\"action\":\"send_shift_reminders\"}"
+          fi
+          RESPONSE=$(curl -s -X POST "https://oalnswbnjhkkovxjxtlz.supabase.co/functions/v1/web-push-worker" \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD")
+          echo "Push Worker Response: $RESPONSE"

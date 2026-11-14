@@ -1,5 +1,5 @@
 // Service Worker cho PWA Điểm Danh LH-TECH
-const CACHE_NAME = 'lhtech-pwa-v2';
+const CACHE_NAME = 'lhtech-pwa-v3';
 const STATIC_ASSETS = [
   './',
   './index.html',
@@ -39,4 +39,57 @@ self.addEventListener('fetch', (event) => {
     );
   }
 });
+
+// ==============================================================
+// WEB PUSH NOTIFICATION (PWA)
+// ==============================================================
+self.addEventListener('push', (event) => {
+  let data = {
+    title: 'LH-TECH Điểm Danh',
+    body: 'Bạn có thông báo mới.',
+    icon: './icons/icon-192.png',
+    badge: './icons/icon-192.png',
+    data: { url: './app.html' }
+  };
+
+  if (event.data) {
+    try {
+      const parsed = event.data.json();
+      data = Object.assign(data, parsed);
+    } catch (e) {
+      data.body = event.data.text();
+    }
+  }
+
+  const options = {
+    body: data.body,
+    icon: data.icon || './icons/icon-192.png',
+    badge: data.badge || './icons/icon-192.png',
+    vibrate: [200, 100, 200],
+    tag: data.tag || 'lhtech-push-' + Date.now(),
+    renotify: true,
+    data: data.data || { url: './app.html' }
+  };
+
+  event.waitUntil(self.registration.showNotification(data.title, options));
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const targetUrl = event.notification.data?.url || './app.html';
+
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
+      for (const client of windowClients) {
+        if (client.url.includes('app.html') && 'focus' in client) {
+          return client.focus();
+        }
+      }
+      if (clients.openWindow) {
+        return clients.openWindow(targetUrl);
+      }
+    })
+  );
+});
+
 

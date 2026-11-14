@@ -193,13 +193,251 @@
     }
   }
 
-  // 10. Khởi tạo
+  // ==============================================================
+  // 10. WEB PUSH NOTIFICATION CONTROLLER (PWA)
+  // ==============================================================
+  function urlBase64ToUint8Array(base64String) {
+    const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+    const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+    const rawData = window.atob(base64);
+    const outputArray = new Uint8Array(rawData.length);
+    for (let i = 0; i < rawData.length; ++i) {
+      outputArray[i] = rawData.charCodeAt(i);
+    }
+    return outputArray;
+  }
+
+  function isPushSupported() {
+    return 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+  }
+
+  let currentStudentIdentity = null;
+
+  async function resolveStudentIdentity() {
+    if (currentStudentIdentity?.profile?.student_id) return currentStudentIdentity;
+    if (!root.Attendance?.identity) return null;
+    try {
+      const id = await root.Attendance.identity();
+      if (id?.profile?.student_id) {
+        currentStudentIdentity = id;
+        return id;
+      }
+    } catch (e) {}
+    return null;
+  }
+
+  async function syncPushSubscription(interactive = false) {
+    if (!isPushSupported()) {
+      if (interactive) {
+        if (isIos && !isStandalone) {
+          showIosInstallModal();
+          root.showToast?.warning('Trên iPhone, vui lòng "Thêm vào MH chính" trước để nhận thông báo đẩy.');
+        } else {
+          root.showToast?.warning('Trình duyệt hiện tại chưa hỗ trợ Web Push Notification.');
+        }
+      }
+      return { subscribed: false };
+    }
+
+    const identity = await resolveStudentIdentity();
+    if (!identity?.profile?.student_id) {
+      if (interactive) root.showToast?.warning('Vui lòng đăng nhập tài khoản sinh viên trước khi bật thông báo.');
+      return { subscribed: false };
+    }
+
+    let permission = Notification.permission;
+    if (permission !== 'granted') {
+      if (!interactive) return { subscribed: false, permission };
+      permission = await Notification.requestPermission();
+      if (permission !== 'granted') {
+        root.showToast?.warning('Bạn đã từ chối quyền thông báo. Hãy bật lại trong cài đặt trình duyệt.');
+        updatePushCardUI(false, permission);
+        return { subscribed: false, permission };
+      }
+    }
+
+    const vapidKey = root.ATTENDANCE_CONFIG?.vapidPublicKey;
+    if (!vapidKey) {
+      if (interactive) root.showToast?.error('Chưa cấu hình khóa VAPID.');
+      return { subscribed: false };
+    }
+
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      let sub = await reg.pushManager.getSubscription();
+      if (!sub) {
+        sub = await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(vapidKey)
+        });
+      }
+
+      const subJson = sub.toJSON();
+      const endpoint = subJson.endpoint;
+      const p256dh = subJson.keys?.p256dh;
+      const auth = subJson.keys?.auth;
+
+      if (endpoint && p256dh && auth && root.Attendance?.client) {
+        const { error } = await root.Attendance.client
+          .from('push_subscriptions')
+          .upsert({
+            endpoint,
+            profile_id: identity.profile.id,
+            student_id: identity.profile.student_id,
+            p256dh,
+            auth,
+            user_agent: navigator.userAgent.slice(0, 250),
+            updated_at: new Date().toISOString()
+          }, { onConflict: 'endpoint' });
+
+        if (error) throw error;
+      }
+
+      updatePushCardUI(true, 'granted');
+      if (interactive) {
+        root.showToast?.success('🔔 Đã bật thông báo điện thoại thành công!');
+      }
+      return { subscribed: true, permission: 'granted' };
+    } catch (err) {
+      console.warn('[Push] Lỗi đăng ký Web Push:', err);
+      if (interactive) {
+        root.showToast?.error('Không thể đăng ký thông báo: ' + (err.message || 'Lỗi kết nối'));
+      }
+      return { subscribed: false, error: err.message };
+    }
+  }
+
+  async function handleTestPushNotification() {
+    const btn = document.getElementById('btnTestWebPush');
+    const identity = await resolveStudentIdentity();
+    if (!identity?.profile?.student_id) {
+      root.showToast?.warning('Chưa xác định được tài khoản sinh viên.');
+      return;
+    }
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin text-[10px]"></i> Đang gửi...';
+    }
+    try {
+      await syncPushSubscription(false);
+      const supabaseUrl = root.ATTENDANCE_CONFIG?.supabaseUrl;
+      const res = await fetch(`${supabaseUrl}/functions/v1/web-push-worker`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'test_push',
+          student_id: identity.profile.student_id
+        })
+      });
+      const data = await res.json();
+      if (data.success && data.sent_count > 0) {
+        root.showToast?.success('🔔 Đã gửi thông báo thử! Hãy kiểm tra thanh thông báo điện thoại.');
+      } else {
+        root.showToast?.warning(data.message || 'Chưa gửi được thông báo thử. Hãy bấm Bật lại thông báo.');
+      }
+    } catch (err) {
+      root.showToast?.error('Lỗi khi gửi thông báo thử.');
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-paper-plane text-[10px]"></i> Gửi thử';
+      }
+    }
+  }
+
+  function updatePushCardUI(isSubscribed, permission) {
+    const statusBadge = document.getElementById('pwaPushStatusBadge');
+    const descText = document.getElementById('pwaPushDescText');
+    const actionWrap = document.getElementById('pwaPushActionWrap');
+    if (!statusBadge || !descText || !actionWrap) return;
+
+    if (isSubscribed && permission === 'granted') {
+      statusBadge.className = 'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30';
+      statusBadge.innerHTML = '<i class="fa-solid fa-circle-check text-[9px]"></i> Đã bật';
+      descText.textContent = 'Điện thoại sẽ tự động nhận thông báo kết quả duyệt đơn xin trễ/nghỉ và nhắc nhở 15 phút trước giờ vào ca.';
+      actionWrap.innerHTML = `
+        <button
+          type="button"
+          id="btnTestWebPush"
+          class="px-2.5 py-1.5 rounded-xl text-[11px] font-semibold bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 transition flex items-center gap-1.5 active:scale-95 cursor-pointer shrink-0"
+        >
+          <i class="fa-solid fa-paper-plane text-[10px]"></i> Gửi thử
+        </button>
+      `;
+      document.getElementById('btnTestWebPush')?.addEventListener('click', handleTestPushNotification);
+    } else if (permission === 'denied') {
+      statusBadge.className = 'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/15 text-rose-400 border border-rose-500/30';
+      statusBadge.innerHTML = '<i class="fa-solid fa-bell-slash text-[9px]"></i> Đã chặn';
+      descText.textContent = 'Quyền thông báo đang bị chặn trên trình duyệt. Hãy mở cài đặt trình duyệt và cho phép Thông báo để nhận tin duyệt đơn.';
+      actionWrap.innerHTML = '';
+    } else {
+      statusBadge.className = 'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-400 border border-amber-500/30';
+      statusBadge.innerHTML = '<i class="fa-solid fa-bell text-[9px]"></i> Chưa bật';
+      descText.textContent = (isIos && !isStandalone)
+        ? 'Trên iPhone: Hãy bấm "Cài Đặt App" (Thêm vào MH chính) rồi mở App để bật thông báo duyệt đơn & nhắc giờ vào ca.'
+        : 'Bật thông báo để nhận kết quả khi Admin duyệt/từ chối đơn xin trễ, vắng và nhắc nhở trước giờ vào ca.';
+      actionWrap.innerHTML = `
+        <button
+          type="button"
+          id="btnEnableWebPush"
+          class="px-3 py-1.5 rounded-xl text-[11px] font-bold bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-white shadow-md shadow-amber-500/20 transition flex items-center gap-1.5 active:scale-95 cursor-pointer shrink-0"
+        >
+          <i class="fa-solid fa-bell text-[10px]"></i> Bật thông báo
+        </button>
+      `;
+      document.getElementById('btnEnableWebPush')?.addEventListener('click', () => void syncPushSubscription(true));
+    }
+  }
+
+  async function injectPushNotificationCard() {
+    const leaveSection = document.getElementById('myLeaveRequestsSection');
+    if (!leaveSection || document.getElementById('pwaPushNotificationSection')) return;
+
+    const section = document.createElement('section');
+    section.id = 'pwaPushNotificationSection';
+    section.className = 'mt-3 bg-slate-900 border border-slate-800 rounded-2xl p-3.5 space-y-2';
+    section.innerHTML = `
+      <div class="flex items-center justify-between gap-2">
+        <div class="flex items-center gap-2 min-w-0">
+          <div class="w-7 h-7 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
+            <i class="fa-solid fa-bell text-xs"></i>
+          </div>
+          <div class="min-w-0">
+            <div class="flex items-center gap-2">
+              <h3 class="text-xs font-bold text-white truncate">Thông báo nhắc ca &amp; duyệt đơn</h3>
+              <span id="pwaPushStatusBadge" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-800 text-slate-400">...</span>
+            </div>
+          </div>
+        </div>
+        <div id="pwaPushActionWrap"></div>
+      </div>
+      <p id="pwaPushDescText" class="text-[11px] text-slate-400 leading-relaxed"></p>
+    `;
+
+    leaveSection.parentNode.insertBefore(section, leaveSection);
+
+    if (!isPushSupported()) {
+      updatePushCardUI(false, 'default');
+      return;
+    }
+
+    const perm = Notification.permission;
+    if (perm === 'granted') {
+      const res = await syncPushSubscription(false);
+      updatePushCardUI(res.subscribed, perm);
+    } else {
+      updatePushCardUI(false, perm);
+    }
+  }
+
+  // 11. Khởi tạo
   function init() {
     enhanceLoginBrand();
     if (!isStandalone) {
       setTimeout(renderInstallBanner, 1000);
       setTimeout(injectScannerInstallPill, 1200);
     }
+    setTimeout(() => void injectPushNotificationCard(), 1300);
   }
 
   if (document.readyState === 'loading') {
