@@ -5,10 +5,12 @@
 (function(root) {
   'use strict';
 
-  // 1. Đăng ký Service Worker
+  // 1. Đăng ký Service Worker (bỏ qua HTTP cache để luôn cập nhật trình xử lý Push mới nhất)
   if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')) {
     window.addEventListener('load', () => {
-      navigator.serviceWorker.register('./sw.js').catch(() => {});
+      navigator.serviceWorker.register('./sw.js?v=20261115-push6', { updateViaCache: 'none' })
+        .then((reg) => { try { reg.update(); } catch (e) {} })
+        .catch(() => {});
     });
   }
 
@@ -241,6 +243,33 @@
     return null;
   }
 
+  let syncingPushPromise = null;
+
+  async function triggerWelcomePushIfNeeded(studentId, interactive) {
+    try {
+      const supabaseUrl = root.ATTENDANCE_CONFIG?.supabaseUrl;
+      if (!supabaseUrl || !studentId) return;
+      const welcomeKey = 'lhtech_push_welcomed_v2_' + studentId;
+      if (!interactive && localStorage.getItem(welcomeKey) === '1') return;
+
+      const resp = await fetch(`${supabaseUrl}/functions/v1/web-push-worker`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'welcome_push',
+          student_id: studentId,
+          force: interactive === true
+        })
+      });
+      if (resp.ok) {
+        const resJson = await resp.json().catch(() => ({}));
+        if (resJson.sent_count > 0 || resJson.already_welcomed) {
+          localStorage.setItem(welcomeKey, '1');
+        }
+      }
+    } catch (e) {}
+  }
+
   async function syncPushSubscription(interactive = false) {
     if (!isPushSupported()) {
       if (interactive) {
@@ -272,22 +301,36 @@
       return { subscribed: false };
     }
 
-    try {
-      const reg = await navigator.serviceWorker.ready;
-      let sub = await reg.pushManager.getSubscription();
-      if (!sub) {
-        sub = await reg.pushManager.subscribe({
-          userVisibleOnly: true,
-          applicationServerKey: urlBase64ToUint8Array(vapidKey)
-        });
-      }
+    if (syncingPushPromise) {
+      const prev = await syncingPushPromise;
+      if (prev?.subscribed && !interactive) return prev;
+    }
 
-      const subJson = sub.toJSON();
-      const endpoint = subJson.endpoint;
-      const p256dh = subJson.keys?.p256dh;
-      const auth = subJson.keys?.auth;
+    syncingPushPromise = (async () => {
+      try {
+        const reg = await navigator.serviceWorker.ready;
+        try { await reg.update(); } catch (e) {}
 
-      if (endpoint && p256dh && auth && root.Attendance?.client) {
+        let sub = await reg.pushManager.getSubscription();
+        if (!sub) {
+          sub = await reg.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: urlBase64ToUint8Array(vapidKey)
+          });
+        }
+
+        const subJson = sub.toJSON();
+        const endpoint = subJson.endpoint;
+        const p256dh = subJson.keys?.p256dh;
+        const auth = subJson.keys?.auth;
+
+        if (!endpoint || !p256dh || !auth || !root.Attendance?.client) {
+          updatePushCardUI(false, permission);
+          return { subscribed: false, permission };
+        }
+
+        let savedStudentId = null;
+
         // Ưu tiên gọi RPC save_my_push_subscription (tự động lấy profile từ auth.uid() trên server)
         const { data: rpcData, error: rpcErr } = await root.Attendance.client.rpc('save_my_push_subscription', {
           p_endpoint: endpoint,
@@ -297,6 +340,7 @@
         });
 
         if (!rpcErr && rpcData?.studentId) {
+          savedStudentId = rpcData.studentId;
           currentStudentIdentity = {
             profileId: rpcData.profileId,
             studentId: rpcData.studentId
@@ -306,7 +350,8 @@
           const identity = await resolveStudentIdentity();
           if (!identity?.studentId) {
             if (interactive) root.showToast?.warning('Đang tải hồ sơ sinh viên, vui lòng thử lại sau 2 giây.');
-            return { subscribed: false };
+            updatePushCardUI(false, permission);
+            return { subscribed: false, permission };
           }
           const { error: upsertErr } = await root.Attendance.client
             .from('push_subscriptions')
@@ -321,21 +366,30 @@
             }, { onConflict: 'endpoint' });
 
           if (upsertErr) throw upsertErr;
+          savedStudentId = identity.studentId;
         }
-      }
 
-      updatePushCardUI(true, 'granted');
-      if (interactive) {
-        root.showToast?.success('🔔 Đã bật thông báo điện thoại thành công!');
+        updatePushCardUI(true, 'granted');
+        if (interactive) {
+          root.showToast?.success('🔔 Đã bật thông báo điện thoại thành công!');
+        }
+        if (savedStudentId) {
+          void triggerWelcomePushIfNeeded(savedStudentId, interactive);
+        }
+        return { subscribed: true, permission: 'granted', studentId: savedStudentId };
+      } catch (err) {
+        console.warn('[Push] Lỗi đăng ký Web Push:', err);
+        updatePushCardUI(false, permission);
+        if (interactive) {
+          root.showToast?.error('Không thể đăng ký thông báo: ' + (err.message || 'Lỗi kết nối'));
+        }
+        return { subscribed: false, error: err.message };
+      } finally {
+        syncingPushPromise = null;
       }
-      return { subscribed: true, permission: 'granted' };
-    } catch (err) {
-      console.warn('[Push] Lỗi đăng ký Web Push:', err);
-      if (interactive) {
-        root.showToast?.error('Không thể đăng ký thông báo: ' + (err.message || 'Lỗi kết nối'));
-      }
-      return { subscribed: false, error: err.message };
-    }
+    })();
+
+    return syncingPushPromise;
   }
 
   function updatePushCardUI(isSubscribed, permission) {
@@ -407,13 +461,21 @@
 
     const perm = Notification.permission;
     if (perm === 'granted') {
-      updatePushCardUI(true, perm);
       const res = await syncPushSubscription(false);
       if (!res.subscribed) {
-        setTimeout(() => void syncPushSubscription(false), 2000);
+        setTimeout(() => void syncPushSubscription(false), 2500);
+        setTimeout(() => void syncPushSubscription(false), 6000);
       }
     } else {
       updatePushCardUI(false, perm);
+    }
+
+    if (root.Attendance?.client?.auth?.onAuthStateChange) {
+      root.Attendance.client.auth.onAuthStateChange((event) => {
+        if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && Notification.permission === 'granted') {
+          setTimeout(() => void syncPushSubscription(false), 500);
+        }
+      });
     }
   }
 

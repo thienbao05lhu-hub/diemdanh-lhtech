@@ -2,13 +2,13 @@ name: Shift Attendance Push Reminders
 
 on:
   schedule:
-    # Nhắc nhở trước giờ vào ca 15 phút (Thứ 2 -> Thứ 7)
+    # Nhắc nhở trước giờ vào ca 15 phút (Thứ 2 -> Chủ Nhật)
     # Ca Sáng: 07:45 VN (00:45 UTC)
-    - cron: '45 0 * * 1-6'
+    - cron: '45 0 * * *'
     # Ca Chiều: 13:00 VN (06:00 UTC)
-    - cron: '0 6 * * 1-6'
+    - cron: '0 6 * * *'
     # Ca Tối: 17:45 VN (10:45 UTC)
-    - cron: '45 10 * * 1-6'
+    - cron: '45 10 * * *'
   workflow_dispatch:
     inputs:
       shift:
