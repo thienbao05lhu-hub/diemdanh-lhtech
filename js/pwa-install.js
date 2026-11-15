@@ -401,7 +401,7 @@
     if (isSubscribed && permission === 'granted') {
       statusBadge.className = 'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30';
       statusBadge.innerHTML = '<i class="fa-solid fa-circle-check text-[9px]"></i> Đã bật';
-      descText.textContent = 'Điện thoại sẽ tự động nhận thông báo kết quả duyệt đơn xin trễ/nghỉ và nhắc nhở 15 phút trước giờ vào ca.';
+      descText.textContent = 'Điện thoại sẽ tự động nhận thông báo kết quả duyệt đơn xin trễ/nghỉ.';
       actionWrap.innerHTML = '';
     } else if (permission === 'denied') {
       statusBadge.className = 'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/15 text-rose-400 border border-rose-500/30';
@@ -412,8 +412,8 @@
       statusBadge.className = 'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-400 border border-amber-500/30';
       statusBadge.innerHTML = '<i class="fa-solid fa-bell text-[9px]"></i> Chưa bật';
       descText.textContent = (isIos && !isStandalone)
-        ? 'Trên iPhone: Hãy bấm "Cài Đặt App" (Thêm vào MH chính) rồi mở App để bật thông báo duyệt đơn & nhắc giờ vào ca.'
-        : 'Bật thông báo để nhận kết quả khi Admin duyệt/từ chối đơn xin trễ, vắng và nhắc nhở trước giờ vào ca.';
+        ? 'Trên iPhone: Hãy bấm "Cài Đặt App" (Thêm vào MH chính) rồi mở App để bật thông báo duyệt đơn.'
+        : 'Bật thông báo để nhận kết quả khi Admin duyệt hoặc từ chối đơn xin trễ, vắng.';
       actionWrap.innerHTML = `
         <button
           type="button"
@@ -442,7 +442,7 @@
           </div>
           <div class="min-w-0">
             <div class="flex items-center gap-2">
-              <h3 class="text-xs font-bold text-white truncate">Thông báo nhắc ca &amp; duyệt đơn</h3>
+              <h3 class="text-xs font-bold text-white truncate">Thông báo duyệt đơn</h3>
               <span id="pwaPushStatusBadge" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-800 text-slate-400">...</span>
             </div>
           </div>
